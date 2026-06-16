@@ -1,0 +1,2460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Camp Games</title>
+  <style>
+@import url("https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap");
+
+:root {
+  --bg-0: #0a0a0a;
+  --bg-1: #111111;
+  --bg-2: #1a1a1a;
+  --panel: #111111;
+  --panel-border: #222222;
+  --panel-border-hover: var(--accent);
+
+  --text-0: #f0f0f0;
+  --text-1: #999999;
+  --text-2: #666666;
+
+  --accent: #e8ff47;
+  --accent-dim: rgba(232, 255, 71, 0.08);
+  --accent-2: #ff4747;
+  --accent-2-dim: rgba(255, 71, 71, 0.08);
+  --warn: #ffae47;
+  --bad: #ff4747;
+  --good: #47ffaa;
+
+  --radius: 0px;
+  --radius-sm: 0px;
+
+  --font-heading: "Syne", sans-serif;
+  --font-mono: "DM Mono", monospace;
+  --font-body: "DM Mono", monospace;
+
+  --transition: 180ms ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-heading);
+  color: var(--text-0);
+  background: var(--bg-0);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Animated background                                                     */
+/* ---------------------------------------------------------------------- */
+
+.bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background: var(--bg-0);
+  overflow: hidden;
+}
+
+.bg-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(232, 255, 71, 0.05), transparent 40%),
+    radial-gradient(circle at 85% 85%, rgba(255, 71, 71, 0.04), transparent 45%);
+}
+
+.bg-canvas::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Layout shell                                                            */
+/* ---------------------------------------------------------------------- */
+
+.shell {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 24px 80px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28px 0 36px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: var(--text-0);
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  background: var(--accent);
+  color: var(--bg-0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brand-mark svg {
+  width: 18px;
+  height: 18px;
+}
+
+.brand-text {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+.brand-text span {
+  display: block;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--text-2);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-1);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: color var(--transition);
+}
+
+.back-link:hover {
+  color: var(--accent);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Score pill                                                              */
+/* ---------------------------------------------------------------------- */
+
+.score-pill {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 20px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+}
+
+.score-pill .score-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.score-pill .score-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-2);
+}
+
+.score-pill .score-value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-0);
+}
+
+.score-pill .score-value.positive { color: var(--good); }
+.score-pill .score-value.negative { color: var(--bad); }
+
+.score-pill .divider {
+  width: 1px;
+  height: 18px;
+  background: var(--panel-border);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Hero                                                                    */
+/* ---------------------------------------------------------------------- */
+
+.hero {
+  padding: 40px 0 56px;
+}
+
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 18px;
+}
+
+.hero h1 {
+  font-family: var(--font-heading);
+  font-size: clamp(36px, 6vw, 60px);
+  line-height: 1.08;
+  font-weight: 700;
+  margin: 0 0 18px;
+  letter-spacing: -0.01em;
+}
+
+.hero h1 .accent {
+  color: var(--accent);
+}
+
+.hero p {
+  font-size: 17px;
+  color: var(--text-1);
+  max-width: 560px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Daily performance bar                                                   */
+/* ---------------------------------------------------------------------- */
+
+.stats-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 36px;
+  flex-wrap: wrap;
+  padding: 20px 28px;
+  border-top: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.stats-bar .stat-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.stats-bar .stat-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-2);
+}
+
+.stats-bar .stat-value {
+  font-family: var(--font-heading);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-0);
+}
+
+.stats-bar .stat-value.positive { color: var(--good); }
+.stats-bar .stat-value.negative { color: var(--accent-2); }
+
+.stats-bar .stat-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--panel-border);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Mode cards                                                              */
+/* ---------------------------------------------------------------------- */
+
+.section-title {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--text-2);
+  margin: 0 0 24px;
+  text-align: center;
+}
+
+.mode-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--panel-border);
+  border: 1px solid var(--panel-border);
+}
+
+.mode-card {
+  --card-accent: var(--accent);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  padding: 32px 28px;
+  text-decoration: none;
+  color: var(--text-0);
+  position: relative;
+  overflow: hidden;
+  transition: background var(--transition);
+  min-height: 320px;
+  cursor: pointer;
+}
+
+.mode-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--card-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--transition);
+}
+
+.mode-card:hover {
+  background: var(--bg-2);
+}
+
+.mode-card:hover::before {
+  transform: scaleX(1);
+}
+
+.mode-card.accent-teal { --card-accent: var(--good); }
+.mode-card.accent-red { --card-accent: var(--accent-2); }
+
+.mode-icon {
+  width: 44px;
+  height: 44px;
+  background: transparent;
+  border: 1px solid var(--card-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+
+.mode-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke: var(--card-accent);
+}
+
+.mode-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+
+.mode-card h3 {
+  font-family: var(--font-heading);
+  font-size: 22px;
+  margin: 0 0 10px;
+  font-weight: 700;
+}
+
+.mode-card p {
+  font-size: 14px;
+  color: var(--text-1);
+  line-height: 1.6;
+  margin: 0 0 24px;
+  flex-grow: 1;
+}
+
+.mode-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--card-accent);
+}
+
+.mode-cta svg {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--transition);
+}
+
+.mode-card:hover .mode-cta svg {
+  transform: translateX(4px);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Buttons                                                                 */
+/* ---------------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 14px 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform var(--transition), background var(--transition), border-color var(--transition), opacity var(--transition);
+  text-decoration: none;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg-0);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn-secondary {
+  background: var(--panel);
+  border-color: var(--panel-border);
+  color: var(--text-0);
+}
+
+.btn-secondary:hover {
+  border-color: var(--panel-border-hover);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Generic panels / cards                                                  */
+/* ---------------------------------------------------------------------- */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 32px;
+}
+
+.panel + .panel {
+  margin-top: 20px;
+}
+
+.panel-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-2);
+  margin-bottom: 14px;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Page header (mode pages)                                                */
+/* ---------------------------------------------------------------------- */
+
+.page-header {
+  margin-bottom: 32px;
+}
+
+.page-header .back-link {
+  margin-bottom: 20px;
+}
+
+.page-header .mode-tag {
+  margin-bottom: 6px;
+}
+
+.page-header h1 {
+  font-family: var(--font-heading);
+  font-size: clamp(28px, 4vw, 38px);
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.page-header p {
+  color: var(--text-1);
+  margin: 10px 0 0;
+  max-width: 620px;
+  line-height: 1.6;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Loader                                                                  */
+/* ---------------------------------------------------------------------- */
+
+.loader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-1);
+  font-size: 14px;
+  padding: 40px 0;
+  justify-content: center;
+}
+
+.loader .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.loader .dot:nth-child(2) { animation-delay: 0.15s; }
+.loader .dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes pulse {
+  0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1.15); }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Objection Battle                                                        */
+/* ---------------------------------------------------------------------- */
+
+.timer-ring {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
+.timer-ring svg {
+  transform: rotate(-90deg);
+  width: 64px;
+  height: 64px;
+}
+
+.timer-ring circle {
+  fill: none;
+  stroke-width: 4;
+}
+
+.timer-ring .track {
+  stroke: var(--panel-border);
+}
+
+.timer-ring .progress {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s linear, stroke 0.3s;
+}
+
+.timer-ring .progress.warn { stroke: var(--warn); }
+.timer-ring .progress.bad { stroke: var(--bad); }
+
+.timer-ring .timer-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.objection-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.objection-context {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-bottom: 12px;
+}
+
+.objection-quote {
+  font-family: var(--font-heading);
+  font-size: clamp(22px, 3.4vw, 30px);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-0);
+}
+
+textarea.response-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-0);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  padding: 16px;
+  resize: vertical;
+  min-height: 120px;
+  margin-top: 20px;
+  transition: border-color var(--transition);
+}
+
+textarea.response-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Feedback report                                                         */
+/* ---------------------------------------------------------------------- */
+
+.feedback-block {
+  margin-bottom: 22px;
+}
+
+.feedback-block:last-child {
+  margin-bottom: 0;
+}
+
+.feedback-block h4 {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.feedback-block h4 .tag {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.feedback-block.good h4 .tag { background: var(--good); }
+.feedback-block.bad h4 .tag { background: var(--bad); }
+.feedback-block.info h4 .tag { background: var(--accent-2); }
+
+.feedback-block ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-1);
+  line-height: 1.7;
+  font-size: 14.5px;
+}
+
+.feedback-block p {
+  margin: 0;
+  color: var(--text-1);
+  line-height: 1.7;
+  font-size: 14.5px;
+}
+
+.feedback-block .quote-block {
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 2px solid var(--accent-2);
+  padding: 12px 16px;
+  font-size: 14.5px;
+  color: var(--text-0);
+  margin-bottom: 10px;
+}
+
+.score-result {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  margin-bottom: 24px;
+}
+
+.score-result .score-result-value {
+  font-family: var(--font-heading);
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.score-result .score-result-value.positive { color: var(--good); }
+.score-result .score-result-value.negative { color: var(--bad); }
+.score-result .score-result-value.neutral { color: var(--text-1); }
+
+.score-result .score-result-label {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Pattern Recognition                                                     */
+/* ---------------------------------------------------------------------- */
+
+.option-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.option-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-0);
+  font-family: var(--font-body);
+  font-size: 15px;
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.option-btn:hover:not(:disabled) {
+  border-color: var(--panel-border-hover);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.option-btn:disabled {
+  cursor: default;
+}
+
+.option-btn .option-key {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-2);
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--panel-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.option-btn.correct {
+  border-color: var(--good);
+  background: rgba(71, 255, 170, 0.08);
+}
+
+.option-btn.correct .option-key {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.option-btn.incorrect {
+  border-color: var(--accent-2);
+  background: var(--accent-2-dim);
+}
+
+.option-btn.incorrect .option-key {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Sales Call Mode                                                         */
+/* ---------------------------------------------------------------------- */
+
+.scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.scenario-btn {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-0);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 14px;
+  padding: 18px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.scenario-btn:hover {
+  border-color: var(--panel-border-hover);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.scenario-btn.selected {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+input.custom-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-0);
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 14px 16px;
+  margin-top: 12px;
+  transition: border-color var(--transition);
+}
+
+input.custom-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.prospect-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 22px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+
+.prospect-id {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.prospect-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--bg-0);
+  flex-shrink: 0;
+}
+
+.prospect-meta .prospect-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.prospect-meta .prospect-scenario {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.chat-window {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 24px;
+  min-height: 360px;
+  max-height: 480px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chat-bubble {
+  max-width: 75%;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.chat-bubble.prospect {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--panel-border);
+  border-bottom-left-radius: 4px;
+}
+
+.chat-bubble.user {
+  align-self: flex-end;
+  background: var(--accent-dim);
+  border: 1px solid rgba(232, 255, 71, 0.25);
+  border-bottom-right-radius: 4px;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.chat-input-row input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-0);
+  font-family: var(--font-body);
+  font-size: 14.5px;
+  padding: 14px 18px;
+  transition: border-color var(--transition);
+}
+
+.chat-input-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.call-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+.call-progress {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-2);
+  letter-spacing: 0.08em;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Empty / API key states                                                  */
+/* ---------------------------------------------------------------------- */
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+  border: 1px solid rgba(255, 174, 71, 0.3);
+  background: rgba(255, 174, 71, 0.06);
+}
+
+.notice h4 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 15px;
+  color: var(--warn);
+}
+
+.notice p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-1);
+  line-height: 1.6;
+}
+
+.notice code {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Single-file views + API key bar                                         */
+/* ---------------------------------------------------------------------- */
+
+.view {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+}
+
+.view.active {
+  display: flex;
+}
+
+.api-key-bar {
+  margin-bottom: 28px;
+}
+
+.api-key-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.api-key-row input {
+  flex: 1;
+  min-width: 240px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-0);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  padding: 12px 16px;
+  transition: border-color var(--transition);
+}
+
+.api-key-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.api-key-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 8px 14px;
+  border: 1px solid var(--panel-border);
+  white-space: nowrap;
+}
+
+.api-key-status.empty { color: var(--text-2); }
+.api-key-status.ok { color: var(--good); border-color: var(--good); }
+.api-key-status.error { color: var(--bad); border-color: var(--bad); }
+
+.api-key-bar p {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.api-key-bar code {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Responsive                                                              */
+/* ---------------------------------------------------------------------- */
+
+@media (max-width: 860px) {
+  .stats-bar { gap: 24px 40px; }
+  .mode-grid { grid-template-columns: 1fr; }
+  .scenario-grid { grid-template-columns: repeat(2, 1fr); }
+  .topbar { flex-direction: column; align-items: flex-start; gap: 16px; }
+}
+
+@media (max-width: 520px) {
+  .scenario-grid { grid-template-columns: 1fr; }
+}
+  </style>
+</head>
+<body>
+  <div class="bg-canvas"></div>
+
+  <div class="shell">
+    <div class="topbar">
+      <a href="#" class="brand" onclick="showView('home'); return false;">
+        <span class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#03130c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"></circle>
+            <circle cx="12" cy="12" r="4.5"></circle>
+            <circle cx="12" cy="12" r="0.5" fill="#03130c"></circle>
+          </svg>
+        </span>
+        <span class="brand-text">
+          Sales Camp Games
+          <span>Training Arena</span>
+        </span>
+      </a>
+
+      <div class="score-pill">
+        <div class="score-item">
+          <span class="score-label">Today</span>
+          <span class="score-value" data-scg-today>+0</span>
+        </div>
+        <div class="divider"></div>
+        <div class="score-item">
+          <span class="score-label">Total</span>
+          <span class="score-value" data-scg-total>0</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel api-key-bar">
+      <div class="panel-label">// Claude API Key</div>
+      <div class="api-key-row">
+        <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." oninput="onApiKeyChange()" />
+        <span id="api-key-status" class="api-key-status empty">Not set</span>
+      </div>
+      <p>
+        This is the single-file, no-server version of Sales Camp Games. Your Claude API key is
+        stored only in this browser (localStorage) and sent directly from your browser to
+        Anthropic's API &mdash; never to any server of ours. Get a key at
+        <code>console.anthropic.com</code>.
+      </p>
+    </div>
+
+    <!-- HOME -->
+    <div id="view-home" class="view active">
+      <section class="hero">
+        <div class="hero-eyebrow">// Train between calls</div>
+        <h1>Sharpen your sales<br /><span class="accent">while the phone is quiet.</span></h1>
+        <p>
+          Three focused training modes built from your own sales study notes.
+          Pick a mode, run the drill, and watch your daily score move.
+        </p>
+      </section>
+
+      <div class="stats-bar">
+        <div class="stat-item">
+          <span class="stat-label">Today's Score</span>
+          <span class="stat-value" data-scg-today-card>+0</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-label">Total Score</span>
+          <span class="stat-value" data-scg-total-card>0</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-label">Rounds Trained</span>
+          <span class="stat-value" data-scg-rounds-card>0</span>
+        </div>
+      </div>
+
+      <section class="mode-section">
+        <h2 class="section-title">// Select a training mode</h2>
+
+        <div class="mode-grid">
+          <a href="#" class="mode-card accent-yellow" onclick="showView('objection'); return false;">
+            <div class="mode-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2 4 5v6c0 5 3.5 9.5 8 11 4.5-1.5 8-6 8-11V5l-8-3z"></path>
+                <path d="M9.5 12.5l1.8 1.8 3.2-3.6"></path>
+              </svg>
+            </div>
+            <div class="mode-tag">Mode 01 — Speed Drill</div>
+            <h3>Objection Battle</h3>
+            <p>
+              A prospect throws an objection. You get 30 seconds to respond.
+              Train the reflex of finding the real belief behind the words
+              instead of arguing with the surface objection.
+            </p>
+            <span class="mode-cta">
+              Enter the arena
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6"></path>
+              </svg>
+            </span>
+          </a>
+
+          <a href="#" class="mode-card accent-teal" onclick="showView('pattern'); return false;">
+            <div class="mode-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </div>
+            <div class="mode-tag">Mode 02 — Read The Room</div>
+            <h3>Pattern Recognition</h3>
+            <p>
+              A prospect makes a statement. What's really going on underneath it —
+              a limiting belief, an identity issue, a hidden objection? Spot the
+              pattern before you can ever fix it.
+            </p>
+            <span class="mode-cta">
+              Start spotting patterns
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6"></path>
+              </svg>
+            </span>
+          </a>
+
+          <a href="#" class="mode-card accent-red" onclick="showView('call'); return false;">
+            <div class="mode-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.97.36 1.92.68 2.83a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.86.55 2.83.68A2 2 0 0 1 22 16.92z"></path>
+              </svg>
+            </div>
+            <div class="mode-tag">Mode 03 — Full Simulation</div>
+            <h3>Sales Call Mode</h3>
+            <p>
+              The main event. Pick a scenario, get a generated prospect, and run
+              a full call from rapport to close. Walk away with a detailed
+              breakdown of every move you made.
+            </p>
+            <span class="mode-cta">
+              Take the call
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6"></path>
+              </svg>
+            </span>
+          </a>
+        </div>
+      </section>
+    </div>
+
+    <!-- OBJECTION BATTLE -->
+    <div id="view-objection" class="view">
+      <div class="page-header">
+        <a href="#" class="back-link" onclick="showView('home'); return false;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"></path>
+          </svg>
+          Training Arena
+        </a>
+        <div class="mode-tag">Mode 01 — Speed Drill</div>
+        <h1>Objection Battle</h1>
+        <p>
+          A prospect drops an objection. You have 30 seconds to respond before
+          the AI analyzes what you got right, what you missed, and which
+          principle from your notes the moment was really about.
+        </p>
+      </div>
+
+      <div id="obj-api-notice" class="notice" style="display:none;">
+        <h4>AI not connected</h4>
+        <p>
+          Add your Claude API key in the box above to enable this mode.
+        </p>
+      </div>
+
+      <div id="obj-game-area">
+        <div class="panel" id="objection-panel">
+          <div class="objection-card-header">
+            <div>
+              <div class="panel-label">// Incoming objection</div>
+              <div class="objection-context" id="objection-context">Loading scenario...</div>
+              <div class="objection-quote" id="objection-quote">&nbsp;</div>
+            </div>
+            <div class="timer-ring">
+              <svg viewBox="0 0 64 64">
+                <circle class="track" cx="32" cy="32" r="28"></circle>
+                <circle class="progress" id="timer-progress" cx="32" cy="32" r="28" stroke-dasharray="176" stroke-dashoffset="0"></circle>
+              </svg>
+              <div class="timer-value" id="timer-value">30</div>
+            </div>
+          </div>
+
+          <textarea class="response-input" id="response-input" placeholder="Type how you'd respond to this objection, live, as if you're on the call right now..."></textarea>
+
+          <div class="actions-row">
+            <span class="objection-context" id="obj-status-line"></span>
+            <button class="btn btn-primary" id="obj-submit-btn">Send response</button>
+          </div>
+        </div>
+
+        <div class="panel" id="obj-feedback-panel" style="display:none;">
+          <div class="panel-label">// Round breakdown</div>
+
+          <div class="score-result">
+            <div class="score-result-value" id="obj-score-result-value">+0</div>
+            <div class="score-result-label">points this round</div>
+          </div>
+
+          <div class="feedback-block good">
+            <h4><span class="tag"></span>What you did well</h4>
+            <ul id="obj-fb-well"></ul>
+          </div>
+
+          <div class="feedback-block bad">
+            <h4><span class="tag"></span>What you missed</h4>
+            <ul id="obj-fb-missed"></ul>
+          </div>
+
+          <div class="feedback-block info">
+            <h4><span class="tag"></span>What's really going on</h4>
+            <p id="obj-fb-reality"></p>
+          </div>
+
+          <div class="feedback-block info">
+            <h4><span class="tag"></span>Better alternative</h4>
+            <div class="quote-block" id="obj-fb-alternative"></div>
+          </div>
+
+          <div class="feedback-block info">
+            <h4><span class="tag"></span>Principle</h4>
+            <p id="obj-fb-principle"></p>
+          </div>
+
+          <div class="actions-row">
+            <span></span>
+            <button class="btn btn-primary" id="obj-next-btn">Next objection</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PATTERN RECOGNITION -->
+    <div id="view-pattern" class="view">
+      <div class="page-header">
+        <a href="#" class="back-link" onclick="showView('home'); return false;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"></path>
+          </svg>
+          Training Arena
+        </a>
+        <div class="mode-tag">Mode 02 — Read The Room</div>
+        <h1>Pattern Recognition</h1>
+        <p>
+          A prospect makes a statement. Before you can ever respond well, you
+          need to see what's actually happening underneath it — a limiting
+          belief, an emotion, an identity issue, a hidden objection.
+        </p>
+      </div>
+
+      <div id="pat-api-notice" class="notice" style="display:none;">
+        <h4>AI not connected</h4>
+        <p>
+          Add your Claude API key in the box above to enable this mode.
+        </p>
+      </div>
+
+      <div id="pat-game-area">
+        <div class="panel" id="pat-exercise-panel">
+          <div class="panel-label">// Prospect says</div>
+          <div class="objection-quote" id="pat-statement-text">Loading scenario...</div>
+
+          <div class="objection-context" id="pat-question-text" style="margin-top:22px;"></div>
+
+          <div class="option-grid" id="pat-option-grid"></div>
+        </div>
+
+        <div class="panel" id="pat-feedback-panel" style="display:none;">
+          <div class="panel-label">// Breakdown</div>
+
+          <div class="score-result">
+            <div class="score-result-value" id="pat-score-result-value">+0</div>
+            <div class="score-result-label" id="pat-score-result-label">points this round</div>
+          </div>
+
+          <div class="feedback-block info">
+            <h4><span class="tag"></span>Why</h4>
+            <p id="pat-fb-explanation"></p>
+          </div>
+
+          <div class="feedback-block info">
+            <h4><span class="tag"></span>How it affects buying behavior</h4>
+            <p id="pat-fb-buying"></p>
+          </div>
+
+          <div class="feedback-block info">
+            <h4><span class="tag"></span>How to handle it</h4>
+            <p id="pat-fb-handle"></p>
+          </div>
+
+          <div class="feedback-block info">
+            <h4><span class="tag"></span>Principle</h4>
+            <p id="pat-fb-principle"></p>
+          </div>
+
+          <div class="actions-row">
+            <span></span>
+            <button class="btn btn-primary" id="pat-next-btn">Next exercise</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SALES CALL MODE -->
+    <div id="view-call" class="view">
+      <div class="page-header">
+        <a href="#" class="back-link" onclick="showView('home'); return false;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"></path>
+          </svg>
+          Training Arena
+        </a>
+        <div class="mode-tag">Mode 03 — Full Simulation</div>
+        <h1>Sales Call Mode</h1>
+        <p>
+          Pick a scenario and a prospect gets generated — with their own goals,
+          problems, and a hidden belief they won't say out loud. Run the call,
+          then get a full breakdown of what a top closer would have done
+          differently.
+        </p>
+      </div>
+
+      <div id="call-api-notice" class="notice" style="display:none;">
+        <h4>AI not connected</h4>
+        <p>
+          Add your Claude API key in the box above to enable this mode.
+        </p>
+      </div>
+
+      <div id="call-game-area">
+        <!-- Scenario selection -->
+        <div class="panel" id="call-scenario-panel">
+          <div class="panel-label">// Choose a scenario</div>
+          <div class="scenario-grid" id="call-scenario-grid">
+            <button class="scenario-btn" data-scenario="Fitness Coach">Fitness Coach</button>
+            <button class="scenario-btn" data-scenario="Business Coach">Business Coach</button>
+            <button class="scenario-btn" data-scenario="Agency Offer">Agency Offer</button>
+            <button class="scenario-btn" data-scenario="E-commerce Offer">E-commerce Offer</button>
+            <button class="scenario-btn" data-scenario="SaaS">SaaS</button>
+            <button class="scenario-btn" data-scenario="Custom Scenario">Custom Scenario</button>
+          </div>
+          <input type="text" class="custom-input" id="call-custom-input" placeholder="Describe your custom scenario (e.g. high-ticket nutrition coaching for busy parents)" style="display:none;" />
+
+          <div class="actions-row">
+            <span class="objection-context" id="call-scenario-status"></span>
+            <button class="btn btn-primary" id="call-start-btn" disabled>Start call</button>
+          </div>
+        </div>
+
+        <!-- Live call -->
+        <div id="call-panel" style="display:none;">
+          <div class="prospect-bar">
+            <div class="prospect-id">
+              <div class="prospect-avatar" id="call-prospect-avatar">?</div>
+              <div class="prospect-meta">
+                <div class="prospect-name" id="call-prospect-name">Connecting...</div>
+                <div class="prospect-scenario" id="call-prospect-scenario"></div>
+              </div>
+            </div>
+            <div class="call-progress" id="call-progress">MSG 0 / 14</div>
+          </div>
+
+          <div class="chat-window" id="call-chat-window"></div>
+
+          <div class="chat-input-row">
+            <input type="text" id="call-chat-input" placeholder="Type what you'd say next on this call..." />
+            <button class="btn btn-primary" id="call-send-btn">Send</button>
+          </div>
+
+          <div class="call-controls">
+            <span class="objection-context" id="call-status"></span>
+            <button class="btn btn-secondary" id="call-end-btn">End call &amp; get feedback</button>
+          </div>
+        </div>
+
+        <!-- Feedback report -->
+        <div id="call-report-panel" style="display:none;">
+          <div class="panel">
+            <div class="panel-label">// Call score</div>
+            <div class="score-result">
+              <div class="score-result-value" id="call-score-value">0</div>
+              <div class="score-result-label">out of 100 &mdash; <span id="call-score-delta-label"></span></div>
+            </div>
+
+            <div class="feedback-block good">
+              <h4><span class="tag"></span>What you did well</h4>
+              <ul id="call-rep-well"></ul>
+            </div>
+
+            <div class="feedback-block bad">
+              <h4><span class="tag"></span>Biggest mistakes</h4>
+              <ul id="call-rep-mistakes"></ul>
+            </div>
+          </div>
+
+          <div class="panel" id="call-missed-panel">
+            <div class="panel-label">// Missed opportunities</div>
+            <div id="call-rep-missed"></div>
+          </div>
+
+          <div class="panel">
+            <div class="feedback-block info">
+              <h4><span class="tag"></span>What a top closer would have done</h4>
+              <ul id="call-rep-topcloser"></ul>
+            </div>
+
+            <div class="feedback-block info">
+              <h4><span class="tag"></span>Principles from your notes</h4>
+              <div id="call-rep-principles"></div>
+            </div>
+          </div>
+
+          <div class="actions-row">
+            <span></span>
+            <button class="btn btn-primary" id="call-new-btn">Run another call</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+/* ==========================================================================
+   Score engine (localStorage)
+   ========================================================================== */
+const SCG = (() => {
+  const STORAGE_KEY = "scg_score_v1";
+
+  function todayKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return { total: 0, daily: {}, rounds: 0 };
+      const parsed = JSON.parse(raw);
+      return {
+        total: parsed.total || 0,
+        daily: parsed.daily || {},
+        rounds: parsed.rounds || 0,
+      };
+    } catch {
+      return { total: 0, daily: {}, rounds: 0 };
+    }
+  }
+
+  function save(data) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  function addScore(delta) {
+    const data = load();
+    const key = todayKey();
+    data.total += delta;
+    data.daily[key] = (data.daily[key] || 0) + delta;
+    data.rounds += 1;
+    save(data);
+    renderAll();
+    return data;
+  }
+
+  function getToday() {
+    const data = load();
+    return data.daily[todayKey()] || 0;
+  }
+
+  function getTotal() {
+    return load().total;
+  }
+
+  function getRounds() {
+    return load().rounds;
+  }
+
+  function fmtSigned(n) {
+    if (n > 0) return `+${n}`;
+    return `${n}`;
+  }
+
+  function renderPill() {
+    const todayEl = document.querySelector("[data-scg-today]");
+    const totalEl = document.querySelector("[data-scg-total]");
+    if (!todayEl && !totalEl) return;
+
+    const today = getToday();
+    const total = getTotal();
+
+    if (todayEl) {
+      todayEl.textContent = fmtSigned(today);
+      todayEl.classList.remove("positive", "negative");
+      if (today > 0) todayEl.classList.add("positive");
+      if (today < 0) todayEl.classList.add("negative");
+    }
+    if (totalEl) {
+      totalEl.textContent = total;
+    }
+  }
+
+  function renderDashboard() {
+    const todayCard = document.querySelector("[data-scg-today-card]");
+    const totalCard = document.querySelector("[data-scg-total-card]");
+    const roundsCard = document.querySelector("[data-scg-rounds-card]");
+    if (!todayCard && !totalCard && !roundsCard) return;
+
+    const today = getToday();
+    const total = getTotal();
+    const rounds = getRounds();
+
+    if (todayCard) {
+      todayCard.textContent = fmtSigned(today);
+      todayCard.classList.remove("positive", "negative");
+      if (today > 0) todayCard.classList.add("positive");
+      if (today < 0) todayCard.classList.add("negative");
+    }
+    if (totalCard) totalCard.textContent = total;
+    if (roundsCard) roundsCard.textContent = rounds;
+  }
+
+  function renderAll() {
+    renderPill();
+    renderDashboard();
+  }
+
+  return { addScore, getToday, getTotal, getRounds, renderAll };
+})();
+
+/* ==========================================================================
+   Knowledge base + grounding prompt
+   ========================================================================== */
+const SALES_NOTES = "# Sales Knowledge Base\n\nThis file is auto-extracted from Simon's sales study notes. It is used as grounding context for the Sales Camp Games AI coach.\n\n\n\n---\n\n## Selling to Identity\n\nSelling to identity\nBased on the fact that the greatest power of man is to try to maintain his self-\ndefined identity.\nIn a sales call you can dig into all these different parts. But the higher up you go\nin the pyramid the higher leverage those questions/frames will have.\nYou can ask questions about what they have done so far - find out why they are\nwhere they are\nYou can ask about what skills they have trained and invested in in the past -\nfind potential bridges\nYou can ask questions about their beliefs - if they are limiting you can break\nthem down one by one, because they will never buy unless they are completely\nconvinced and trust that each part of the process will take them to their goal\nBut you can also get into who they actually want to be, their identity - because\nif they realize that it is not an external problem or even a skills problem and you\nshow them that everything just has to do with who they tell themselves they are\n- then they will \"step into\" that version of themselves. If it means they have to\ntake action to become the person who “always gets what they want,” they will\nbuy.\nWhy it works\nSelling to identity\t1\n\n-- 1 of 4 --\n\nReal urgency - Instead of creating false urgency (through nasty and pushy\ntechniques), you expose them to who they can actually be, and in them a\nstrong urgency is created to keep that promise to themselves\nUnderstand people on a deeper level - Instead of asking them basic and\nsalesy questions from a general script, you ask questions that require you to\nunderstand\nwhy you are even asking them.\nHelpful motive - Instead of only selling them on helping them change their\nbehaviors and tout their skills, you focus on who they actually want to become.\nIn a way, you help them more than anyone else with what is most important to\nthem. More helpful = better sales.\nIdentity gap framework sequence\n1 \u0000 Get them to acknowledge their identity\n“Where does your drive to change things come from?”\nThis will get you to why, what they answer is the identity they want (desired\nidentity)\n2 \u0000 Find a limiting belief that has been holding them back\n“What has been stopping you internally from solving this problem?”\nFind out how long they have been waiting and thinking, then find out what it\nis that has stopped them in the first place.\nThis is the belief they must sacrifice to step into their desired identity\n3 \u0000 Connect the question to identity\n“The reason Iʼm asking is because I can give you everything you need,\nbut if youʼre not the person who can even get results, it wonʼt help”\n“Itʼs about being the version of yourself that naturally gets the results”\nJustify your deep questions and make them understand what needs to\nhappen (they need to accept the identity they want)\nHere you create the gap in their identity, you inform them that you have to\nBE who you say you are, not just pretend to be.\n4 \u0000 Create pain in current identity\n“Are you okay with staying the version you are right now (that has the\nlimiting belief)?”\nSelling to identity\t2\n\n-- 2 of 4 --\n\n“Why not?”\n5 \u0000 Create real urgency through consequences\n“Where do you see yourself in two years if you stay the way you are now?”\n“If we stay the way we are now, how will it feel?”\n6 \u0000 Position your victim as the identity bridge\nYour product is what can help them transform their identity\nQuestions that tear off the mask and let you speak to the real person:\n“What kind of person do you see yourself as right now?”\n“What is the cost of staying the way you are right now?”\n“How much longer do you want to be this version of yourself?”\nSeller Identity\nLevel 1 \u0000 Seller Identity\nFocuses on selling\nSpeaks from a place of scarcity and need\nWorries about objections\nTries to convince\nLevel 2 \u0000 Consultant Identity\nFocuses on problem solving\nOperates from knowledge/expertise\nConfident in abilities\nLevel 3 \u0000 Transformation guide identity\nFocuses on transforming their identity\nOperates from abundance, certainty\nUnattached to the outcome\nCares about the person's best interests\nHow to do the transformation yourself\nSelling to identity\t3\n\n-- 3 of 4 --\n\nStop caring about your commission - the less needy you are the more you\nsell\nLive in genuine abundance and believe in the transformation of identity\nYou must genuinely believe in the person you are helping, care more about\nthem than your commission\nYou must first do the identity transformation yourself before you can help\nothers do it - step into the identity as a leader and a professional\n(transformation guide)\nSelling to identity\t4\n\n-- 4 of 4 --\n\n\n---\n\n## Limiting Beliefs\n\nLimiting beliefs\nThe 4 Steps to Shifting Peopleʼs Beliefs\n\u0000\u0000\u0000 Identify\n\u0000\u0000\u0000 Clarify\n\u0000\u0000\u0000 Reframe\n\u0000\u0000\u0000 Close the Loop\nWhy we need to reframe limiting beliefs\nThe way people talk to us is how they talk to themselves. If we then notice a\npattern that is preventing the person from making a change in their life, it is our\njob to shift that mindset and give them new perspectives.\nPeople think by talking, if we can change the way they talk to us, we can shift\ntheir beliefs.\nThey will have stories about how they canʼt do something. If we can show them\nthat this is just something they tell themselves and reveal that what they “canʼt”\nis actually a “wonʼt/wonʼt” then we put them in a position where they can\nchoose to take action or not.\nIdentify\nBe alert and try to identify these beliefs as early as possible\nSkeptical\nThey think everything is a scam\nHave been scammed before\nDon't believe what people say\n“Works for others, not for me”\nMoney\nI don't have the money now, therefore I can't get help\nProblem: Not willing to be resourceful\nThe problem is not: That they don't have the money\nLimiting beliefs\t1\n\n-- 1 of 3 --\n\nThings aren't that bad after all\nBig ego\nMinimizes their pain as a shield to protect ego\nPeople change what they do because of pain and fear of future pain, they\nsimply haven't accepted the pain yet\nBlaming\nDon't want to accept that they themselves are the problem\nTherefore blame external things like finances, other people, etc.\nHaven't realized that winners win even under bad circumstances\nBelieve that things will happen by themselves\nThey have no sense of urgency\nBelieve that everything will fix itself\nThey don't want to accept that only they have the power to change things\nWishful thinking language\nThey haven't realized that they have to do a certain thing to reach their goal\nOr that they haven't realized that they have to reach their goal\nInstead, they use words like \"would be good\", \"I wish\", \"I hope that...\"\nThey have never thought about the real consequences that happen if they\ndon't do something\nPeople get what they\nneed - often not what they\nwant\nI'll do this, but not now\nJust means they're not serious enough\nTheir seriousness hasn't been tested - they have never thought through the\nconsequences\nResearch mode\nThey have Analysis paralysis which stops them from taking the step\nClarify\nFind out if what you believe is right. Ask questions and dig deeper.\nLimiting beliefs\t2\n\n-- 2 of 3 --\n\nTake your time and understand where they are coming from. They will not\nagree to you changing the way they see things if they do not feel you\nunderstand them.\nReframe\nAsk permission first or ask a confusing question\n“Is it okay if I share a perspective?”\n“What if it was not what you think it is…”\nStep 1 - change the sentence\nMake them see something that in their mind is negative as something\npositive/neutral. You take a step back to see the whole picture and lay out all\nthe potential advantages and disadvantages to their belief.\nStep 2 - change the reasons\nMake them realize how the reason for their small problem does not have to\nhinder their decision.\nStep 3 \u0000 Analogies\nDraw an analogy between their excuse/situation and a new perspective. This\naffects how they see the value/importance of the belief.\nStep 4 - change logical levels\nMove the conversation from specific events/problems/details to something\nmore abstract. E.g. values, identity and purpose.\nA good example is to connect to identity and ask what the winning version of\nthemselves would do in this situation given everything you just talked about.\nClose the loop\n“Tie the bag” as in a Swedish text\nAsk them if it is okay to assume from now on that we see things in the new way.\nRemember this when you ask new questions - when you ask\nconsequence/future questions e.g.\nLimiting beliefs\t3\n\n-- 3 of 3 --\n\n\n---\n\n## The One Call Close\n\nThe one call close\nThis is a complete no-BS sales process.\nTo close the conversation with people, you need to understand why you are\nasking what you are asking.\nThere are things you need to know about them in order to sell. That doesn't\nmean you have to ask these exact questions.\n\u0000The Opening)\n1 \u0000 Why are they here?\n2 \u0000 What do they want help with?\n3 \u0000 Why do they want help with this?\n4 \u0000 Set the frame (small agenda)\nWhat they don't have is what they need. That way you know where to lead\nthe conversation. More money, more freedom, or more time (biz op).\nEveryone has some level of pain or lack, otherwise they wouldn't be on the\ncall with you.\nKeep it at the convo level. Focus on them ASAP. Be and sound genuinely\ninterested.\nWhen setting the frame, you don't want to sound like you have an agenda.\nIf you are going to have one, have a very small agenda.\n“This is to see where you are, where you want to be, and then at the end if\nyou\nfeel that this\nmaybe is what youʼre looking for then we can move on to\nthe next step. Would that help?”\nWhy they want help explains their problem, but the way they describe it\nexplains what need they lack. Always one of these…\nThe further down, the more pain. Ask questions about their needs, and start\nfrom the bottom up.\ncontribution\nGrowth\nThe one call close\t1\n\n-- 1 of 12 --\n\nVariety\nSignificance\nLove and connection\nCertainty\nEarly push-backs\n*“Just say what youʼre doing”\n(they think theyʼre ready to go all in right away. Theyʼre not)\nSoft:\n“Ahh sure, weʼll get through it\nWhat weʼre doing is very custom, so to speak… so it has a lot to do with what\nyou need help with…\nJust so I can get a better idea, what is it that you need help with, specifically?”\nMedium:\n“Absolutely, but hereʼs my thinking. If youʼre happily married, you donʼt usually\ngo on dates, right?\nSo what would make you do something like that in the first place?\nSo why did you choose to jump on a call even if things are good?”\nor\n“I understand, weʼll go through it. But the thing is, we donʼt really have a one-\nsize-fits-all solution for everyone, so if you want, we could spend like 3\u00004 hours\ngoing through all the different solutions.\nBut I donʼt really have that time and maybe you donʼt either.\nDo you think it would be better if I found out a little more about you so I know\nexactly what would help you?”\nor\n“Absolutely, I understand. Weʼll go through it. But itʼs going to be pretty hard if I\ndonʼt even know exactly what you need.\nYou know, itʼs a little stiff if you go to a doctor and ask for pills without\nexplaining what your problem is in the first place…\nso honestly, what makes you want to do something different in the first place?”\nThe one call close\t2\n\n-- 2 of 12 --\n\n“Everything is good. Just want to get better”\n(future-focused individuals who donʼt like to admit problems)\nPut them in a Good-to-great frame\n“Ahh okay so it sounds like we want to go from\nGood to\nExcellent or even\nBest?”\nAdd hook\n“I love working with (people/avatars) who want to go from good to best,\nbecause they know they canʼt do what the 99% do. Do you get what I mean?”\nRephrase the question\n“So what would you say you need to go from good to excellent/best?”\n“So what do you feel youʼre missing right now that would make you good\ninstead of excellent?”\n\u0000Situation)\n1 \u0000 What are they doing right now?\n2 \u0000 How long have they been doing it?\n3 \u0000 Why are they doing it?\nOptional:\nWhat results are they getting? (biz op)\n\u0000Problem)\n1 \u0000 What is missing / why is their current situation not sufficient?\n2 \u0000 Probe and make it hurt\n3 \u0000 Eliminate all potential other solutions\n4 \u0000 Get them to commit\nYou need pain because pain creates urgency. The pain is in the symptoms.\nThe difference: The problem is that the person is broke. The symptom\n(what carries the pain) is that they are stuck on public transport, can't\nafford to pay the rent, never go on trips, etc.\nThe one call close\t3\n\n-- 3 of 12 --\n\nTo reach these symptoms, you ask questions about their needs, how it\nmakes them feel, etc.\nRemember to start by asking questions about ‘lowerʼ needs.\nCreate pain in two different offers\nImprovement Offer\n\u0000They are already trying but it is not working)\nHow:\nYou MUST create doubt in their current method and make them admit that it is\ntheir fault.\nAsk internal based questions.\n“So what do you feel you are missing that is causing you to be stuck at your\ncurrent weight?”\nPro tip: About biz op → Reveal exact numbers quickly, you canʼt hide behind\nnumbers\nNew Opportunity Offer\n(you are selling them on a completely new mechanism)\nHow:\nGet them to admit that their current opportunity is causing them pain.\n“What would you say is the thing that your current business model is not\nfulfilling that is causing you to be stuck where you are now?”\nEarly pain push-back\n“Everything is good, just want more”\nHow:\nGet them to briefly go into their goal and then pull them back into reality\nquickly.\n“Okay, but a lot of people are still happy staying in the same situation they are\nin… where does your drive to earn more come from? Why is it important to\nyou?”\n“Okay, but why canʼt you do all that right now? What do you feel is missing, in\nterms of your business, for you to be able to do those things right now\ninstead?”\nThe one call close\t4\n\n-- 4 of 12 --\n\nWhen you have the problem, you start digging with probing questions…\nPlay confused, worried\nStart broad - “What do you mean by…”\nGet specific - “Can you give an example?”\nExplore time span - “How long has this been going on?”\nQuantify the pain (optional) - “How much money/time do you feel you are\nlosing right now?”\nCase impact - “What impact is this having on your business/day/people\naround you?”\nPersonal impact - “I donʼt want to assume anything, but how do you feel\nabout this? / How does this make you feel?”\nConsequence (optional) - “What happens if this continues?”\nEliminate potential solutions\n“Unlike ABC, what makes you want to seek help instead of… doing it yourself /\ncontinuing with one of your other solutions?”\nGet them to sell themselves on your opp.\nUnderstanding purchase decisions\n1 \u0000 What have they done to solve the problem so far?\n2 \u0000 Pre-handle objections\n3 \u0000 Identity reframe\nFuture pacing\n0 \u0000 Reframe\n1 \u0000 What does it\ndo for them to reach their goal?\n2 \u0000 Get a moment\nThe one call close\t5\n\n-- 5 of 12 --\n\nReframe\nUse “medal reframe”\n“Say you tell someone to run a 100-meter dash, they will run. But say you then\nhave them run the same dash, but this time they actually get a medal if they run\na certain time, will they run faster? Yes.”\n“So say [opportunity] is your race, what would you say is your medal? What\ndoes this mean to you?”\nThis defuses and introduces your deeper questions\nor\nPersonal event (advanced and you actually need a fitting story)\nAsk a genuinely curious question:\n“If you had the opportunity to do [goal], what difference would it make in your\nlife?”\nProbe\n\"\u0000Why that?”\n“What would you drive?”\n“Why that car?”\n“What would it mean to you personally?”\nThen paint a picture\n“So if you really imagine it [paint a picture based on what they said] - how\ndoes that make you feel?”\n“So if you really imagine it -\nDriving your new white Ferrari Pista from the\ndealership, and it's 100% yours, completely paid-off, you're cruising down the\ncoastal roads of Miami, palm trees all over, the sun is shining, you're\ncompletely free - right then, how does that make you feel?”\nYou can paint anything. Conversations, deals, flashbacks, moving into a\nnew house, etc.\nConsequences\n0 \u0000 Reframe\nThe one call close\t6\n\n-- 6 of 12 --\n\n1 \u0000 Identify the consequence of not taking action\n2 \u0000 Get them to commit to change\nFirst a reframe to get them to open up\n“I appreciate you being open with me, and now we know what youʼre running\ntowards. But if you take the same person who runs the 100-meter dash and put\na lion behind them, do you think theyʼll run faster then too?”\n“So to you, what is your lion? Why?”\nThe cost of not taking action is the biggest motivator for people to buy.\nCreate pain and donʼt look for answers, look for emotions.\n“Can I just ask, if nothing changes on [topic], how likely is it that youʼll reach\n[goal] in [time frame]? Why not?”\n“So what if nothing changes? # to 6 months go by and weʼre stuck with the\nsame [problem] and we never get [emotional outcome]?”\nPotential push-backs\n“I wouldnʼt let that happen, I want to do this”\nThrow their ego aside:\n“Iʼm not questioning your will, but if we never let the lion out of the cage, weʼll\nnever run…”\nReframe the question.\n“I donʼt really know”\nAlways answer:\n“If you really think it through?”\n“I would do something else”\nReframe: Having a plan B is part of the problem.\n“But donʼt you think that might be part of the problem?\nIf you look at everyone who is really, really successful in life, they always had a\nplan B?\nDo you know where the expression “Burning the boats” comes from?\nThe one call close\t7\n\n-- 7 of 12 --\n\nWhen the Spanish came to South America and were going to take on the\nindigenous people who lived there, they were outnumbered 1\u000010.\nSo the Spanish leaders burned all the boats of the army, because he knew that\nthe soldiers would give up more easily if they knew that they had a plan B - to\nescape from there.\nSo my question is… are you willing to burn the boats in your life to achieve\nthis goal?”\n“To really be able to do this, we have to understand what the lion in your life is\nright now…”\nRephrase the question.\nThen you have to get them to say for themselves that they donʼt accept this\n“So youʼre going to let it happen?”\n“But whose responsibility would you say it is? To let it happen or not?”\n“So are you ready to actually make a change so this doesnʼt happen?”\n“Why now? Why not push it forward for a while like most people do?”\n“So itʼs time to make a change then”\nNOW you can move on to the presentation, but they have to agree to it.\n“Great! Thatʼs what I needed to hear from you… Since you said you have X\nproblem that causes Y things… then what we do will work for you.”\n“So if it would help you… I can go through how we help people with X problem\nget to Z goal. Would that help?”\nPresentation\n1 \u0000 Pillar 1\n2 \u0000 Pillar 2\n3 \u0000 Pillar 3\n4 \u0000 Find certainty\n5 \u0000 Price\nMust be short and straight to the point, present your offer in 3 parts.\nThe one call close\t8\n\n-- 8 of 12 --\n\nMax 3\u000010 min\n“One of the most common reasons people come to us is that they donʼt know\n[important knowledge\nWhich leads to many feeling [strong emotion]\nSo the way we solve it is to [own solution]\nAnd what this means for you is that you will learn [solution/method] because\nyou said [the problems they mentioned]\nSo this is how we will solve it…\n3 pillars\nHow does that sound to you? Why?”\nNow you need to make sure they are confident that this will solve their\nproblem\n“Before we dive into the investment, do you feel that what we went through can\ntake you from [current position] to [goal]?”\n“On a scale of 1\u000010, how much do you believe in this solution?”\n“Why is that? What would it take to take it from [number] to a ten?”\nIf they are convinced, you can drop the price.\nDonʼt make it a big deal, but itʼs important to value-bomb the sentence\nbefore mentioning the investment.\nFirst, tie the investment to an outcome, then explain the next steps.\n“The investment to get you started so you can [achieve your goal - outcome\nbased] is [price]…\nthe next steps are simple, weʼll start your onboarding right away so you can\n[learn the method] and [get closer to your goal - progress based].\nAny questions on how it works? Would it work for you?”\nObjections\n1 \u0000 What do they mean?\n2 \u0000 Why would they do it?\n3 \u0000 Reframe\n4 \u0000 Leverage\nThe one call close\t9\n\n-- 9 of 12 --\n\n5 \u0000 Are they ready to change the situation?\n6 \u0000 What can they do? What resources?\nObjections are limitations. Donʼt allow their limitations, you are here to help\nthem.\nRight now their obj. weighs more is their “why”\nThe goal now is to flip this so that their “why” weighs more than obj.\n“I donʼt have the money…”\nDefuse + clarify.\n“Okay, no problem. What do you mean you donʼt have the money?”\n“Money aside, would you do it?”\n“Why though?”\n“But why invest to reach your goal?”\nReframe \u0000Money hard → Commitment hard)\n“Can I suggest something?”\n“Whatʼs riskier?\nThat you keep doing what youʼre doing now and things get even worse… or that\nwe remove this constraint, get the money, and make sure you [get results]?”\n“Why is it riskier?”\nLeverage\n“So what happens if you decide to stay where you are now?…\n“What are the daily things youʼll have to carry a year from now, if you donʼt\nchange anything?”\nCommit\n“Good thing youʼre open, itʼs actually taking the step thatʼs the hard part. So are\nyou ready to do what needs to be done? Why?”\nFind resources\n“Good, if youʼre actually ready, I want to see you win, how about we focus on\nwhat we CAN do instead of what we CANʼT do? So what can we do?”\nThe one call close\t10\n\n-- 10 of 12 --\n\n“I donʼt have time”\nDefuse + clarify.\n“Okay, no problem. What do you mean by that?”\nReframe \u0000I canʼt → Others in my situation have done it)\n“Can I suggest something?”\n“There are those who have [their situation but worse], and still succeed, what\ndo you think they do to actually create time in their daily lives for their\npriorities?”\nLeverage\n“So what happens if you decide to stay where you are now?…\n“What are the daily things you will have to carry for a year from now, if you\ndonʼt change anything?”\nCommit\n“Good that you are open, it is actually taking the step that is the hard part. So\nare you ready to do what needs to be done? Why?”\nFind resources\n“Good, if you are actually ready, I want to see you win, how about we focus on\nwhat we CAN do instead of what we CANʼT do? So what can we do?”\nSmoke screen\nAnything external or internet related is about time, money or perceived value.\nTry to dig out if it is money or time that is actually the problem.\nMost often it is money.\n“What do you mean by that?”\n“And where do you think this comes from?”\nValue objection\nIf you followed the process you should not get any value objections - it means\nthey are not completely sure about the process/method.\nGo back to the 1\u000010 scale.\nFear\nThe one call close\t11\n\n-- 11 of 12 --\n\nIf they still donʼt want to pay - comes from a place of fear\nGo as far as you need to to get them to commit.\nReframe\nLeverage\nCommittment\nNice vs. Nice?\n“Do you know the difference between being mean and nice?”\n“Think about it… weʼre out at a bar or something, weʼre talking to some girls and\nmy breath stinks…\nIf you were nice you wouldnʼt say anything, because youʼd worry about what Iʼd\nthink or say…\nBut if you were nice, youʼd say “bro, come here I have to say something, your\nbreath is awful right now, have a piece of gum and weʼll go back” because you\nwant the best for me.\nIs it okay if Iʼm a little “nice” to you now?”\nGo all in… tell them what they need to hear.\nThe one call close\t12\n\n-- 12 of 12 --\n\n\n---\n\n## Language Fixing\n\nLanguage fixing\nThe best way to sell is a straight line.\nBut your prospects will start to get out of line so you have to bend them back\ninto the straight line.\nOne way to predict whether they will bend the line in the end is their\nlanguage.\n\u0000\u0000\u0000 Wishful thinking\na\u0000\u0000 When they use too much\nb\u0000\u0000 “I wish that…”\nc\u0000\u0000 “I would like…”\nd\u0000\u0000 Solution: Call out their BS and ask what they actually need\ne\u0000\u0000 Ex: “It would be nice to make 100k/m”\nf\u0000\u0000\n“Yes and it would be nice to be on the beach right now, tell me what you\nactually need”\n\u0000\u0000\u0000 Minimizing their problem\na\u0000\u0000 They express themselves emotionally about how it “isnʼt that bad”\nb\u0000\u0000 This dampens urgency: If there is no urgency, they will do less to\nactually fix the problem\nc\u0000\u0000 Solution: Re-frame their mindset so they see the “minimization” as part\nof the problem\nd\u0000\u0000 Ex: “I mean… itʼs not that bad”\ne\u0000\u0000\n“Donʼt you think that could be part of the problem? … If we keep saying\nto ourselves that it's not that bad, where is the motivation to actually\nchange anything?”\nf\u0000\u0000 “I don't really know”\ng\u0000\u0000\n“Can I give you a new perspective?” … “If you were playing a football\ngame and one of your teammates didn't care if you won or lost, would\nyou want him on the team?”\nh\u0000\u0000 “No”\nLanguage fixing\t1\n\n-- 1 of 2 --\n\ni\u0000\u0000\n“Why not?”\nj\u0000\u0000\n“Exactly… there's no real feeling that pushes him forward, so be\ncompletely honest now… (insert an event that symbolizes his\nproblem)… how does that make you feel?”\n\u0000\u0000\u0000 External language - victim mindset\na\u0000\u0000 They don't take responsibility for their problem, blaming everything\nexternal they can.\nb\u0000\u0000 This means they won't be convinced that you can fix the problem,\nbecause they don't believe that anything can help them.\nc\u0000\u0000 Solution: Tell them about someone else in their exact situation who is\nmaking it work anyway\nd\u0000\u0000 Ex: “I mean… itʼs just harder in todayʼs economy”\ne\u0000\u0000\n“So thatʼs how it is, can I share a perspective with you?”\nf\u0000\u0000\n“Weʼve worked with a lot of agents who have made it work despite\ntodayʼs economy. So what do you feel you might be missing when it\ncomes to generating leads… or maybe how you take care of them so\nthat things are inconsistent?”\ng\u0000\u0000 Get them to search internally for their real problem.\n\u0000\u0000\u0000 ambiguous language\na\u0000\u0000 “I think…”\nb\u0000\u0000 “Probably…”\nc\u0000\u0000 “It should be…”\nd\u0000\u0000 This indicates doubt, they wonʼt buy if they doubt. What they need is\ncertanty.\ne\u0000\u0000 Solution: Repeat what they said so they understand that it is unclear\nf\u0000\u0000 Ex: “I think I will do it”\ng\u0000\u0000\n“Think?”\nLanguage fixing\t2\n\n-- 2 of 2 --\n\n\n---\n\n## Structure Training (Recap)\n\nStructure Training (Recap)\nFundamentals\n\u0000\u0000\u0000 Authority\nLook the part\nFitness → jacked, business → more formal\nSound like someone with it\nStrong voice, sound comfortable\nSpeak and appear confident\nGood setup and background\n\u0000\u0000\u0000 Funnel\nA sales structure works like a funnel. You start very broad, and it gets\nnarrower the further into the conversation you go.\nYour job is to make sure the person has done/understood everything\nthey need to make a decision.\nThe further down you go, the more specific you need to be. You canʼt\nkeep using cookie-cutter questions.\n\u0000\u0000\u0000 Use their words\nYou have to work with the conversation you have, not the one you want\nSo you have to stick to their words. They might use the word “stress,”\nbut you might interpret it as fear or frustration. Use the word “stress”\nanyway.\nYour words mean little. Their own words are gospel.\nOverall sales structure\nThe Opening\nEveryone has needs, but what needs you have are relative to where you are\nin life\nStructure Training (Recap)\t1\n\n-- 1 of 3 --\n\nBroke people will find themselves lower down in the pyramid. Because we\ncanʼt start worrying about security if we donʼt have food. And we canʼt\nworry about how weʼre perceived if we donʼt even have security, e.g., a\nwell-paying job.\nThese needs are very clear; they arenʼt that hard to identify because they\nare more fundamental.\nMore successful people will have their own needs. Usually one of the\nhigher-level ones, since theyʼve got the underlying ones covered. Like\nesteem and belonging. But remember that everything is relative. A rich\nperson might also need security. If, for example, a billionaire loses several\nbillion dollars, theyʼll be in a really bad spot in their own eyes. But still rich in\neveryone elseʼs.\nWhat theyʼre looking for (weʼll figure that out through questions) = what\nthey donʼt have. What they donʼt have = PAIN\nPeople who are satisfied with their lives\ndonʼt jump on sales calls\nYour goal with this part of the call is to get as MUCH LEVERAGE as possible\nso you can then get them to do something out of character.\nTONE\u0000 Open and curious\nDonʼt let them pigeonhole you as a “telemarketer”\nDonʼt use strict agendas. Donʼt say you only accept YES or NO. You donʼt\nwant to create resistance. IF you have one, be open about it.\nWhat made you schedule this call?\nStructure Training (Recap)\t2\n\n-- 2 of 3 --\n\nWhat kind of help are you looking for? ← Your goal: Identify a goal or a\nproblem\nThe first part of this call is just to see where you are with X and where you want\nto be in order to create a tailored plan, and then perhaps go over possible steps\nmoving forward. ← An open and light agenda\nI like working with people who are in the stage of transitioning from someone\nwhoʼs still working—maybe an 8-to-5 job—but wants so much more, to\nsomeone with their own business and so on. \u0000PERSON] always says that people\ngo from order takers to action takers. ← An identity hook that creates leverage\nfor the future\nSituation\nBe straightforward and curious; pay attention to your tone\nYou donʼt have to know everything about their problems either. Just enough\nso you can dive deep into their pain points.\nNo more than 20 minutes\nProblem\nHere, you dig into their pain. Because itʼs pain that creates urgency.\nProblem vs. symptom. The pain lies in the symptoms, not the problem. Itʼs\nthe little things in their daily lives that make their lives feel harder.\nIdentify their needs, start with the pyramid, and address the ones further\ndown that are more fundamental.\nImprovement opportunity. → When it comes to improving someoneʼs\nsituation in a specific area—meaning theyʼre at an intermediate level in what\nthey do—you want to create doubt about their current method and get them\nto admit that itʼs their fault. No external factor should be involved.\nOtherwise, youʼll never change anything.\nNew opp → Get them to admit that their current opp (job, business,\nsituation, whatever) is what is causing them pain.\nStructure Training (Recap)\t3\n\n-- 3 of 3 --\n\n\n---\n\n## Tonal Training\n\nTonal training\nTypes of tone:\nConfused\nCurious\nConcerned\nChallenging/skeptical\nPlayful\nA big part of sales is conveying emotions. This is what our tone helps us do.\nItʼs also true that when weʼre anxious or afraid before a call, it will show in our\ntone for the same reason.\nSo mastering your state of mind and your emotions is mastering your tone.\nWhy…\nConfused\nWhy sound confused? Because people want to help people who are\nconfused. You draw them to you. They open up.\nFor example, you can respond in an empathetic way and tilt your head:\n“Tough, huh?”\nCurious\nWhy? They need to understand that Iʼm here to help them and not to push\nanything on them.\nConcerned\nBecause I genuinely know that if they donʼt change something, theyʼll stay\nin the same situation\nTonal training\t1\n\n-- 1 of 5 --\n\nThe concern in your voice helps amplify their sense of pain—which is\ngenuine\nFor example…\n“But… what happens if\nnothing changes then ??\nChallenging\nBecause I donʼt want them to buy into their own limitations. I know they can\ndo more, and itʼs better for them.\nPlayful\nBecause helping people is fun and not a stressful process\nIt allows them to open up to you\nImportant to use a lot at the beginning when they have to be completely\nhonest, and they arenʼt completely honest when under stress or anxiety\nHow do I know what tone to use?\n→ Always ask yourself, “What do I want them to feel?”\n→ Use the tone that promotes what they need to feel\nPerception, Intent, and Value\nFor them to take in all the information youʼre saying and actually understand\nwhy they should—or must—buy, you need to follow three steps\n\u0000\u0000\u0000 Their perception of you\nFirst, they must form the right perception of you; otherwise, they will never\nallow themselves to absorb and trust what you say. You do this through\ntone—that is, by conveying the right energy and emotions to them.\nEmotions that show you understand, listen, want to help, and are\ntrustworthy.\n\u0000\u0000\u0000 Your intention\nThe way what you say comes across to them. This is also important to\nmaster. Otherwise, misunderstandings can occur, or you might just come\nacross as too salesy. This is also partly achieved through tone.\nTonal training\t2\n\n-- 2 of 5 --\n\n\u0000\u0000\u0000 The value you offer\nWhat we actually provide them with.\nDifferent aspects and how you should come across in them…\nAt the beginning\nHere, you need zero sales resistance. Nothing should suggest that youʼre\ntrying to sell them something.\nThatʼs why you need to sound curious, so they can open up when they\nrealize you want to listen and not just sell\nBut also playful, so you come across as a normal, friendly person and not a\ncreep. Theyʼll open up more that way.\nWe can never be sure why theyʼre in the situation theyʼre in\nHow: Tilt your head, ask lots of questions in a curious tone\nTo practice this, you can film yourself and practice\nWhen we get to the problem\nA mix of curiosity and concern\nWhen someone explains their problem to us, we feel concerned, because\nthat feeling is conveyed to the prospect. When they feel concerned, the\nproblem becomes more serious and creates a greater sense of urgency to\nsolve it.\nIf you donʼt help them alleviate the pain, people tend not to change their\nminds\nNot: “Tell me more…” nonchalantly\nBut: “What…!?” with a leaning-in, close, concerned expression and a\ndifferent tone\nWe can also use our language to ensure our intent comes across correctly…\n“I mean… thatʼs a little concerning, can you tell me more about it?”\nTonal training\t3\n\n-- 3 of 5 --\n\nReact as if your best friend suddenly told you out of the blue that he has an\nillness. Donʼt just overdo it.\nUnderstand the buying decision\nHere, we shift—usually quite quickly—our tone to become challenging and\nskeptical.\nIn a way, weʼre pushing the customer away. So they understand that weʼre\nhere to help them, but ONLY IF they actually want to. This highlights the\nfact that theyʼre the ones who have to change their situation. And thereʼs no\npressure on my part to close the sale.\nEveryone has some belief that isnʼt based on anything logical. Sometimes\nyou have to be direct and real with them so they understand that these\nbeliefs arenʼt worth holding onto. Thatʼs where skepticism comes in.\n“Hereʼs the thing… do you really want to solve the problem?” + direct tone\nand dismissive body language\n“May I challenge what you just said a little?”\nFuture pacing - When we paint a picture of the results\nA lighter, more interested, and curious tone.\nTheyʼre describing their ideal future to us; we need to reward that by\nshowing interest in what theyʼre saying. The best way is to ask questions\nabout the details theyʼre talking about.\nTalk as if youʼre interested in something someone is excited about.\nSomething new, a dream trip, a win…\nIf you can visualize something, the chance that youʼll actually pursue that\nreality is greater. We help them visualize.\nAddressing the consequences\nConcerned, a bit challenging\nSo that we can amplify the sense of urgency behind the need for change\nTheir perception of you is that you actually care\nTonal training\t4\n\n-- 4 of 5 --\n\nBuilding the “gap”\nIn a sales conversation, you need to create a bridge. The bridge, divided\ninto their current stage and desired outcomes, is one of the biggest drivers\nbehind their decision to buy.\nPeople want\nto escape their current situation → We get there by asking\n“What?” → We ensure the answers we provide are credible through how we\npresent ourselves—that is, by using the right tone\nPeople\nstrive toward their dreams and desired outcomes → We uncover this\nby asking\nWhy? → We ensure our answers are credible by using the right\ntone when we ask\nCommitment\nA strongly challenging tone\nWe want them to\njustify why they need to change\nHere you must be direct and honest with them, and ask the tough questions\n—the ones they donʼt always dare to ask themselves\nProbing & Clarifying\nConfused or curious, depending on the context\nConfused → ‘Ah, he doesnʼt know what Iʼm talking about, let me clarifyʼ\n“What do you mean by that?” + lean in, change your tone\nVerbal pace\nHow fast vs. slow we say something adds to what weʼre saying\nWhen you want to draw more attention to a\nTIMING is also very important\nYou need to maintain a medium pace throughout the call to be able to\nemphasize. If you overdo any tone or pace, it becomes irrelevant\nTonal training\t5\n\n-- 5 of 5 --\n\n\n---\n\n## Objection Training (Recap)\n\nObjection training (recap)\nSmoke screen objections (not real)\nReasons:\nFear\nYou havenʼt built enough rapport\nWhether theyʼre scared or you havenʼt built enough rapport, you need to slow\ndown. When theyʼre scared, their thoughts will run fast. Itʼs important to set the\npace right. Let them think, let them understand what youʼre saying.\nAction: When they say “I need to think about it” or “…talk to my partner” take a\nsip of water. This gives you time to think, but also sets the pace so they can\nabsorb what youʼre saying.\nIt all depends on how they perceive you (trustworthiness). If youʼre too fast →\nstress, feeling like youʼre pushy and trying to sell them out, excuses. If youʼre\nchill, calm, collected → You come across as someone who actually wants to\nlisten to them and understand them.\n“I have to think about it”\nCalm down - sip water\nAnswer: “Just so I can give you the best info… What do you feel you need\nto think about?”\nImportant: do NOT say it in a straight-forward pushy way, be nonch and\navoid neediness (they know you want to ask them that)\nMove on to\nmoney obj.\n“I have to talk to my partner”\nCalm down\nAnswer: “Just so I can fully understand you… what would that convo\nMOST be about?”\nIf they are sure it would be about the money → go to\nmoney obj.\nIf they say it really HAS to be because that is how they make decisions\n(excuse) → go to\ndecision making process\nObjection training (recap)\t1\n\n-- 1 of 11 --\n\nAnother smoke screen (or the ones above)\nUse the same method to validate the obstacle as if they said it is too much\nmoney. Ask if they would do it if their partner wasn't involved or if they said\nyes.\nIf they say YES, you can also check (to avoid future obj.) if the investment\nwould work for them if they just talked to their partner. Ask one more time\njust to be absolutely sure, otherwise move on to\nmoney obj.\nIf they DON'T talk about money at all, you can ignore it (as a real obj.) from\nnow on. Because money is always the elephant in the room.\nNiche Smoke screens:\n“I need to talk to someone (testimonial)?”\nAsk them what they think will happen\nGet them to admit that they know they will only have positive things to say\n“Are you looking for ways to do this or are you looking for ways not to do\nit? Why?”\nClarity reframe (you know this)\nAsk what is actually stopping them\n“I need to talk to other companies\nFirst you need to understand what they want to know from others\nAnswer: “Okay, no problem, just so I know if I can help, what is it that you\nwant to know from them?”\nIf they just want to see other options → Clarity reframe\nIf they say they always make decisions then → Go to DMP.\nIf it is a real (money, time value) obj. → Go there\nReal objecitons\nMoney \u00009/10 times)\nCDR\u0000 Clarify, defuse, reframe\nFirst clarify you:\n“What do you mean?”\nThen you refute their obj.\nObjection training (recap)\t2\n\n-- 2 of 11 --\n\n“Okay, no problem…”\nThree more questions in a row to identify that it is actually about money:\n“Money aside - would you do it?”\n“Why would you do it?” ← Get them to back up what they just said\n“But why invest your time in doing something that gives you X goal?” or\n“Program aside, why invest in yourself to achieve the goal?” ← Get them to\ntell you, in their own words, why their\nemotional why is more important than the\nmoney\nAlways make them see it as you are doing your technology FOR them, and not\nTO them.\nThen you re-frame the\nmoney (if necessary)\nIf it is an ROI sacrifice (they want to earn more)…\nMost often, you distinguish between problems and symptoms. You position\nwhat they see as a problem, i.e. that they donʼt have the money, as a symptom\nof their real problem. Which is that they\ndon't have the information to earn\nenough.\nExample: “What is the real problem and what is the symptom here?”\n“So the real problem is that we don't have the information to earn what we\nwant, and the symptom is that we don't have the money”\n“Do you agree with that?”\n“Why?”\nGive them an easy two-fold question:\n“What is riskier… finding a way to get the money so you can solve the real,\nreal problem, or continuing to focus on the symptom and never doing\nanything about it, making it even worse?\nAlways say their upcoming choice last because it's easier to respond to what\nyou just heard.\nImmediately after, you always ask “Why?”\nAfter that, you double down again and ask what actually happens if they don't\nchange anything. A good example:\n“What would the daily consequences be if things were just the way they are\nnow?”\nObjection training (recap)\t3\n\n-- 3 of 11 --\n\nTime\nQuick summary of real obj.\n\u0000\u0000\u0000 We identify what the obstacle is\n\u0000\u0000\u0000 We ask permission to rephrase\n\u0000\u0000\u0000 We rephrase\n\u0000\u0000\u0000 We offer a two-fold choice\n\u0000\u0000\u0000 Get them to double down on why\n\u0000\u0000\u0000 Then we dig up consequences if it doesnʼt happen\nDecision-making process\n(if they still don't want to take the plunge or if they have\ntheir own ways of\nmaking decisions that don't help them)\nPartner\nWhat you want to do is break down the problem and find out if it's even a\nproblem at all, and if it is, make them realize that it's only their responsibility to\nimprove themselves.\nSo first ask:\n“If you went and told your wife you wanted to do this, but she didn't agree,\nwould that change your final decision, or what?\"\nIf NO → Sell right away\nIf YES → Continue\nAsk permission to give them a tip. Ask who is actually responsible for changing\nthe situation:\n“Who is responsible for getting you to your goal?” ← Don't stop until they\nunderstand that they alone are responsible\n“That reminds me of a Shakespeare quote… ‘Uneasy is the head that wears\nthe crown'\nHave you heard that before?”\nAfter they agree:\nObjection training (recap)\t4\n\n-- 4 of 11 --\n\n“So is it fair for you, if we think you are responsible, to take your crown off\nand put it on ___?”\n“Why not?” ← Get their backing dirrrrrekt\nAgain, just like with the money obj. we give them a two-fold decision to make.\n“You will have a conversation with them, but the question is just which type\ndo you want.. which one would you choose?… That you go to them with all\nthese problems that you wanted to solve but didnʼt, and that you have a rent\nto pay (in terms of ROI sacrifice). Or that you go to them and show them how\nyou have already solved the problem and lead them to that choice?” ← Frame\nit as taking different roles in the conversation, one is a man with the same\nproblems as before, and one is a leader who contributes confidently to those\nclose to him\n“And if she says ‘nooooo, you will earn too much and buy a lambo and leave\nme for a 20-year-oldʼ then we will give you a refund, okay?” ← then ease all\ntension with a little humor\n“The money is not the problem; it is about whether or not you are fully\ncommitted. So are you fully convinced that you want to do this or not?”\nIf → YES\n“So what do we have to do to reach the goal?”\n60% most of the time this is all that is needed.\nI always make decisions this way (need to wait, MUST 1000% ask the wife\netc.)\nYou can also ask them if this is how they always make decisions, but be sure\nfirst.\n“Okay, I get you… this is a pretty cliche question, but on a scale of 1\u000010, if 1 is\nthat you are very unhappy with where you are and 10 is that you are living\nyour dream life… where would you say you are right now?”\nIf 5\u000010 → check what they are assuming (what is a ten to you really and what is\na five?\u0000 Here you can humble them if you notice that it is necessary.\nIf 1\u00004 → Continue\n“Okay, why a __?”\nThe goal here is to get them to accept that they are not where they want to be\nfinancially. The steps are therefore to first accept their situation as not being\nObjection training (recap)\t5\n\n-- 5 of 11 --\n\nenough. Then (below) get them to accept that mindset plays some role, and\nthat they realize that it is their mindset that they need to change - because their\ncurrent one has brought them to this situation.\n“Okay, I hate the word ‘mindsetʼ… but do you agree that mindset… or\nmindset… can make us change the way we make decisions?”\n“So are you okay with letting your current mindset, which gives you a (e.g. 4)\non the scale, determine your results and your life going forward?”\nIf NO → “Why not?”\n“I appreciate you saying this… and I know that right now we want to (e.g.\nsleep on it, talk to family, etc.) Which I understand… because we all make\ndecisions based on our perspectives…\nThe problem is that if we continue to make decisions the same way we did\nbefore, when we havenʼt succeeded in what we really want, it will be much\nharder to change anything.” ← Position their mindset as the problem\n“In order for us to change anything, we have to start adopting a new\nperspective. So if we look at (the dream version of the person, e.g. 20k/m\nJohan). How would he make a decision? Should he wait one day, which turns\ninto two, which turns into three, etc. Or should he dive right in and bet on\nhimself?” ← Positioning changing the mindset as the solution\n“Why that?”\nAs usual, we always ask a twofold question before the commitment question:\n“Oh, so right now weʼre at a crossroads. We can either continue making\ndecisions as before and get exactly the same result… or we can make a\ndifferent type of decision so that we reach (their goal) that we promised\nourselves. Which would you choose?”\nIf YES…\n“What happens if you donʼt do it then? What happens if you continue making\ndecisions the same way as before?” ← Straight to the consequences\n“Do you want to stay in the same vicious spiral?”\n“So what do you want to do now?” ← Commitment\nIf they keep pushing…\n“I get that we can double-check ourselves until we forget it… why not triple\nand triple check it? But do you feel that with what we have been through, you\nObjection training (recap)\t6\n\n-- 6 of 11 --\n\nwill reach the goal? ← If they are arguing about double checking\n“Because look at it this way, when you get on an airplane, do you go into the\ncockpit and ask what exactly all the buttons do? Or do you sit down, put on\nyour seatbelt, and trust us to take you where you want to go, because weʼve\ntaken so many people there before?” ← Here we remind you of authority,\nguarantee, and previous proof\n“We know how this works, so what we need from you is for you to sit down\nand put on your seatbelt…”\n“But what does it actually change in the end?” ← If they donʼt want to give in,\nyou need to disconnect what they want to get out of double-checking from\nwhat youʼre actually helping them with\nIf they continue → Enter\nfear\nSummary:\n\u0000\u0000\u0000 Get them to accept their current position\n\u0000\u0000\u0000 Position their mindset as the problem\n\u0000\u0000\u0000 Position changing their mindset as the solution\n\u0000\u0000\u0000 We offer a two-fold choice\n\u0000\u0000\u0000 Get them to double down on why\n\u0000\u0000\u0000 Then we dig up consequences if it doesnʼt happen\nI only need 24 hours (a specific one, you can solve it as above or a more\ndirect way like below)\nBEFORE YOU GO INTO THIS, YOU MUST DO THE SAME MONEY\u0000VERIFICATION\nAS WITH ANY OTHER SMOKE SCREEN (to make sure itʼs not the money thatʼs\nthe problem)\n“You can definitely take a day and think about it… check this out; at the end\nof the day, Iʼm just here to help you…\nSo I can explain why it might not be the best solution without getting you\nupset?”\nOkay…\n“So it seems like weʼre going to make a really big change, right?”\n“And when we decide to make a big change, when is the best time to do it if\nweʼre 100% committed?”\nObjection training (recap)\t7\n\n-- 7 of 11 --\n\n…\n“It was probably 6 months ago, and the next best time is right now. Do you\nagree?” ← Here you can also add a New Yearʼs resolution analogy and ask why\nthey agree\n“Why do you agree?”\n“And, look, I just want to help you get the best results okay… when it comes\nto making a big decision and making a change… if weʼre that person who in\nDecember says theyʼre going to lose a ton of weight\nfirst starting January\n1st… and they wait… how long do those people actually stick to their goal?”\nIf they say they donʼt know → Explain that itʼs about two weeks max, then ask\nwhy\n“Why not so long?” ← Make them realize that their “procrastination” mindset is\na bigger problem than they think, that they actually have less chance of\nchanging anything long-term\nThe key here is to describe their mindset as a commitment problem. Are they\n100% committed or not?”\nIf they say itʼs not a month but just a day…\n“If youʼre the person who says on a Friday that weʼre going to start a diet on\nMonday… during Friday, Saturday and Sunday, do you think weʼre moving\ntowards our goal or away from it? Because we never\nstand still in life.”\n“Exactly, we walk away from our goal… so you can absolutely take a day and\nwalk away from your goals, but we know that how we do one thing is how we\ndo all things…\nSo if you tell yourself itʼs okay to walk away from your goals…\nWhy would I let you in if I really cared about you and that you would get the\nbest outcome?” ← Shows rough status and trustworthiness\nLESS direct → “Why would I let you walk away from this conversation if I\ncared…”\n“What happens if we keep telling ourselves itʼs okay to walk away from our\ngoals?” ← consequence\nFear obj.\nONLY AFTER YOUʼVE WENT THROUGH MONEY OBJ, PARTNER OBJ, OR\nOTHERWISE\nAFTER SMOKE SCREENS AND THEYʼRE STILL\nAFRAID… (and\nObjection training (recap)\t8\n\n-- 8 of 11 --\n\nrefuse to take the plunge)\nTheir fear is a non-logistic, underlying, secret belief that they just need a little\nhelp changing.\nThe problem is that they have their guard up when you give them different\nreframes to shift their mindset, you simply need a pattern interrupt where you\nlet them open up.\nABC → Admit, Befriend, Convert meaning\nAdmit:\nSo they say something that shows that they are actually just scared…\n“I think that hope is…\nI donʼt want to use scary… but itʼs a little scary, isnʼt\nit?”\nBefriend:\n“I understand how you feel, because Iʼve been there myself, and what youʼre\nfeeling is exactly what you should feel. Who grows in their comfort zone\nanyway?”\n“So that feeling youʼre feeling means that youʼre growing in some way,\nbecause if you were sitting there completely cold as a corpse, something\nwould be wrong, right? (might need to check your pulse)” ← Seriously +\ndefuse\nConvert meaning:\n“That feeling wonʼt go away, so the question is how do we use it…\nor 2 \u0000 We shape it into an action, into action, and now that weʼve taken a risk -\nthen it has to work. Then we have to step into becoming that (goal) version of\nourselves.\nSo what do you choose? Let the feeling stop you or shape it into taking a big\nstep?”\n“Why though?” ← Donʼt let them say\n“but…” Ask directly about the\nconsequence before they can yip. If you control what they think, you control\nwhat they do\n“What happens if you let it stop you though?”\nAre you going to let it happen?”\n“So what do we need to do to reduce the risk of it happening and us not\nreaching (goal)?”\nObjection training (recap)\t9\n\n-- 9 of 11 --\n\nGo to sell.\nThey still canʼt move on\nTake them out of auto-pilot mode.\nSpeech mode:\n“Becoming the version we need to be is tough because our old self is holding\non for dear life…\nI know that for me, when I always have to make a big decision, I have two\ndifferent voices in my head. I have one that says I should do it right away and\nthen I have one that says I should chill and wait… Do you get what I mean?”\n← This needs to be done so that they disconnect their fear from themselves\n…\n“Thatʼs interesting and itʼs completely normal… I call it my bitch voice and my\nboss voice. The bitch voice will always say things like ‘I canʼt do itʼ or ‘I have\nto waitʼ…\nWhile the boss voice always says “You have to do something, you have to bet\non yourself. You have to stop sitting on the bench and start being the person\nyou know you should be.” ← What youʼre really doing here is telling them what\nthey have to do, but itʼs not a callout because it exists in a quote\n…\n“These voices wonʼt go away, but do you agree that the voice I choose to\nlisten to always gets louder? Most people listen to their bitch voice so much\nthat you donʼt even hear their boss voice anymore…\nBut since youʼre on this call, you still have that voice, right?”\n…\n“So right now… and I know itʼs a tough decision… but which voice do you\nwant to be louder, the bitch voice or the boss voice? Why?”\n“So let me listen to it right now… what does it say?” ← What you speak, you\nalso think\n“Why does it say that?”\n…\nConsequence:\nObjection training (recap)\t10\n\n-- 10 of 11 --\n\n“But what happens if you keep listening to the bitch voice and let the boss\nvoice get weaker and weaker? And continue like that for the rest of your\nlife?”\n“Are you allowing that to happen?”\n“So what do we have to do for you to go to bed tonight knowing that today\nyou did exactly everything you could to actually change your life, achieve\n(goal) and (get their emotional outcome)?”\nObjection training (recap)\t11\n\n-- 11 of 11 --\n\n\n---\n\n## How to Pre-Handle Every Objection\n\nHow to pre handle every\nobjection\nThe goal here is to get them to reveal their “in-action” that has been holding\nthem back from doing something about their problem. Once youʼve done that,\nyou need to attack and shift their belief thatʼs stopping them. In other words,\nget them to\nwant to take action\nnow.\nTo find out their real limiting beliefs that are preventing them from taking action\nBEFORE you reach the pitch and drop the price, you need to ask the question…\n“What have you done before to solve the problem?”\nThey may answer different things…\n\u0000\u0000\u0000 Tried something before\na\u0000\u0000 What results did you get?\nb\u0000\u0000 Good results\ni\u0000\u0000 “What was missing?”\nii\u0000\u0000 “How long ago was this?”\niii\u0000\u0000 Go to\n“Didnʼt do a thing”\nc\u0000\u0000 Bad results\ni\u0000\u0000 GIRLFRIEND/RESTURANT reframe\nii\u0000\u0000 “If you go to a restaurant and get food poisoning, does that mean\nyouʼll never go to a restaurant again? No, just that youʼll never go to\nthat particular restaurant, right?”\niii\u0000\u0000 “Your experiences and past mistakes make you better equipped to\nchoose a better restaurant next time…”\niv\u0000\u0000 “Think about it this way… you can let them burn you once… but are\nyou going to let them burn you a second time by preventing you\nfrom considering going again?”\nv\u0000\u0000 “Why?”\nvi\u0000\u0000 “How long ago was this?”\nHow to pre handle every objection\t1\n\n-- 1 of 5 --\n\nvii\u0000\u0000 Go to\n“Didnʼt do a thing”\n\u0000\u0000\u0000 Talking to different companies right now\na\u0000\u0000 Gathering leverage…\nb\u0000\u0000 “Theyʼre still good companies, what would you say is what youʼre trying\nto get across by talking to them?”\nc\u0000\u0000 “Say you talk to everyone and you notice that everyone has generally\nthe same price, what would you assume then… if you had to make a\nchoice?”\nd\u0000\u0000 If they HAVE ALREADY talked to different companies…\ni\u0000\u0000 “Okay, what made you not go ahead with those companies?”\ne\u0000\u0000 “Have you tried anything before?”\nf\u0000\u0000 If yes, go to\n“Try something before”\ng\u0000\u0000 If no, go to\n“Didnʼt do anything”\n\u0000\u0000\u0000 Tried everything myself \u0000YT, free content)\na\u0000\u0000 You canʼt take this as a real answer\nb\u0000\u0000 “Yeah, I get it, but if Youtube really worked, we would all be millionaires\nby now, what have you done to get professional help?”\n\u0000\u0000\u0000 Didnʼt do anything\na\u0000\u0000 Now you find out their\nbelief that is holding them back\nb\u0000\u0000 “What is it that has stopped you from doing something?”\n\u0000\u0000\u0000\nYou will probably get excuses…\na\u0000\u0000 Time/external\nb\u0000\u0000 Show that it is not a problem\nc\u0000\u0000 “There are many others (e.g. in our program) in your position (lack of\ntime/other external), who even have a wife and children and a dog but\nstill find time to achieve X outcome.”\nd\u0000\u0000 “So what do you think allows them to find time to achieve their goals?”\n(selling themselves on the idea)\ne\u0000\u0000 “Then what has stopped you from finding time to achieve X outcome?”\n\u0000\u0000\u0000 Money\nHow to pre handle every objection\t2\n\n-- 2 of 5 --\n\na\u0000\u0000 “I get it, can I skip that thought for a second?”\nb\u0000\u0000 “Our greatest superpower is to always be able to find a solution. But\nmany people use that superpower to come up with why it is not\npossible to find a solution.”\nc\u0000\u0000 \"People are really smart at finding ways to say 'I can't afford it,' but they\nforget to use that same smartness to find ways to actually afford it.\"\nd\u0000\u0000 (our greatest superpower is to be resourceful, but most people use thier\nresourcefulness on how they can't be recourseful)\ne\u0000\u0000 Basically frame it so that they understand that it's not the price of the\nsolution that's the problem, but that they don't have the money that's\nthe problem. What happens here is that many people realize that they\nactually have the money for it, which reveals the real fear.\nf\u0000\u0000 \"So what's been stopping you from getting the resources you need to\nsolve X problem and get Y outcome?\"\n\u0000\u0000\u0000 Didn't know about it before\na\u0000\u0000 \"Can I share a perspective?\"\nb\u0000\u0000 \"Okay, so if we've been around this problem for X amount of time,\nwhose responsibility is it to go out and find a way to solve it?\"\nc\u0000\u0000 “So whatʼs stopping you from looking into and finding a solution to this\nproblem?”\n\u0000\u0000\u0000 Just looking around/researching\na\u0000\u0000 Here you just want to show them that itʼs actually clarity they need…\nb\u0000\u0000 “How long?”\nc\u0000\u0000 “So whatʼs stopping you from diving into one of the things youʼve been\nlooking into?”\nd\u0000\u0000 “Okay, so you just need more clarity?”\ne\u0000\u0000 “Can I share a perspective on what clarity actually… means?”\nf\u0000\u0000 “You never know what the weather will be like at the beach tomorrow\nuntil you actually go there and see for yourself… so whatʼs the only way\nfor you to know if any of these solutions will work for you or not?”\ng\u0000\u0000 “So whatʼs really stopping you from diving in and seeing if it will work or\nnot?”\nHow to pre handle every objection\t3\n\n-- 3 of 5 --\n\n\u0000\u0000\u0000\nFinally you get one of the real beliefs…\na\u0000\u0000 itʼs not a priority/too lazy/too comfortable\nb\u0000\u0000 Afraid - donʼt know if theyʼll make it\nc\u0000\u0000 Think they can fix it themselves\n\u0000\u0000\u0000\u0000 “What do you mean by that?” (always) make them dig deeper\n\u0000\u0000\u0000\u0000 “Can I suggest something?”\n\u0000\u0000\u0000\u0000 Choose a route…\n\u0000\u0000\u0000 Direct attack on revealed belief\na\u0000\u0000 “Can you see that (belief pattern) is keeping us in our current situation -\nand are you okay with me asking?”\nb\u0000\u0000 If so… then they admit to themselves that this is a problem, the natural\nnext step is to find a solution.\nc\u0000\u0000 “What are we going to do to overcome this mindset so we can actually\nachieve X goal?”\n\u0000\u0000\u0000 If they admit that they need to change…\na\u0000\u0000 “You donʼt have to change… what happens if you donʼt do anything?”\n3. Add an identity frame here\n\u0000\u0000\u0000 With an identity frame we create an identity gap. We reveal that itʼs\nreally about them wanting to be a better person but these beliefs are\nholding them back from doing so.\n\u0000\u0000\u0000 Is it maybe time to make a change?”\n\u0000\u0000\u0000 Or: Dig even deeper\n\u0000\u0000\u0000 “So where does it come from? Having that pain for X amount of time\nand letting (belief) keep you stuck where you are now?”\n\u0000\u0000\u0000 “So what do you feel it has cost you?”\n\u0000\u0000\u0000 (if itʼs not an ROI money sacrifice, you have to dig up other important\ntopics- family, children, health, time)\n\u0000\u0000\u0000 About ROI…\n\u0000\u0000\u0000 “Do you mind doing the math… and looking at the numbers?”\nHow to pre handle every objection\t4\n\n-- 4 of 5 --\n\n\u0000\u0000\u0000 Get out a calculator and multiply how much they said they are losing\nover time they have waited to take action.\n\u0000\u0000\u0000 ALWAYS get them to accept the amount\na\u0000\u0000 “Does that amount sound right?”\nb\u0000\u0000 Also have a surprised/shocked tone and body language\nc\u0000\u0000 “So you feel that feeling/belief is worth holding on to if we want to\nreach X goal?”\nd\u0000\u0000 Why not?\ne\u0000\u0000 “Time for a change?”\nf\u0000\u0000 “What happens if you donʼt do something then?”\n5. Add an identity frame\na\u0000\u0000 Right now we have a numbers gap. They want to reach a sum but we\nreveal that these beliefs are keeping them in their current painful\nsituation.\nb\u0000\u0000 With an identity frame we create an identity gap. We reveal that it's\nreally about them wanting to become a better person but these beliefs\nare holding them back from doing so.\nHow to pre handle every objection\t5\n\n-- 5 of 5 --\n";
+
+const BASE_SYSTEM = `You are the AI engine behind "Sales Camp Games", a sales training app.
+Every piece of coaching, feedback, generated objection, scenario, and explanation you produce
+MUST be grounded in the sales study notes below. Reference the underlying principles by name
+where relevant (e.g. Authority, Language Fixing, Limiting Beliefs, Tonality, Identity Shift,
+Certainty Building, Objection Handling, Selling to Identity, The One Call Close, Structure).
+Do not invent generic sales advice that contradicts these notes.
+
+Always respond with ONLY valid JSON matching the schema described in the user message.
+No markdown, no commentary, no code fences.
+
+=== SALES STUDY NOTES ===
+${SALES_NOTES}
+=== END OF NOTES ===`;
+
+const MODEL = "claude-sonnet-4-5-20250929";
+
+/* ==========================================================================
+   API key handling
+   ========================================================================== */
+const API_KEY_STORAGE = "scg_api_key";
+
+function getApiKey() {
+  return (localStorage.getItem(API_KEY_STORAGE) || "").trim();
+}
+
+function setApiKey(key) {
+  localStorage.setItem(API_KEY_STORAGE, key);
+}
+
+function updateApiKeyStatus() {
+  const key = getApiKey();
+  const statusEl = document.getElementById("api-key-status");
+  statusEl.classList.remove("empty", "ok", "error");
+  if (!key) {
+    statusEl.textContent = "Not set";
+    statusEl.classList.add("empty");
+  } else if (key.startsWith("sk-ant-")) {
+    statusEl.textContent = "Key saved";
+    statusEl.classList.add("ok");
+  } else {
+    statusEl.textContent = "Doesn't look like a Claude key";
+    statusEl.classList.add("error");
+  }
+}
+
+function onApiKeyChange() {
+  const key = document.getElementById("api-key-input").value.trim();
+  setApiKey(key);
+  updateApiKeyStatus();
+}
+
+/* ==========================================================================
+   Claude API helpers (direct from browser)
+   ========================================================================== */
+function extractJSON(text) {
+  let cleaned = text.trim();
+  cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```\s*$/, "");
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start === -1 || end === -1) throw new Error("No JSON object found in AI response");
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
+async function callClaudeRaw(system, messages, maxTokens) {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("NO_API_KEY");
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      system,
+      messages,
+    }),
+  });
+
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || "API error");
+  return (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+}
+
+async function askClaude(userPrompt, maxTokens = 1500) {
+  const text = await callClaudeRaw(BASE_SYSTEM, [{ role: "user", content: userPrompt }], maxTokens);
+  return extractJSON(text);
+}
+
+/* ==========================================================================
+   Shared helpers
+   ========================================================================== */
+function fillList(id, items) {
+  const ul = document.getElementById(id);
+  ul.innerHTML = "";
+  (items || []).forEach((item) => {
+    const li = document.createElement("li");
+    li.textContent = item;
+    ul.appendChild(li);
+  });
+  if (!items || items.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = "Nothing notable.";
+    ul.appendChild(li);
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+/* ==========================================================================
+   View routing
+   ========================================================================== */
+let objectionInited = false;
+let patternInited = false;
+let callInited = false;
+
+function showView(name) {
+  ["home", "objection", "pattern", "call"].forEach((v) => {
+    document.getElementById("view-" + v).classList.toggle("active", v === name);
+  });
+  window.scrollTo(0, 0);
+
+  if (name === "objection" && !objectionInited) {
+    objectionInited = true;
+    window.initObjection();
+  }
+  if (name === "pattern" && !patternInited) {
+    patternInited = true;
+    window.initPattern();
+  }
+  if (name === "call" && !callInited) {
+    callInited = true;
+    window.initCall();
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const input = document.getElementById("api-key-input");
+  input.value = getApiKey();
+  updateApiKeyStatus();
+  SCG.renderAll();
+});
+/* ==========================================================================
+   Mode 1: Objection Battle
+   ========================================================================== */
+(() => {
+  const TOTAL_TIME = 30;
+  const CIRC = 2 * Math.PI * 28; // ~175.93
+
+  const els = {
+    context: document.getElementById("objection-context"),
+    quote: document.getElementById("objection-quote"),
+    input: document.getElementById("response-input"),
+    submitBtn: document.getElementById("obj-submit-btn"),
+    nextBtn: document.getElementById("obj-next-btn"),
+    statusLine: document.getElementById("obj-status-line"),
+    objectionPanel: document.getElementById("objection-panel"),
+    feedbackPanel: document.getElementById("obj-feedback-panel"),
+    timerValue: document.getElementById("timer-value"),
+    timerProgress: document.getElementById("timer-progress"),
+    apiNotice: document.getElementById("obj-api-notice"),
+    gameArea: document.getElementById("obj-game-area"),
+  };
+
+  let current = null;
+  let remaining = TOTAL_TIME;
+  let timerHandle = null;
+  let submitted = false;
+
+  els.timerProgress.setAttribute("stroke-dasharray", CIRC.toFixed(2));
+
+  function setTimerDisplay() {
+    els.timerValue.textContent = remaining;
+    const offset = CIRC * (1 - remaining / TOTAL_TIME);
+    els.timerProgress.setAttribute("stroke-dashoffset", offset.toFixed(2));
+    els.timerProgress.classList.remove("warn", "bad");
+    if (remaining <= 5) els.timerProgress.classList.add("bad");
+    else if (remaining <= 12) els.timerProgress.classList.add("warn");
+  }
+
+  function startTimer() {
+    remaining = TOTAL_TIME;
+    setTimerDisplay();
+    clearInterval(timerHandle);
+    timerHandle = setInterval(() => {
+      remaining -= 1;
+      setTimerDisplay();
+      if (remaining <= 0) {
+        clearInterval(timerHandle);
+        if (!submitted) submitResponse();
+      }
+    }, 1000);
+  }
+
+  window.initObjection = function () {
+    if (!getApiKey()) {
+      els.apiNotice.style.display = "flex";
+      els.gameArea.style.display = "none";
+      return;
+    }
+    els.apiNotice.style.display = "none";
+    els.gameArea.style.display = "block";
+    loadNewObjection();
+  };
+
+  async function loadNewObjection() {
+    if (!getApiKey()) {
+      els.apiNotice.style.display = "flex";
+      els.gameArea.style.display = "none";
+      return;
+    }
+    els.apiNotice.style.display = "none";
+    els.gameArea.style.display = "block";
+
+    submitted = false;
+    els.feedbackPanel.style.display = "none";
+    els.objectionPanel.style.display = "block";
+    els.input.value = "";
+    els.input.disabled = false;
+    els.submitBtn.disabled = false;
+    els.submitBtn.textContent = "Send response";
+    els.context.textContent = "Loading scenario...";
+    els.quote.textContent = " ";
+    els.statusLine.textContent = "";
+    clearInterval(timerHandle);
+    els.timerValue.textContent = TOTAL_TIME;
+
+    try {
+      const data = await askClaude(
+        `Generate ONE realistic sales objection a prospect would say during a sales call,
+based on the objection patterns found in the sales study notes.
+Vary the objection each time (price, time, trust, spouse, "need to think about it",
+"send me info", "I've tried this before", etc).
+
+Respond with JSON:
+{
+  "objection": "the exact line the prospect says, in quotes",
+  "context": "one sentence describing the situation/scenario this came up in"
+}`,
+        400
+      );
+      current = data;
+      els.context.textContent = data.context;
+      els.quote.textContent = `"${data.objection}"`;
+      startTimer();
+    } catch (err) {
+      els.context.textContent = "Couldn't reach the AI.";
+      els.quote.textContent = err.message === "NO_API_KEY" ? "Add your API key above." : "Try again in a moment.";
+    }
+  }
+
+  async function submitResponse() {
+    if (submitted) return;
+    submitted = true;
+    clearInterval(timerHandle);
+
+    const userResponse = els.input.value.trim() || "(no response — time ran out)";
+    const timeTakenSeconds = TOTAL_TIME - remaining;
+
+    els.input.disabled = true;
+    els.submitBtn.disabled = true;
+    els.submitBtn.textContent = "Analyzing...";
+    els.statusLine.textContent = "AI is reviewing your response...";
+
+    try {
+      const data = await askClaude(
+        `The prospect raised this objection during a sales call:
+Context: ${current.context}
+Objection: "${current.objection}"
+
+The user had 30 seconds to respond and answered (took ${timeTakenSeconds}s):
+"${userResponse}"
+
+Analyze the response and return JSON with this exact schema:
+{
+  "whatYouDidWell": ["short bullet", "..."],
+  "whatYouMissed": ["short bullet", "..."],
+  "betterAlternative": "how someone with more experience would likely have responded, written as an example reply",
+  "whatIsReallyGoingOn": "the underlying belief/emotion/situation behind the objection",
+  "principle": "the single sales principle from the notes this situation was really about",
+  "score": <integer between -10 and 10, reflecting how good the response was. Be honest, not generous; a generic or surface-level response that takes the objection at face value should score 0 or negative. A response that explores the real belief and reframes it should score positive>
+}`,
+        900
+      );
+      renderFeedback(data);
+    } catch (err) {
+      els.statusLine.textContent = "Something went wrong analyzing your response. Try again.";
+      els.input.disabled = false;
+      els.submitBtn.disabled = false;
+      els.submitBtn.textContent = "Send response";
+      submitted = false;
+    }
+  }
+
+  function renderFeedback(data) {
+    SCG.addScore(typeof data.score === "number" ? data.score : 0);
+
+    const scoreEl = document.getElementById("obj-score-result-value");
+    const score = data.score || 0;
+    scoreEl.textContent = score > 0 ? `+${score}` : `${score}`;
+    scoreEl.classList.remove("positive", "negative", "neutral");
+    if (score > 0) scoreEl.classList.add("positive");
+    else if (score < 0) scoreEl.classList.add("negative");
+    else scoreEl.classList.add("neutral");
+
+    fillList("obj-fb-well", data.whatYouDidWell);
+    fillList("obj-fb-missed", data.whatYouMissed);
+    document.getElementById("obj-fb-reality").textContent = data.whatIsReallyGoingOn || "";
+    document.getElementById("obj-fb-alternative").textContent = data.betterAlternative || "";
+    document.getElementById("obj-fb-principle").textContent = data.principle || "";
+
+    els.objectionPanel.style.display = "none";
+    els.feedbackPanel.style.display = "block";
+  }
+
+  els.submitBtn.addEventListener("click", submitResponse);
+  els.nextBtn.addEventListener("click", loadNewObjection);
+  els.input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      submitResponse();
+    }
+  });
+})();
+/* ==========================================================================
+   Mode 2: Pattern Recognition
+   ========================================================================== */
+(() => {
+  const els = {
+    statement: document.getElementById("pat-statement-text"),
+    question: document.getElementById("pat-question-text"),
+    optionGrid: document.getElementById("pat-option-grid"),
+    exercisePanel: document.getElementById("pat-exercise-panel"),
+    feedbackPanel: document.getElementById("pat-feedback-panel"),
+    nextBtn: document.getElementById("pat-next-btn"),
+    apiNotice: document.getElementById("pat-api-notice"),
+    gameArea: document.getElementById("pat-game-area"),
+  };
+
+  let current = null;
+  let answered = false;
+
+  window.initPattern = function () {
+    if (!getApiKey()) {
+      els.apiNotice.style.display = "flex";
+      els.gameArea.style.display = "none";
+      return;
+    }
+    els.apiNotice.style.display = "none";
+    els.gameArea.style.display = "block";
+    loadNewExercise();
+  };
+
+  async function loadNewExercise() {
+    if (!getApiKey()) {
+      els.apiNotice.style.display = "flex";
+      els.gameArea.style.display = "none";
+      return;
+    }
+    els.apiNotice.style.display = "none";
+    els.gameArea.style.display = "block";
+
+    answered = false;
+    els.feedbackPanel.style.display = "none";
+    els.exercisePanel.style.display = "block";
+    els.statement.textContent = "Loading scenario...";
+    els.question.textContent = "";
+    els.optionGrid.innerHTML = "";
+
+    try {
+      const data = await askClaude(
+        `Generate ONE "pattern recognition" exercise for buyer psychology training, based on
+the sales study notes. Pick a realistic statement a prospect might say that hints at a
+limiting belief, emotion, identity issue, hidden objection, or decision pattern.
+Then create a multiple-choice question asking what is REALLY going on underneath the statement.
+
+Respond with JSON:
+{
+  "statement": "the prospect's exact line, in quotes",
+  "question": "What is the central issue here? (or similar phrasing)",
+  "options": {
+    "A": "option text",
+    "B": "option text",
+    "C": "option text",
+    "D": "option text"
+  },
+  "correctAnswer": "A" | "B" | "C" | "D"
+}
+
+Make sure exactly one option is clearly the best/correct answer grounded in the notes, and the
+others are plausible but wrong (e.g. surface-level reads like money/timing when the real issue
+is identity/certainty/trust).`,
+        500
+      );
+      current = data;
+      els.statement.textContent = `"${data.statement}"`;
+      els.question.textContent = data.question;
+      renderOptions(data.options);
+    } catch (err) {
+      els.statement.textContent = "Couldn't reach the AI.";
+      els.question.textContent = err.message === "NO_API_KEY" ? "Add your API key above." : "Try again in a moment.";
+    }
+  }
+
+  function renderOptions(options) {
+    els.optionGrid.innerHTML = "";
+    Object.entries(options).forEach(([key, text]) => {
+      const btn = document.createElement("button");
+      btn.className = "option-btn";
+      btn.dataset.key = key;
+      btn.innerHTML = `<span class="option-key">${key}</span><span>${text}</span>`;
+      btn.addEventListener("click", () => selectOption(key));
+      els.optionGrid.appendChild(btn);
+    });
+  }
+
+  async function selectOption(key) {
+    if (answered) return;
+    answered = true;
+
+    [...els.optionGrid.children].forEach((btn) => {
+      btn.disabled = true;
+      if (btn.dataset.key === current.correctAnswer) btn.classList.add("correct");
+      if (btn.dataset.key === key && key !== current.correctAnswer) btn.classList.add("incorrect");
+    });
+
+    try {
+      const data = await askClaude(
+        `Pattern recognition exercise:
+Prospect said: "${current.statement}"
+Question: ${current.question}
+Options: ${JSON.stringify(current.options)}
+Correct answer: ${current.correctAnswer}
+User chose: ${key}
+
+Explain the reasoning. Return JSON:
+{
+  "correct": ${key === current.correctAnswer ? "true" : "false"},
+  "explanation": "why the correct answer is right, tied to buyer psychology",
+  "howItAffectsBuying": "how this issue affects the prospect's buying behavior",
+  "howToHandleIt": "how the user could help the prospect think differently about it",
+  "principle": "the single sales principle from the notes this relates to",
+  "score": <integer, +5 if correct, -3 if incorrect>
+}`,
+        700
+      );
+      renderFeedback(data);
+    } catch (err) {
+      answered = false;
+    }
+  }
+
+  function renderFeedback(data) {
+    SCG.addScore(typeof data.score === "number" ? data.score : 0);
+
+    const scoreEl = document.getElementById("pat-score-result-value");
+    const labelEl = document.getElementById("pat-score-result-label");
+    const score = data.score || 0;
+    scoreEl.textContent = score > 0 ? `+${score}` : `${score}`;
+    scoreEl.classList.remove("positive", "negative", "neutral");
+    if (score > 0) scoreEl.classList.add("positive");
+    else if (score < 0) scoreEl.classList.add("negative");
+    else scoreEl.classList.add("neutral");
+    labelEl.textContent = data.correct ? "Correct — points this round" : "Incorrect — points this round";
+
+    document.getElementById("pat-fb-explanation").textContent = data.explanation || "";
+    document.getElementById("pat-fb-buying").textContent = data.howItAffectsBuying || "";
+    document.getElementById("pat-fb-handle").textContent = data.howToHandleIt || "";
+    document.getElementById("pat-fb-principle").textContent = data.principle || "";
+
+    setTimeout(() => {
+      els.feedbackPanel.style.display = "block";
+    }, 500);
+  }
+
+  els.nextBtn.addEventListener("click", loadNewExercise);
+})();
+/* ==========================================================================
+   Mode 3: Sales Call Mode
+   ========================================================================== */
+(() => {
+  const TARGET_MESSAGES = 14;
+
+  const els = {
+    apiNotice: document.getElementById("call-api-notice"),
+    gameArea: document.getElementById("call-game-area"),
+
+    scenarioPanel: document.getElementById("call-scenario-panel"),
+    scenarioGrid: document.getElementById("call-scenario-grid"),
+    customInput: document.getElementById("call-custom-input"),
+    startBtn: document.getElementById("call-start-btn"),
+    scenarioStatus: document.getElementById("call-scenario-status"),
+
+    callPanel: document.getElementById("call-panel"),
+    prospectAvatar: document.getElementById("call-prospect-avatar"),
+    prospectName: document.getElementById("call-prospect-name"),
+    prospectScenario: document.getElementById("call-prospect-scenario"),
+    callProgress: document.getElementById("call-progress"),
+    chatWindow: document.getElementById("call-chat-window"),
+    chatInput: document.getElementById("call-chat-input"),
+    sendBtn: document.getElementById("call-send-btn"),
+    callStatus: document.getElementById("call-status"),
+    endCallBtn: document.getElementById("call-end-btn"),
+
+    reportPanel: document.getElementById("call-report-panel"),
+    newCallBtn: document.getElementById("call-new-btn"),
+  };
+
+  let selectedScenario = null;
+  let prospect = null;
+  let history = [];
+  let userMessageCount = 0;
+  let busy = false;
+
+  window.initCall = function () {
+    if (!getApiKey()) {
+      els.apiNotice.style.display = "flex";
+      els.gameArea.style.display = "none";
+      return;
+    }
+    els.apiNotice.style.display = "none";
+    els.gameArea.style.display = "block";
+  };
+
+  // --- Scenario selection ---------------------------------------------
+
+  els.scenarioGrid.addEventListener("click", (e) => {
+    const btn = e.target.closest(".scenario-btn");
+    if (!btn) return;
+    [...els.scenarioGrid.children].forEach((b) => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    selectedScenario = btn.dataset.scenario;
+
+    if (selectedScenario === "Custom Scenario") {
+      els.customInput.style.display = "block";
+    } else {
+      els.customInput.style.display = "none";
+    }
+    updateStartButton();
+  });
+
+  els.customInput.addEventListener("input", updateStartButton);
+
+  function updateStartButton() {
+    if (!getApiKey()) {
+      els.startBtn.disabled = true;
+      return;
+    }
+    if (!selectedScenario) {
+      els.startBtn.disabled = true;
+      return;
+    }
+    if (selectedScenario === "Custom Scenario" && !els.customInput.value.trim()) {
+      els.startBtn.disabled = true;
+      return;
+    }
+    els.startBtn.disabled = false;
+  }
+
+  els.startBtn.addEventListener("click", startCall);
+
+  async function startCall() {
+    if (!getApiKey()) {
+      els.apiNotice.style.display = "flex";
+      els.gameArea.style.display = "none";
+      return;
+    }
+
+    els.startBtn.disabled = true;
+    els.startBtn.textContent = "Connecting...";
+    els.scenarioStatus.textContent = "Generating prospect...";
+
+    try {
+      const customDescription = selectedScenario === "Custom Scenario" ? els.customInput.value.trim() : "";
+      const data = await askClaude(
+        `Generate a prospect profile for a sales call roleplay simulation.
+Scenario: ${selectedScenario}${customDescription ? ` - custom details: ${customDescription}` : ""}
+
+Return JSON:
+{
+  "name": "first name",
+  "age": <number>,
+  "goal": "their main goal",
+  "currentSituation": "their current situation",
+  "problem": "their core problem",
+  "hiddenBelief": "a limiting belief they hold, in quotes, that they would never say out loud",
+  "buyingReadiness": "Low" | "Medium" | "High",
+  "openingMessage": "the prospect's opening line to start the call - casual, like a real person picking up, NOT a sales pitch from them"
+}`,
+        600
+      );
+      prospect = data;
+      history = [];
+      userMessageCount = 0;
+
+      els.prospectName.textContent = prospect.name;
+      els.prospectAvatar.textContent = (prospect.name || "?").charAt(0).toUpperCase();
+      els.prospectScenario.textContent = customDescription || selectedScenario;
+
+      els.chatWindow.innerHTML = "";
+      addBubble("prospect", prospect.openingMessage);
+      history.push({ role: "assistant", content: prospect.openingMessage });
+
+      updateProgress();
+      els.scenarioPanel.style.display = "none";
+      els.callPanel.style.display = "block";
+      els.chatInput.focus();
+    } catch (err) {
+      els.scenarioStatus.textContent = "Couldn't reach the AI. Try again.";
+      els.startBtn.disabled = false;
+      els.startBtn.textContent = "Start call";
+    }
+  }
+
+  // --- Chat ---------------------------------------------------------------
+
+  function addBubble(role, text) {
+    const bubble = document.createElement("div");
+    bubble.className = `chat-bubble ${role}`;
+    bubble.textContent = text;
+    els.chatWindow.appendChild(bubble);
+    els.chatWindow.scrollTop = els.chatWindow.scrollHeight;
+  }
+
+  function updateProgress() {
+    els.callProgress.textContent = `MSG ${userMessageCount} / ${TARGET_MESSAGES}`;
+  }
+
+  async function sendMessage() {
+    const text = els.chatInput.value.trim();
+    if (!text || busy) return;
+    busy = true;
+
+    addBubble("user", text);
+    history.push({ role: "user", content: text });
+    userMessageCount += 1;
+    updateProgress();
+    els.chatInput.value = "";
+    els.chatInput.disabled = true;
+    els.sendBtn.disabled = true;
+    els.callStatus.textContent = "Prospect is responding...";
+
+    try {
+      const historyText = history
+        .map((m) => `${m.role === "user" ? "Salesperson" : "Prospect"}: ${m.content}`)
+        .join("\n");
+
+      const system = `You are roleplaying as a sales prospect named ${prospect.name} in a "${selectedScenario}" sales call simulation.
+
+Profile:
+- Age: ${prospect.age}
+- Goal: ${prospect.goal}
+- Current situation: ${prospect.currentSituation}
+- Problem: ${prospect.problem}
+- Hidden belief (never say this explicitly, but let it leak through your resistance/objections): ${prospect.hiddenBelief}
+- Buying readiness: ${prospect.buyingReadiness}
+
+Stay completely in character as a real human prospect on a call. Speak naturally and conversationally,
+like a normal person texting/talking - not like a teacher, not like an AI assistant, not overly formal.
+React realistically to the salesperson based on how well they build rapport, ask questions,
+uncover your real problem, and handle your objections. Be a little guarded at first.
+If the salesperson does a good job (per the principles in the sales notes: Authority, Tonality,
+Identity Shift, Certainty Building, Objection Handling, etc), gradually open up and become more
+receptive. If they pitch too early, get vague, or ignore your objections, stay resistant or
+push back realistically. Keep responses short (1-4 sentences), like a real conversation.
+Never break character. Never mention you are an AI.`;
+
+      const userMsg = `Conversation so far:\n${historyText}\n\nSalesperson: ${text}\n\nRespond only as ${prospect.name}, in character. Output just the spoken reply, nothing else.`;
+
+      const reply = (await callClaudeRaw(system, [{ role: "user", content: userMsg }], 300)).trim();
+
+      addBubble("prospect", reply);
+      history.push({ role: "assistant", content: reply });
+      els.callStatus.textContent = userMessageCount >= TARGET_MESSAGES
+        ? "You've hit the suggested call length — wrap it up when ready."
+        : "";
+    } catch (err) {
+      els.callStatus.textContent = "Something went wrong reaching the prospect.";
+    } finally {
+      els.chatInput.disabled = false;
+      els.sendBtn.disabled = false;
+      els.chatInput.focus();
+      busy = false;
+    }
+  }
+
+  els.sendBtn.addEventListener("click", sendMessage);
+  els.chatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // --- End call & report ---------------------------------------------------
+
+  els.endCallBtn.addEventListener("click", endCall);
+
+  async function endCall() {
+    if (busy) return;
+    if (userMessageCount < 2) {
+      els.callStatus.textContent = "Send at least a couple of messages before ending the call.";
+      return;
+    }
+    busy = true;
+    els.endCallBtn.disabled = true;
+    els.endCallBtn.textContent = "Analyzing call...";
+    els.chatInput.disabled = true;
+    els.sendBtn.disabled = true;
+
+    try {
+      const historyText = history
+        .map((m) => `${m.role === "user" ? "Salesperson" : "Prospect"}: ${m.content}`)
+        .join("\n");
+
+      const data = await askClaude(
+        `A sales call roleplay simulation just ended.
+Scenario: ${selectedScenario}
+Prospect profile: ${JSON.stringify(prospect)}
+
+Full transcript:
+${historyText}
+
+Analyze the salesperson's (the "Salesperson" lines) performance in depth, grounded in the
+sales study notes. Return JSON with this exact schema:
+{
+  "callScore": <integer 0-100>,
+  "whatYouDidWell": ["bullet", "..."],
+  "biggestMistakes": ["bullet", "..."],
+  "missedOpportunities": [
+    { "prospectSaid": "quote from transcript", "youTreatedItAs": "...", "itWasActually": "..." }
+  ],
+  "whatATopCloserWouldHaveDone": ["bullet", "..."],
+  "principles": [
+    { "name": "principle name from notes (e.g. Authority, Identity Shift, Certainty Building, Tonality, Language Fixing, Limiting Beliefs, Objection Handling)", "note": "how it applied to a specific moment in this call" }
+  ],
+  "scoreDelta": <integer between -15 and 15, how this performance should affect the user's daily score - roughly (callScore-50)/4 rounded>
+}`,
+        1500
+      );
+      renderReport(data);
+    } catch (err) {
+      els.callStatus.textContent = "Couldn't generate the feedback report. Try ending again.";
+      els.endCallBtn.disabled = false;
+      els.endCallBtn.textContent = "End call & get feedback";
+      els.chatInput.disabled = false;
+      els.sendBtn.disabled = false;
+    } finally {
+      busy = false;
+    }
+  }
+
+  function renderReport(data) {
+    SCG.addScore(typeof data.scoreDelta === "number" ? data.scoreDelta : 0);
+
+    document.getElementById("call-score-value").textContent = data.callScore ?? "—";
+
+    const delta = data.scoreDelta || 0;
+    document.getElementById("call-score-delta-label").textContent =
+      `${delta > 0 ? "+" : ""}${delta} points added to today's score`;
+
+    fillList("call-rep-well", data.whatYouDidWell);
+    fillList("call-rep-mistakes", data.biggestMistakes);
+    fillList("call-rep-topcloser", data.whatATopCloserWouldHaveDone);
+
+    const missedWrap = document.getElementById("call-rep-missed");
+    missedWrap.innerHTML = "";
+    (data.missedOpportunities || []).forEach((m) => {
+      const block = document.createElement("div");
+      block.className = "feedback-block info";
+      block.innerHTML = `
+        <div class="quote-block">"${escapeHtml(m.prospectSaid || "")}"</div>
+        <p><strong>You treated it as:</strong> ${escapeHtml(m.youTreatedItAs || "")}</p>
+        <p><strong>It was actually:</strong> ${escapeHtml(m.itWasActually || "")}</p>
+      `;
+      missedWrap.appendChild(block);
+    });
+    if (!data.missedOpportunities || data.missedOpportunities.length === 0) {
+      missedWrap.innerHTML = "<p style=\"color: var(--text-1); margin:0;\">None identified — solid read of the conversation.</p>";
+    }
+
+    const principlesWrap = document.getElementById("call-rep-principles");
+    principlesWrap.innerHTML = "";
+    (data.principles || []).forEach((p) => {
+      const block = document.createElement("div");
+      block.className = "quote-block";
+      block.innerHTML = `<strong>${escapeHtml(p.name || "")}</strong> — ${escapeHtml(p.note || "")}`;
+      block.style.marginBottom = "8px";
+      principlesWrap.appendChild(block);
+    });
+
+    els.callPanel.style.display = "none";
+    els.reportPanel.style.display = "block";
+  }
+
+  // --- Reset ---------------------------------------------------------------
+
+  els.newCallBtn.addEventListener("click", () => {
+    els.reportPanel.style.display = "none";
+    els.scenarioPanel.style.display = "block";
+    els.callStatus.textContent = "";
+    els.endCallBtn.disabled = false;
+    els.endCallBtn.textContent = "End call & get feedback";
+    els.startBtn.textContent = "Start call";
+    [...els.scenarioGrid.children].forEach((b) => b.classList.remove("selected"));
+    els.customInput.style.display = "none";
+    els.customInput.value = "";
+    selectedScenario = null;
+    updateStartButton();
+  });
+})();
+  </script>
+</body>
+</html>

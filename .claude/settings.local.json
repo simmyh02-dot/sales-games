@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(node scripts/extract-notes.js)",
+      "Bash(node -e \"console.log\\(Object.keys\\(require\\('pdf-parse'\\)\\)\\)\")",
+      "Bash(sed -i 's/font-family: \"Space Grotesk\", sans-serif;/font-family: var\\(--font-heading\\);/g' style.css)",
+      "Bash(sed -i 's/font-family: \"Inter\", sans-serif;/font-family: var\\(--font-body\\);/g' style.css)",
+      "Bash(sed -i 's/font-family: \"JetBrains Mono\", monospace;/font-family: var\\(--font-mono\\);/g' style.css)",
+      "Bash(powershell -Command \"\\(Get-Item knowledge\\\\sales_notes.md\\).Length\")"
+    ]
+  }
+}

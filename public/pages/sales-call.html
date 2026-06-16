@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Call Mode — Sales Camp Games</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="bg-canvas"></div>
+
+  <div class="shell">
+    <div class="topbar">
+      <a href="/" class="back-link">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 12H5M12 19l-7-7 7-7"></path>
+        </svg>
+        Training Arena
+      </a>
+
+      <div class="score-pill">
+        <div class="score-item">
+          <span class="score-label">Today</span>
+          <span class="score-value" data-scg-today>+0</span>
+        </div>
+        <div class="divider"></div>
+        <div class="score-item">
+          <span class="score-label">Total</span>
+          <span class="score-value" data-scg-total>0</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-header">
+      <div class="mode-tag">Mode 03 — Full Simulation</div>
+      <h1>Sales Call Mode</h1>
+      <p>
+        Pick a scenario and a prospect gets generated — with their own goals,
+        problems, and a hidden belief they won't say out loud. Run the call,
+        then get a full breakdown of what a top closer would have done
+        differently.
+      </p>
+    </div>
+
+    <div id="api-notice" class="notice" style="display:none;">
+      <h4>AI not connected</h4>
+      <p>
+        Add your Claude API key to the <code>.env</code> file as
+        <code>ANTHROPIC_API_KEY</code> and restart the server to enable this mode.
+      </p>
+    </div>
+
+    <div id="game-area">
+      <!-- Scenario selection -->
+      <div class="panel" id="scenario-panel">
+        <div class="panel-label">// Choose a scenario</div>
+        <div class="scenario-grid" id="scenario-grid">
+          <button class="scenario-btn" data-scenario="Fitness Coach">Fitness Coach</button>
+          <button class="scenario-btn" data-scenario="Business Coach">Business Coach</button>
+          <button class="scenario-btn" data-scenario="Agency Offer">Agency Offer</button>
+          <button class="scenario-btn" data-scenario="E-commerce Offer">E-commerce Offer</button>
+          <button class="scenario-btn" data-scenario="SaaS">SaaS</button>
+          <button class="scenario-btn" data-scenario="Custom Scenario">Custom Scenario</button>
+        </div>
+        <input type="text" class="custom-input" id="custom-input" placeholder="Describe your custom scenario (e.g. high-ticket nutrition coaching for busy parents)" style="display:none;" />
+
+        <div class="actions-row">
+          <span class="objection-context" id="scenario-status"></span>
+          <button class="btn btn-primary" id="start-call-btn" disabled>Start call</button>
+        </div>
+      </div>
+
+      <!-- Live call -->
+      <div id="call-panel" style="display:none;">
+        <div class="prospect-bar">
+          <div class="prospect-id">
+            <div class="prospect-avatar" id="prospect-avatar">?</div>
+            <div class="prospect-meta">
+              <div class="prospect-name" id="prospect-name">Connecting...</div>
+              <div class="prospect-scenario" id="prospect-scenario"></div>
+            </div>
+          </div>
+          <div class="call-progress" id="call-progress">MSG 0 / 16</div>
+        </div>
+
+        <div class="chat-window" id="chat-window"></div>
+
+        <div class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Type what you'd say next on this call..." />
+          <button class="btn btn-primary" id="send-btn">Send</button>
+        </div>
+
+        <div class="call-controls">
+          <span class="objection-context" id="call-status"></span>
+          <button class="btn btn-secondary" id="end-call-btn">End call &amp; get feedback</button>
+        </div>
+      </div>
+
+      <!-- Feedback report -->
+      <div id="report-panel" style="display:none;">
+        <div class="panel">
+          <div class="panel-label">// Call score</div>
+          <div class="score-result">
+            <div class="score-result-value" id="call-score-value">0</div>
+            <div class="score-result-label">out of 100 &mdash; <span id="score-delta-label"></span></div>
+          </div>
+
+          <div class="feedback-block good">
+            <h4><span class="tag"></span>What you did well</h4>
+            <ul id="rep-well"></ul>
+          </div>
+
+          <div class="feedback-block bad">
+            <h4><span class="tag"></span>Biggest mistakes</h4>
+            <ul id="rep-mistakes"></ul>
+          </div>
+        </div>
+
+        <div class="panel" id="missed-panel">
+          <div class="panel-label">// Missed opportunities</div>
+          <div id="rep-missed"></div>
+        </div>
+
+        <div class="panel">
+          <div class="feedback-block info">
+            <h4><span class="tag"></span>What a top closer would have done</h4>
+            <ul id="rep-topcloser"></ul>
+          </div>
+
+          <div class="feedback-block info">
+            <h4><span class="tag"></span>Principles from your notes</h4>
+            <div id="rep-principles"></div>
+          </div>
+        </div>
+
+        <div class="actions-row">
+          <span></span>
+          <button class="btn btn-primary" id="new-call-btn">Run another call</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/score.js"></script>
+  <script src="/js/sales-call.js"></script>
+</body>
+</html>
