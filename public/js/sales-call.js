@@ -3,53 +3,59 @@
 
   const els = {
     apiNotice: document.getElementById("api-notice"),
-    gameArea: document.getElementById("game-area"),
+    gameArea:  document.getElementById("game-area"),
 
     scenarioPanel: document.getElementById("scenario-panel"),
-    scenarioGrid: document.getElementById("scenario-grid"),
-    customInput: document.getElementById("custom-input"),
-    startBtn: document.getElementById("start-call-btn"),
+    scenarioGrid:  document.getElementById("scenario-grid"),
+    customInput:   document.getElementById("custom-input"),
+    startBtn:      document.getElementById("start-call-btn"),
     scenarioStatus: document.getElementById("scenario-status"),
 
-    callPanel: document.getElementById("call-panel"),
+    sectionPanel:      document.getElementById("section-panel"),
+    sectionGrid:       document.getElementById("section-grid"),
+    backToScenarioBtn: document.getElementById("back-to-scenario-btn"),
+    confirmSectionBtn: document.getElementById("confirm-section-btn"),
+
+    callPanel:      document.getElementById("call-panel"),
     prospectAvatar: document.getElementById("prospect-avatar"),
-    prospectName: document.getElementById("prospect-name"),
+    prospectName:   document.getElementById("prospect-name"),
     prospectScenario: document.getElementById("prospect-scenario"),
-    callProgress: document.getElementById("call-progress"),
-    chatWindow: document.getElementById("chat-window"),
-    chatInput: document.getElementById("chat-input"),
-    sendBtn: document.getElementById("send-btn"),
-    callStatus: document.getElementById("call-status"),
-    endCallBtn: document.getElementById("end-call-btn"),
+    callProgress:   document.getElementById("call-progress"),
+    chatWindow:     document.getElementById("chat-window"),
+    chatInput:      document.getElementById("chat-input"),
+    sendBtn:        document.getElementById("send-btn"),
+    callStatus:     document.getElementById("call-status"),
+    endCallBtn:     document.getElementById("end-call-btn"),
 
     reportPanel: document.getElementById("report-panel"),
-    newCallBtn: document.getElementById("new-call-btn"),
+    newCallBtn:  document.getElementById("new-call-btn"),
   };
 
   let selectedScenario = null;
-  let prospect = null;
-  let history = [];
+  let selectedSection  = null;
+  let prospect         = null;
+  let history          = [];
   let userMessageCount = 0;
-  let busy = false;
+  let busy             = false;
 
   async function checkHealth() {
     try {
-      const res = await fetch("/api/health");
+      const res  = await fetch("/api/health");
       const data = await res.json();
       if (!data.aiConfigured) {
         els.apiNotice.style.display = "flex";
-        els.gameArea.style.display = "none";
+        els.gameArea.style.display  = "none";
         return false;
       }
       return true;
     } catch {
       els.apiNotice.style.display = "flex";
-      els.gameArea.style.display = "none";
+      els.gameArea.style.display  = "none";
       return false;
     }
   }
 
-  // --- Scenario selection ---------------------------------------------
+  // --- Step 1: Scenario selection -----------------------------------------
 
   els.scenarioGrid.addEventListener("click", (e) => {
     const btn = e.target.closest(".scenario-btn");
@@ -58,75 +64,92 @@
     btn.classList.add("selected");
     selectedScenario = btn.dataset.scenario;
 
-    if (selectedScenario === "Custom Scenario") {
-      els.customInput.style.display = "block";
-    } else {
-      els.customInput.style.display = "none";
-    }
+    els.customInput.style.display = selectedScenario === "Custom Scenario" ? "block" : "none";
     updateStartButton();
   });
 
   els.customInput.addEventListener("input", updateStartButton);
 
   function updateStartButton() {
-    if (!selectedScenario) {
-      els.startBtn.disabled = true;
-      return;
-    }
-    if (selectedScenario === "Custom Scenario" && !els.customInput.value.trim()) {
-      els.startBtn.disabled = true;
-      return;
-    }
-    els.startBtn.disabled = false;
+    els.startBtn.disabled =
+      !selectedScenario ||
+      (selectedScenario === "Custom Scenario" && !els.customInput.value.trim());
   }
 
-  els.startBtn.addEventListener("click", startCall);
+  // "Start call" on step 1 now advances to step 2 (section selection)
+  els.startBtn.addEventListener("click", () => {
+    els.scenarioPanel.style.display = "none";
+    els.sectionPanel.style.display  = "block";
+  });
+
+  // --- Step 2: Section selection ------------------------------------------
+
+  els.sectionGrid.addEventListener("click", (e) => {
+    const btn = e.target.closest(".scenario-btn");
+    if (!btn) return;
+    [...els.sectionGrid.children].forEach((b) => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    selectedSection = btn.dataset.section;
+    els.confirmSectionBtn.disabled = false;
+  });
+
+  els.backToScenarioBtn.addEventListener("click", () => {
+    els.sectionPanel.style.display  = "none";
+    els.scenarioPanel.style.display = "block";
+  });
+
+  els.confirmSectionBtn.addEventListener("click", startCall);
+
+  // --- Start call ----------------------------------------------------------
 
   async function startCall() {
-    els.startBtn.disabled = true;
-    els.startBtn.textContent = "Connecting...";
-    els.scenarioStatus.textContent = "Generating prospect...";
+    els.confirmSectionBtn.disabled     = true;
+    els.confirmSectionBtn.textContent  = "Connecting...";
 
     try {
       const res = await fetch("/api/call/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scenario: selectedScenario,
+          scenario:          selectedScenario,
           customDescription: selectedScenario === "Custom Scenario" ? els.customInput.value.trim() : "",
+          section:           selectedSection,
         }),
       });
       if (!res.ok) throw new Error("request failed");
-      prospect = await res.json();
-      history = [];
+      prospect         = await res.json();
+      history          = [];
       userMessageCount = 0;
 
       els.prospectName.textContent = prospect.name;
       els.prospectAvatar.textContent = (prospect.name || "?").charAt(0).toUpperCase();
-      els.prospectScenario.textContent = selectedScenario === "Custom Scenario"
-        ? els.customInput.value.trim()
-        : selectedScenario;
+      els.prospectScenario.textContent =
+        selectedScenario === "Custom Scenario"
+          ? `${els.customInput.value.trim()} — ${selectedSection}`
+          : `${selectedScenario} — ${selectedSection}`;
 
       els.chatWindow.innerHTML = "";
       addBubble("prospect", prospect.openingMessage);
       history.push({ role: "assistant", content: prospect.openingMessage });
 
       updateProgress();
-      els.scenarioPanel.style.display = "none";
-      els.callPanel.style.display = "block";
+      els.sectionPanel.style.display = "none";
+      els.callPanel.style.display    = "block";
       els.chatInput.focus();
     } catch {
-      els.scenarioStatus.textContent = "Couldn't reach the AI. Try again.";
-      els.startBtn.disabled = false;
-      els.startBtn.textContent = "Start call";
+      els.scenarioStatus.textContent       = "Couldn't reach the AI. Try again.";
+      els.confirmSectionBtn.disabled       = false;
+      els.confirmSectionBtn.textContent    = "Start call";
+      els.sectionPanel.style.display       = "none";
+      els.scenarioPanel.style.display      = "block";
     }
   }
 
-  // --- Chat ---------------------------------------------------------------
+  // --- Chat ----------------------------------------------------------------
 
   function addBubble(role, text) {
     const bubble = document.createElement("div");
-    bubble.className = `chat-bubble ${role}`;
+    bubble.className  = `chat-bubble ${role}`;
     bubble.textContent = text;
     els.chatWindow.appendChild(bubble);
     els.chatWindow.scrollTop = els.chatWindow.scrollHeight;
@@ -145,9 +168,9 @@
     history.push({ role: "user", content: text });
     userMessageCount += 1;
     updateProgress();
-    els.chatInput.value = "";
+    els.chatInput.value    = "";
     els.chatInput.disabled = true;
-    els.sendBtn.disabled = true;
+    els.sendBtn.disabled   = true;
     els.callStatus.textContent = "Prospect is responding...";
 
     try {
@@ -155,10 +178,11 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scenario: selectedScenario,
+          scenario:    selectedScenario,
           prospect,
           history,
           userMessage: text,
+          section:     selectedSection,
         }),
       });
       if (!res.ok) throw new Error("request failed");
@@ -172,7 +196,7 @@
       els.callStatus.textContent = "Something went wrong reaching the prospect.";
     } finally {
       els.chatInput.disabled = false;
-      els.sendBtn.disabled = false;
+      els.sendBtn.disabled   = false;
       els.chatInput.focus();
       busy = false;
     }
@@ -197,26 +221,26 @@
       return;
     }
     busy = true;
-    els.endCallBtn.disabled = true;
+    els.endCallBtn.disabled    = true;
     els.endCallBtn.textContent = "Analyzing call...";
-    els.chatInput.disabled = true;
-    els.sendBtn.disabled = true;
+    els.chatInput.disabled     = true;
+    els.sendBtn.disabled       = true;
 
     try {
       const res = await fetch("/api/call/end", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario: selectedScenario, prospect, history }),
+        body: JSON.stringify({ scenario: selectedScenario, prospect, history, section: selectedSection }),
       });
       if (!res.ok) throw new Error("request failed");
       const data = await res.json();
       renderReport(data);
     } catch {
       els.callStatus.textContent = "Couldn't generate the feedback report. Try ending again.";
-      els.endCallBtn.disabled = false;
+      els.endCallBtn.disabled    = false;
       els.endCallBtn.textContent = "End call & get feedback";
-      els.chatInput.disabled = false;
-      els.sendBtn.disabled = false;
+      els.chatInput.disabled     = false;
+      els.sendBtn.disabled       = false;
     } finally {
       busy = false;
     }
@@ -231,9 +255,9 @@
     document.getElementById("score-delta-label").textContent =
       `${delta > 0 ? "+" : ""}${delta} points added to today's score`;
 
-    fillList("rep-well", data.whatYouDidWell);
-    fillList("rep-mistakes", data.biggestMistakes);
-    fillList("rep-topcloser", data.whatATopCloserWouldHaveDone);
+    fillList("rep-well",       data.whatYouDidWell);
+    fillList("rep-mistakes",   data.biggestMistakes);
+    fillList("rep-topcloser",  data.whatATopCloserWouldHaveDone);
 
     const missedWrap = document.getElementById("rep-missed");
     missedWrap.innerHTML = "";
@@ -261,7 +285,7 @@
       principlesWrap.appendChild(block);
     });
 
-    els.callPanel.style.display = "none";
+    els.callPanel.style.display  = "none";
     els.reportPanel.style.display = "block";
   }
 
@@ -289,16 +313,21 @@
   // --- Reset ---------------------------------------------------------------
 
   els.newCallBtn.addEventListener("click", () => {
-    els.reportPanel.style.display = "none";
+    els.reportPanel.style.display   = "none";
     els.scenarioPanel.style.display = "block";
-    els.callStatus.textContent = "";
-    els.endCallBtn.disabled = false;
-    els.endCallBtn.textContent = "End call & get feedback";
-    els.startBtn.textContent = "Start call";
+    els.callStatus.textContent      = "";
+    els.endCallBtn.disabled         = false;
+    els.endCallBtn.textContent      = "End call & get feedback";
+    els.startBtn.textContent        = "Start call";
+    els.confirmSectionBtn.disabled  = true;
+    els.confirmSectionBtn.textContent = "Start call";
+
     [...els.scenarioGrid.children].forEach((b) => b.classList.remove("selected"));
+    [...els.sectionGrid.children].forEach((b)  => b.classList.remove("selected"));
     els.customInput.style.display = "none";
-    els.customInput.value = "";
+    els.customInput.value         = "";
     selectedScenario = null;
+    selectedSection  = null;
     updateStartButton();
   });
 

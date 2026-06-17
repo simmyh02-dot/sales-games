@@ -35,9 +35,9 @@
       <div class="mode-tag">Mode 01 — Speed Drill</div>
       <h1>Objection Battle</h1>
       <p>
-        A prospect drops an objection. You have 30 seconds to respond before
-        the AI analyzes what you got right, what you missed, and which
-        principle from your notes the moment was really about.
+        A prospect drops an objection. You get 30, 60, or 90 seconds depending
+        on difficulty. Respond as if you're live on the call, then get a quick
+        breakdown of what you got right, what you missed, and why.
       </p>
     </div>
 
@@ -50,67 +50,10 @@
     </div>
 
     <div id="game-area">
-      <div class="panel" id="objection-panel">
-        <div class="objection-card-header">
-          <div>
-            <div class="panel-label">// Incoming objection</div>
-            <div class="objection-context" id="objection-context">Loading scenario...</div>
-            <div class="objection-quote" id="objection-quote">&nbsp;</div>
-          </div>
-          <div class="timer-ring">
-            <svg viewBox="0 0 64 64">
-              <circle class="track" cx="32" cy="32" r="28"></circle>
-              <circle class="progress" id="timer-progress" cx="32" cy="32" r="28" stroke-dasharray="176" stroke-dashoffset="0"></circle>
-            </svg>
-            <div class="timer-value" id="timer-value">30</div>
-          </div>
-        </div>
+      <div id="rounds-feed"></div>
 
-        <textarea class="response-input" id="response-input" placeholder="Type how you'd respond to this objection, live, as if you're on the call right now..."></textarea>
-
-        <div class="actions-row">
-          <span class="objection-context" id="status-line"></span>
-          <button class="btn btn-primary" id="submit-btn">Send response</button>
-        </div>
-      </div>
-
-      <div class="panel" id="feedback-panel" style="display:none;">
-        <div class="panel-label">// Round breakdown</div>
-
-        <div class="score-result">
-          <div class="score-result-value" id="score-result-value">+0</div>
-          <div class="score-result-label">points this round</div>
-        </div>
-
-        <div class="feedback-block good">
-          <h4><span class="tag"></span>What you did well</h4>
-          <ul id="fb-well"></ul>
-        </div>
-
-        <div class="feedback-block bad">
-          <h4><span class="tag"></span>What you missed</h4>
-          <ul id="fb-missed"></ul>
-        </div>
-
-        <div class="feedback-block info">
-          <h4><span class="tag"></span>What's really going on</h4>
-          <p id="fb-reality"></p>
-        </div>
-
-        <div class="feedback-block info">
-          <h4><span class="tag"></span>Better alternative</h4>
-          <div class="quote-block" id="fb-alternative"></div>
-        </div>
-
-        <div class="feedback-block info">
-          <h4><span class="tag"></span>Principle</h4>
-          <p id="fb-principle"></p>
-        </div>
-
-        <div class="actions-row">
-          <span></span>
-          <button class="btn btn-primary" id="next-btn">Next objection</button>
-        </div>
+      <div id="next-bar" style="display:none;">
+        <button class="btn btn-primary" id="next-btn">Next objection</button>
       </div>
     </div>
   </div>

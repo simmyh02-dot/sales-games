@@ -53,6 +53,7 @@
     <div id="game-area">
       <!-- Scenario selection -->
       <div class="panel" id="scenario-panel">
+
         <div class="panel-label">// Choose a scenario</div>
         <div class="scenario-grid" id="scenario-grid">
           <button class="scenario-btn" data-scenario="Fitness Coach">Fitness Coach</button>
@@ -67,6 +68,25 @@
         <div class="actions-row">
           <span class="objection-context" id="scenario-status"></span>
           <button class="btn btn-primary" id="start-call-btn" disabled>Start call</button>
+        </div>
+      </div>
+
+      <!-- Section selection -->
+      <div class="panel" id="section-panel" style="display:none;">
+        <div class="panel-label">// Which part of the call do you want to practice?</div>
+        <div class="scenario-grid section-grid" id="section-grid">
+          <button class="scenario-btn" data-section="Opening">Opening<br><small>Rapport &amp; permission</small></button>
+          <button class="scenario-btn" data-section="Situation">Situation<br><small>Discovery questions</small></button>
+          <button class="scenario-btn" data-section="Problem">Problem<br><small>Pain deepening</small></button>
+          <button class="scenario-btn" data-section="Consequences">Consequences<br><small>Impact of not solving</small></button>
+          <button class="scenario-btn" data-section="Purchase Decisions">Purchase Decisions<br><small>How they buy &amp; who&apos;s involved</small></button>
+          <button class="scenario-btn" data-section="Presentation">Presentation<br><small>Pitching the offer</small></button>
+          <button class="scenario-btn" data-section="Objection Handling">Objection Handling<br><small>After the pitch</small></button>
+          <button class="scenario-btn" data-section="Close">Close<br><small>Asking for the sale</small></button>
+        </div>
+        <div class="actions-row">
+          <button class="btn btn-secondary" id="back-to-scenario-btn">Back</button>
+          <button class="btn btn-primary" id="confirm-section-btn" disabled>Start call</button>
         </div>
       </div>
 

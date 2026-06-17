@@ -1,78 +1,104 @@
 (() => {
-  const els = {
-    statement: document.getElementById("statement-text"),
-    question: document.getElementById("question-text"),
-    optionGrid: document.getElementById("option-grid"),
-    exercisePanel: document.getElementById("exercise-panel"),
-    feedbackPanel: document.getElementById("feedback-panel"),
-    nextBtn: document.getElementById("next-btn"),
-    apiNotice: document.getElementById("api-notice"),
-    gameArea: document.getElementById("game-area"),
-  };
+  let exerciseCount = 0;
+  let currentExercise = null;
 
-  let current = null; // { statement, question, options, correctAnswer }
-  let answered = false;
+  const feed    = document.getElementById("exercises-feed");
+  const nextBar = document.getElementById("next-bar");
+  const nextBtn = document.getElementById("next-btn");
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str || "";
+    return div.innerHTML;
+  }
 
   async function checkHealth() {
     try {
-      const res = await fetch("/api/health");
+      const res  = await fetch("/api/health");
       const data = await res.json();
       if (!data.aiConfigured) {
-        els.apiNotice.style.display = "flex";
-        els.gameArea.style.display = "none";
+        document.getElementById("api-notice").style.display = "flex";
+        document.getElementById("game-area").style.display  = "none";
         return false;
       }
       return true;
     } catch {
-      els.apiNotice.style.display = "flex";
-      els.gameArea.style.display = "none";
+      document.getElementById("api-notice").style.display = "flex";
+      document.getElementById("game-area").style.display  = "none";
       return false;
     }
   }
 
   async function loadNewExercise() {
-    answered = false;
-    els.feedbackPanel.style.display = "none";
-    els.exercisePanel.style.display = "block";
-    els.statement.textContent = "Loading scenario...";
-    els.question.textContent = "";
-    els.optionGrid.innerHTML = "";
+    nextBar.style.display = "none";
+    exerciseCount++;
+
+    const card = document.createElement("div");
+    card.className = "round-card loading";
+    card.id = `exercise-${exerciseCount}`;
+
+    const n = exerciseCount;
+    card.innerHTML = `
+      <div class="round-card-meta">
+        <span class="round-number">Exercise ${n}</span>
+      </div>
+      <div class="panel-label">// Prospect says</div>
+      <div class="objection-quote card-statement">Loading...</div>
+      <div class="objection-context card-question" style="margin-top:22px;"></div>
+      <div class="option-grid card-options"></div>
+      <div class="feedback-inline" style="display:none;"></div>
+    `;
+
+    feed.appendChild(card);
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
 
     try {
-      const res = await fetch("/api/pattern/new", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const res = await fetch("/api/pattern/new", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
       if (!res.ok) throw new Error("request failed");
       const data = await res.json();
-      current = data;
-      els.statement.textContent = `"${data.statement}"`;
-      els.question.textContent = data.question;
-      renderOptions(data.options);
+
+      card.classList.remove("loading");
+      card.querySelector(".card-statement").textContent = `"${data.statement}"`;
+      card.querySelector(".card-question").textContent  = data.question;
+
+      renderOptions(card, data);
+      currentExercise = data;
     } catch {
-      els.statement.textContent = "Couldn't reach the AI.";
-      els.question.textContent = "Try again in a moment.";
+      card.classList.remove("loading");
+      card.querySelector(".card-statement").textContent = "Couldn't reach the AI.";
+      card.querySelector(".card-question").textContent  = "Try again in a moment.";
     }
   }
 
-  function renderOptions(options) {
-    els.optionGrid.innerHTML = "";
-    Object.entries(options).forEach(([key, text]) => {
+  function renderOptions(card, exercise) {
+    const grid = card.querySelector(".card-options");
+    grid.innerHTML = "";
+    let answered = false;
+
+    Object.entries(exercise.options).forEach(([key, text]) => {
       const btn = document.createElement("button");
-      btn.className = "option-btn";
+      btn.className   = "option-btn";
       btn.dataset.key = key;
-      btn.innerHTML = `<span class="option-key">${key}</span><span>${text}</span>`;
-      btn.addEventListener("click", () => selectOption(key));
-      els.optionGrid.appendChild(btn);
+      btn.innerHTML   = `<span class="option-key">${key}</span><span>${escapeHtml(text)}</span>`;
+      btn.addEventListener("click", () => selectOption(card, key, exercise, answered, (v) => { answered = v; }));
+      grid.appendChild(btn);
     });
   }
 
-  async function selectOption(key) {
+  async function selectOption(card, key, exercise, answered, setAnswered) {
     if (answered) return;
-    answered = true;
+    setAnswered(true);
 
-    // lock + highlight
-    [...els.optionGrid.children].forEach((btn) => {
+    // Lock + highlight immediately
+    const buttons = [...card.querySelectorAll(".option-btn")];
+    buttons.forEach((btn) => {
       btn.disabled = true;
-      if (btn.dataset.key === current.correctAnswer) btn.classList.add("correct");
-      if (btn.dataset.key === key && key !== current.correctAnswer) btn.classList.add("incorrect");
+      if (btn.dataset.key === exercise.correctAnswer) btn.classList.add("correct");
+      if (btn.dataset.key === key && key !== exercise.correctAnswer) btn.classList.add("incorrect");
     });
 
     try {
@@ -80,45 +106,60 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          statement: current.statement,
-          question: current.question,
-          options: current.options,
-          correctAnswer: current.correctAnswer,
-          userAnswer: key,
+          statement:     exercise.statement,
+          question:      exercise.question,
+          options:       exercise.options,
+          correctAnswer: exercise.correctAnswer,
+          userAnswer:    key,
         }),
       });
       if (!res.ok) throw new Error("request failed");
       const data = await res.json();
-      renderFeedback(data);
+      renderFeedbackInCard(card, data);
     } catch {
-      answered = false;
+      // On failure, still show next bar so user isn't stuck
+      nextBar.style.display = "flex";
     }
   }
 
-  function renderFeedback(data) {
+  function renderFeedbackInCard(card, data) {
     SCG.addScore(typeof data.score === "number" ? data.score : 0);
 
-    const scoreEl = document.getElementById("score-result-value");
-    const labelEl = document.getElementById("score-result-label");
-    const score = data.score || 0;
-    scoreEl.textContent = score > 0 ? `+${score}` : `${score}`;
-    scoreEl.classList.remove("positive", "negative", "neutral");
-    if (score > 0) scoreEl.classList.add("positive");
-    else if (score < 0) scoreEl.classList.add("negative");
-    else scoreEl.classList.add("neutral");
-    labelEl.textContent = data.correct ? "Correct — points this round" : "Incorrect — points this round";
+    const score      = typeof data.score === "number" ? data.score : 0;
+    const isCorrect  = data.correct;
+    const scoreClass = score > 0 ? "positive" : score < 0 ? "negative" : "neutral";
+    const scoreLabel = isCorrect ? "Correct" : "Incorrect";
 
-    document.getElementById("fb-explanation").textContent = data.explanation || "";
-    document.getElementById("fb-buying").textContent = data.howItAffectsBuying || "";
-    document.getElementById("fb-handle").textContent = data.howToHandleIt || "";
-    document.getElementById("fb-principle").textContent = data.principle || "";
+    const feedbackEl = card.querySelector(".feedback-inline");
+    feedbackEl.innerHTML = `
+      <div class="score-result">
+        <div class="score-result-value ${scoreClass}">${score > 0 ? "+" : ""}${score}</div>
+        <div class="score-result-label">${scoreLabel} — points this round</div>
+      </div>
+      <div class="feedback-block info">
+        <h4><span class="tag"></span>Why</h4>
+        <p>${escapeHtml(data.explanation)}</p>
+      </div>
+      <div class="feedback-block info">
+        <h4><span class="tag"></span>How it affects buying behavior</h4>
+        <p>${escapeHtml(data.howItAffectsBuying)}</p>
+      </div>
+      <div class="feedback-block info">
+        <h4><span class="tag"></span>How to handle it</h4>
+        <p>${escapeHtml(data.howToHandleIt)}</p>
+      </div>
+      <div class="feedback-block info">
+        <h4><span class="tag"></span>Principle</h4>
+        <p>${escapeHtml(data.principle)}</p>
+      </div>
+    `;
+    feedbackEl.style.display = "block";
 
-    setTimeout(() => {
-      els.feedbackPanel.style.display = "block";
-    }, 500);
+    nextBar.style.display = "flex";
+    nextBar.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
-  els.nextBtn.addEventListener("click", loadNewExercise);
+  nextBtn.addEventListener("click", loadNewExercise);
 
   (async () => {
     const ok = await checkHealth();
