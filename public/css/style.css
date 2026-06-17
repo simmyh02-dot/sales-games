@@ -312,7 +312,7 @@ body {
 
 .mode-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 1px;
   background: var(--panel-border);
   border: 1px solid var(--panel-border);
@@ -353,8 +353,9 @@ body {
   transform: scaleX(1);
 }
 
-.mode-card.accent-teal { --card-accent: var(--good); }
-.mode-card.accent-red { --card-accent: var(--accent-2); }
+.mode-card.accent-teal   { --card-accent: var(--good); }
+.mode-card.accent-red    { --card-accent: var(--accent-2); }
+.mode-card.accent-purple { --card-accent: #b47fff; }
 
 .mode-icon {
   width: 44px;
@@ -1010,6 +1011,7 @@ input.custom-input:focus {
   .mode-grid { grid-template-columns: 1fr; }
   .scenario-grid { grid-template-columns: repeat(2, 1fr); }
   .topbar { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .topbar-right { flex-direction: column; align-items: flex-start; gap: 12px; }
 }
 
 @media (max-width: 520px) {
@@ -1121,4 +1123,91 @@ input.custom-input:focus {
   .section-grid {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* ==========================================================================
+   Topbar right cluster (score pill + auth widget)
+   ========================================================================== */
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ==========================================================================
+   Auth widget
+   ========================================================================== */
+
+.auth-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--panel-border);
+  flex-shrink: 0;
+}
+
+.auth-avatar-initials {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg-0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.auth-name {
+  font-size: 13px;
+  color: var(--text-1);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-signout-btn {
+  background: none;
+  border: 1px solid var(--panel-border);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+}
+
+.auth-signout-btn:hover {
+  color: var(--text-0);
+  border-color: var(--text-1);
+}
+
+/* ==========================================================================
+   Better-alternative bullet list
+   ========================================================================== */
+
+.alt-lines {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-0);
+  line-height: 1.9;
+  font-size: 14.5px;
+}
+
+.alt-lines li {
+  color: var(--text-0);
 }

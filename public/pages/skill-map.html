@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Skill Network — Sales Camp Games</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script src="https://accounts.google.com/gsi/client" async></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    /* ------------------------------------------------------------------ */
+    /* Skill Map layout                                                     */
+    /* ------------------------------------------------------------------ */
+
+    .skill-map-wrap {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .map-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--panel-border);
+      margin-bottom: 0;
+    }
+
+    .filter-btn {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 6px 12px;
+      border: 1px solid var(--panel-border);
+      background: var(--bg-1);
+      color: var(--text-1);
+      cursor: pointer;
+      transition: background 180ms, border-color 180ms, color 180ms;
+    }
+
+    .filter-btn.active {
+      background: var(--cat-color, var(--accent));
+      border-color: var(--cat-color, var(--accent));
+      color: var(--bg-0);
+    }
+
+    .map-search {
+      margin-left: auto;
+      background: var(--bg-1);
+      border: 1px solid var(--panel-border);
+      color: var(--text-0);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      padding: 6px 14px;
+      width: 200px;
+      transition: border-color 180ms;
+    }
+    .map-search:focus { outline: none; border-color: var(--accent); }
+    .map-search::placeholder { color: var(--text-2); }
+
+    .map-body {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      position: relative;
+    }
+
+    #map-svg-wrap {
+      flex: 1;
+      min-height: 0;
+      height: calc(100vh - 260px);
+      min-height: 520px;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-0);
+    }
+
+    #map-svg {
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+    #map-svg:active { cursor: grabbing; }
+
+    /* Tooltip */
+    #map-tooltip {
+      position: absolute;
+      pointer-events: none;
+      background: var(--bg-2);
+      border: 1px solid var(--panel-border);
+      padding: 10px 14px;
+      max-width: 220px;
+      z-index: 20;
+      display: none;
+    }
+    #map-tooltip .tt-label {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    #map-tooltip .tt-desc {
+      font-size: 12px;
+      color: var(--text-1);
+      line-height: 1.5;
+    }
+
+    /* Side panel */
+    #side-panel {
+      width: 0;
+      overflow: hidden;
+      transition: width 240ms ease;
+      background: var(--bg-1);
+      border-left: 1px solid var(--panel-border);
+      display: flex;
+      flex-direction: column;
+    }
+    #side-panel.open {
+      width: 340px;
+    }
+    .side-panel-inner {
+      padding: 24px;
+      overflow-y: auto;
+      flex: 1;
+      width: 340px;
+    }
+    .side-panel-inner h2 {
+      font-family: var(--font-heading);
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0 0 6px;
+      line-height: 1.2;
+    }
+    .side-cat-badge {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border: 1px solid;
+      margin-bottom: 14px;
+    }
+    .side-desc {
+      font-size: 14px;
+      color: var(--text-1);
+      line-height: 1.65;
+      margin-bottom: 18px;
+    }
+    .side-scripts-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-2);
+      margin-bottom: 10px;
+    }
+    .side-scripts ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--text-1);
+      font-size: 13.5px;
+      line-height: 1.75;
+    }
+    .side-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: none;
+      border: 1px solid var(--panel-border);
+      color: var(--text-2);
+      font-size: 16px;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: color 180ms, border-color 180ms;
+    }
+    .side-close:hover { color: var(--text-0); border-color: var(--text-1); }
+
+    /* D3 SVG styles */
+    .node-circle {
+      cursor: pointer;
+      transition: opacity 200ms;
+    }
+    .node-label {
+      pointer-events: none;
+      font-family: "DM Mono", monospace;
+      dominant-baseline: central;
+      text-anchor: middle;
+    }
+    .edge {
+      transition: opacity 200ms;
+    }
+
+    @media (max-width: 640px) {
+      #side-panel.open { width: 100%; }
+      .side-panel-inner { width: 100%; }
+      .map-search { width: 120px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-canvas"></div>
+
+  <div class="shell" style="padding-bottom: 0;">
+    <div class="topbar">
+      <a href="/" class="back-link">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 12H5M12 19l-7-7 7-7"></path>
+        </svg>
+        Training Arena
+      </a>
+      <div class="topbar-right">
+        <div class="score-pill">
+          <div class="score-item">
+            <span class="score-label">Today</span>
+            <span class="score-value" data-scg-today>+0</span>
+          </div>
+          <div class="divider"></div>
+          <div class="score-item">
+            <span class="score-label">Total</span>
+            <span class="score-value" data-scg-total>0</span>
+          </div>
+        </div>
+        <div id="auth-widget"></div>
+      </div>
+    </div>
+
+    <div class="page-header" style="margin-bottom:0;">
+      <div class="mode-tag">Mode 04 — Concept Map</div>
+      <h1>Sales Skill Network</h1>
+    </div>
+  </div>
+
+  <div class="skill-map-wrap" style="padding: 0 24px;">
+    <div class="map-controls">
+      <button class="filter-btn active" data-cat="ALL" style="--cat-color:#e8ff47;">All</button>
+      <button class="filter-btn" data-cat="A" style="--cat-color:#2dd4bf;">Call Flow</button>
+      <button class="filter-btn" data-cat="B" style="--cat-color:#fb923c;">Discovery</button>
+      <button class="filter-btn" data-cat="C" style="--cat-color:#4ade80;">Beliefs</button>
+      <button class="filter-btn" data-cat="D" style="--cat-color:#f87171;">Objections</button>
+      <button class="filter-btn" data-cat="E" style="--cat-color:#e879f9;">Identity</button>
+      <button class="filter-btn" data-cat="F" style="--cat-color:#a78bfa;">Language</button>
+      <button class="filter-btn" data-cat="G" style="--cat-color:#fbbf24;">Tonality</button>
+      <button class="filter-btn" data-cat="H" style="--cat-color:#64748b;">Fundamentals</button>
+      <input class="map-search" id="map-search" type="text" placeholder="Search nodes..." />
+    </div>
+
+    <div class="map-body">
+      <div id="map-svg-wrap">
+        <svg id="map-svg"></svg>
+        <div id="map-tooltip">
+          <div class="tt-label" id="tt-label"></div>
+          <div class="tt-desc" id="tt-desc"></div>
+        </div>
+      </div>
+
+      <div id="side-panel">
+        <div class="side-panel-inner" id="side-content">
+          <button class="side-close" id="side-close-btn" title="Close">✕</button>
+          <h2 id="sp-title"></h2>
+          <div class="side-cat-badge" id="sp-badge"></div>
+          <p class="side-desc" id="sp-desc"></p>
+          <div class="side-scripts" id="sp-scripts"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/score.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/skill-map.js"></script>
+</body>
+</html>

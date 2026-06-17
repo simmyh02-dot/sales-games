@@ -247,7 +247,7 @@
   }
 
   function renderReport(data) {
-    SCG.addScore(typeof data.scoreDelta === "number" ? data.scoreDelta : 0);
+    SCG.addScore(typeof data.scoreDelta === "number" ? data.scoreDelta : 0, "sales-call");
 
     document.getElementById("call-score-value").textContent = data.callScore ?? "—";
 

@@ -1,7 +1,7 @@
 /* ==========================================================================
-   Shared score engine — Sales Camp Games
-   Stores points in localStorage. "Today" resets the daily counter but keeps
-   the all-time total. Every mode calls SCG.addScore(delta) when a round ends.
+   score.js — Sales Camp Games score engine
+   When the user is signed in, scores are posted to the server and totals
+   are fetched from there. Falls back to localStorage when not signed in.
    ========================================================================== */
 
 const SCG = (() => {
@@ -12,52 +12,112 @@ const SCG = (() => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
 
-  function load() {
+  // --- localStorage helpers ------------------------------------------------
+
+  function loadLocal() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return { total: 0, daily: {}, rounds: 0 };
       const parsed = JSON.parse(raw);
-      return {
-        total: parsed.total || 0,
-        daily: parsed.daily || {},
-        rounds: parsed.rounds || 0,
-      };
+      return { total: parsed.total || 0, daily: parsed.daily || {}, rounds: parsed.rounds || 0 };
     } catch {
       return { total: 0, daily: {}, rounds: 0 };
     }
   }
 
-  function save(data) {
+  function saveLocal(data) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }
 
-  function addScore(delta) {
-    const data = load();
-    const key = todayKey();
-    data.total += delta;
-    data.daily[key] = (data.daily[key] || 0) + delta;
-    data.rounds += 1;
-    save(data);
-    renderAll();
+  function addLocal(delta) {
+    const data = loadLocal();
+    const key  = todayKey();
+    data.total        += delta;
+    data.daily[key]    = (data.daily[key] || 0) + delta;
+    data.rounds       += 1;
+    saveLocal(data);
     return data;
   }
 
-  function getToday() {
-    const data = load();
-    return data.daily[todayKey()] || 0;
+  // --- Server helpers (when signed in) ------------------------------------
+
+  async function postScoreToServer(delta, mode) {
+    if (typeof SCG_AUTH === "undefined") return;
+    const token = SCG_AUTH.getToken();
+    if (!token) return;
+    try {
+      await fetch("/api/scores", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ delta, mode }),
+      });
+    } catch { /* fire-and-forget, silent fail */ }
   }
 
-  function getTotal() {
-    return load().total;
+  async function fetchSummaryFromServer() {
+    if (typeof SCG_AUTH === "undefined") return null;
+    const token = SCG_AUTH.getToken();
+    if (!token) return null;
+    try {
+      const res = await fetch("/api/scores/summary", {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
   }
 
-  function getRounds() {
-    return load().rounds;
+  // Sync localStorage totals from server (called after sign-in)
+  async function syncFromServer() {
+    const summary = await fetchSummaryFromServer();
+    if (!summary) return;
+    const data = loadLocal();
+    data.total  = summary.total;
+    data.rounds = summary.rounds;
+    data.daily[todayKey()] = summary.today;
+    saveLocal(data);
+    renderAll();
   }
+
+  // --- Public addScore ------------------------------------------------------
+
+  function addScore(delta, mode) {
+    // Always update localStorage immediately for instant UI feedback
+    addLocal(delta);
+    renderAll();
+    // Also post to server in the background
+    postScoreToServer(delta, mode || "unknown");
+    // After server post, re-fetch to get accurate server total
+    fetchSummaryFromServer().then((summary) => {
+      if (!summary) return;
+      const data = loadLocal();
+      data.total  = summary.total;
+      data.rounds = summary.rounds;
+      data.daily[todayKey()] = summary.today;
+      saveLocal(data);
+      renderAll();
+    });
+  }
+
+  // --- Render ---------------------------------------------------------------
 
   function fmtSigned(n) {
     if (n > 0) return `+${n}`;
     return `${n}`;
+  }
+
+  function getLocal() {
+    const data = loadLocal();
+    return {
+      today:  data.daily[todayKey()] || 0,
+      total:  data.total,
+      rounds: data.rounds,
+    };
   }
 
   function renderPill() {
@@ -65,8 +125,7 @@ const SCG = (() => {
     const totalEl = document.querySelector("[data-scg-total]");
     if (!todayEl && !totalEl) return;
 
-    const today = getToday();
-    const total = getTotal();
+    const { today, total } = getLocal();
 
     if (todayEl) {
       todayEl.textContent = fmtSigned(today);
@@ -74,20 +133,16 @@ const SCG = (() => {
       if (today > 0) todayEl.classList.add("positive");
       if (today < 0) todayEl.classList.add("negative");
     }
-    if (totalEl) {
-      totalEl.textContent = total;
-    }
+    if (totalEl) totalEl.textContent = total;
   }
 
   function renderDashboard() {
-    const todayCard = document.querySelector("[data-scg-today-card]");
-    const totalCard = document.querySelector("[data-scg-total-card]");
+    const todayCard  = document.querySelector("[data-scg-today-card]");
+    const totalCard  = document.querySelector("[data-scg-total-card]");
     const roundsCard = document.querySelector("[data-scg-rounds-card]");
     if (!todayCard && !totalCard && !roundsCard) return;
 
-    const today = getToday();
-    const total = getTotal();
-    const rounds = getRounds();
+    const { today, total, rounds } = getLocal();
 
     if (todayCard) {
       todayCard.textContent = fmtSigned(today);
@@ -95,7 +150,7 @@ const SCG = (() => {
       if (today > 0) todayCard.classList.add("positive");
       if (today < 0) todayCard.classList.add("negative");
     }
-    if (totalCard) totalCard.textContent = total;
+    if (totalCard)  totalCard.textContent  = total;
     if (roundsCard) roundsCard.textContent = rounds;
   }
 
@@ -104,7 +159,11 @@ const SCG = (() => {
     renderDashboard();
   }
 
-  document.addEventListener("DOMContentLoaded", renderAll);
+  document.addEventListener("DOMContentLoaded", () => {
+    renderAll();
+    // If already signed in, sync from server on page load
+    syncFromServer();
+  });
 
-  return { addScore, getToday, getTotal, getRounds, renderAll };
+  return { addScore, syncFromServer, renderAll, getLocal };
 })();

@@ -123,12 +123,17 @@
   }
 
   function renderFeedbackInCard(card, data) {
-    SCG.addScore(typeof data.score === "number" ? data.score : 0);
+    SCG.addScore(typeof data.score === "number" ? data.score : 0, "pattern-recognition");
 
     const score      = typeof data.score === "number" ? data.score : 0;
     const isCorrect  = data.correct;
     const scoreClass = score > 0 ? "positive" : score < 0 ? "negative" : "neutral";
     const scoreLabel = isCorrect ? "Correct" : "Incorrect";
+
+    // howToHandleIt is now an array of steps
+    const handleItems = Array.isArray(data.howToHandleIt)
+      ? data.howToHandleIt.map(b => `<li>${escapeHtml(b)}</li>`).join("")
+      : `<li>${escapeHtml(data.howToHandleIt)}</li>`;
 
     const feedbackEl = card.querySelector(".feedback-inline");
     feedbackEl.innerHTML = `
@@ -141,12 +146,12 @@
         <p>${escapeHtml(data.explanation)}</p>
       </div>
       <div class="feedback-block info">
-        <h4><span class="tag"></span>How it affects buying behavior</h4>
+        <h4><span class="tag"></span>How it affects buying</h4>
         <p>${escapeHtml(data.howItAffectsBuying)}</p>
       </div>
       <div class="feedback-block info">
         <h4><span class="tag"></span>How to handle it</h4>
-        <p>${escapeHtml(data.howToHandleIt)}</p>
+        <ul>${handleItems}</ul>
       </div>
       <div class="feedback-block info">
         <h4><span class="tag"></span>Principle</h4>

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sales Call Mode — Sales Camp Games</title>
   <link rel="stylesheet" href="/css/style.css" />
+  <script src="https://accounts.google.com/gsi/client" async></script>
 </head>
 <body>
   <div class="bg-canvas"></div>
@@ -18,16 +19,19 @@
         Training Arena
       </a>
 
-      <div class="score-pill">
-        <div class="score-item">
-          <span class="score-label">Today</span>
-          <span class="score-value" data-scg-today>+0</span>
+      <div class="topbar-right">
+        <div class="score-pill">
+          <div class="score-item">
+            <span class="score-label">Today</span>
+            <span class="score-value" data-scg-today>+0</span>
+          </div>
+          <div class="divider"></div>
+          <div class="score-item">
+            <span class="score-label">Total</span>
+            <span class="score-value" data-scg-total>0</span>
+          </div>
         </div>
-        <div class="divider"></div>
-        <div class="score-item">
-          <span class="score-label">Total</span>
-          <span class="score-value" data-scg-total>0</span>
-        </div>
+        <div id="auth-widget"></div>
       </div>
     </div>
 
@@ -162,6 +166,7 @@
   </div>
 
   <script src="/js/score.js"></script>
+  <script src="/js/auth.js"></script>
   <script src="/js/sales-call.js"></script>
 </body>
 </html>

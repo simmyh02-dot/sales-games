@@ -180,13 +180,18 @@
   }
 
   function renderFeedbackInCard(card, data) {
-    SCG.addScore(typeof data.score === "number" ? data.score : 0);
+    SCG.addScore(typeof data.score === "number" ? data.score : 0, "objection-battle");
 
     const score = typeof data.score === "number" ? data.score : 0;
     const scoreClass = score >= 7 ? "positive" : score >= 4 ? "neutral" : "negative";
 
     const wellItems   = (data.whatYouDidWell || []).map(b => `<li>${escapeHtml(b)}</li>`).join("") || "<li>Nothing notable.</li>";
     const missedItems = (data.whatYouMissed  || []).map(b => `<li>${escapeHtml(b)}</li>`).join("") || "<li>Nothing notable.</li>";
+
+    // betterAlternative is now an array of lines
+    const altItems = Array.isArray(data.betterAlternative)
+      ? data.betterAlternative.map(b => `<li>${escapeHtml(b)}</li>`).join("")
+      : `<li>${escapeHtml(data.betterAlternative)}</li>`;
 
     const feedbackEl = card.querySelector(".feedback-inline");
     feedbackEl.innerHTML = `
@@ -208,7 +213,7 @@
       </div>
       <div class="feedback-block info">
         <h4><span class="tag"></span>Better alternative</h4>
-        <div class="quote-block">${escapeHtml(data.betterAlternative)}</div>
+        <ul class="alt-lines">${altItems}</ul>
       </div>
       <div class="feedback-block info">
         <h4><span class="tag"></span>Principle</h4>

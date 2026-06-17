@@ -3,6 +3,9 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const Anthropic = require("@anthropic-ai/sdk");
+const { OAuth2Client } = require("google-auth-library");
+const { Pool } = require("pg");
+const jwt = require("jsonwebtoken");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,16 +18,79 @@ const SALES_NOTES = fs.readFileSync(
   "utf-8"
 );
 
+// ---------------------------------------------------------------------
+// AI client
+// ---------------------------------------------------------------------
+
 let anthropic = null;
 if (process.env.ANTHROPIC_API_KEY) {
   anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
 
 // ---------------------------------------------------------------------
-// Cache
+// Database (Neon / Postgres — optional; auth degrades gracefully if absent)
 // ---------------------------------------------------------------------
 
-const CACHE_DIR      = path.join(__dirname, "cache");
+let db = null;
+if (process.env.DATABASE_URL) {
+  db = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  db.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      google_id TEXT UNIQUE,
+      email TEXT,
+      name TEXT,
+      picture TEXT,
+      created_at BIGINT
+    );
+    CREATE TABLE IF NOT EXISTS scores (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT,
+      delta INTEGER,
+      mode TEXT,
+      date TEXT,
+      created_at BIGINT
+    );
+  `).catch((e) => console.error("DB init error:", e.message));
+}
+
+// ---------------------------------------------------------------------
+// Google auth client
+// ---------------------------------------------------------------------
+
+const googleClient = process.env.GOOGLE_CLIENT_ID
+  ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
+  : null;
+
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
+
+function signToken(userId) {
+  return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: "30d" });
+}
+
+function verifyToken(token) {
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
+
+function authMiddleware(req, res, next) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: "Not authenticated" });
+  const payload = verifyToken(token);
+  if (!payload) return res.status(401).json({ error: "Invalid or expired token" });
+  req.userId = payload.sub;
+  next();
+}
+
+// ---------------------------------------------------------------------
+// Cache (uses /tmp on Vercel, ./cache locally)
+// ---------------------------------------------------------------------
+
+const CACHE_DIR      = process.env.VERCEL ? "/tmp/scg-cache" : path.join(__dirname, "cache");
 const OBJ_CACHE_FILE = path.join(CACHE_DIR, "objections.json");
 const PAT_CACHE_FILE = path.join(CACHE_DIR, "patterns.json");
 
@@ -36,7 +102,7 @@ const RECENT_WINDOW = 5;
 
 function loadCaches() {
   try {
-    if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR);
+    if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
     if (fs.existsSync(OBJ_CACHE_FILE))
       objectionCache = JSON.parse(fs.readFileSync(OBJ_CACHE_FILE, "utf-8"));
   } catch { objectionCache = []; }
@@ -49,7 +115,7 @@ function loadCaches() {
 
 function saveCache(filePath, data) {
   fs.promises.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8")
-    .catch((e) => console.error("Cache write failed:", e));
+    .catch((e) => console.error("Cache write failed:", e.message));
 }
 
 function pickFromCache(cache, recentKeys, keyField) {
@@ -66,19 +132,25 @@ function trackRecent(arr, key) {
 loadCaches();
 
 // ---------------------------------------------------------------------
-// Helpers
+// AI helpers
 // ---------------------------------------------------------------------
 
 function requireAI(res) {
   if (!anthropic) {
     res.status(503).json({
-      error:
-        "No Claude API key configured. Add ANTHROPIC_API_KEY to your .env file and restart the server.",
+      error: "No Claude API key configured. Add ANTHROPIC_API_KEY to your environment variables.",
     });
     return false;
   }
   return true;
 }
+
+const STYLE_RULES = `
+RESPONSE STYLE (follow strictly):
+- Write in plain, everyday English. No unnecessary jargon.
+- Keep each bullet point under 15 words.
+- Be direct and specific — no vague praise or vague criticism.
+- Name the exact mistake or the exact thing they did right.`;
 
 const BASE_SYSTEM = `You are the AI engine behind "Sales Camp Games", a sales training app.
 Every piece of coaching, feedback, generated objection, scenario, and explanation you produce
@@ -121,6 +193,107 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // ---------------------------------------------------------------------
+// Auth routes
+// ---------------------------------------------------------------------
+
+app.post("/api/auth/google", async (req, res) => {
+  if (!googleClient) return res.status(503).json({ error: "Google auth not configured. Set GOOGLE_CLIENT_ID." });
+  if (!db) return res.status(503).json({ error: "Database not configured. Set DATABASE_URL." });
+
+  const { credential } = req.body;
+  if (!credential) return res.status(400).json({ error: "Missing credential" });
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const googleId = payload.sub;
+    const email    = payload.email;
+    const name     = payload.name;
+    const picture  = payload.picture;
+    const userId   = `g_${googleId}`;
+
+    await db.query(
+      `INSERT INTO users (id, google_id, email, name, picture, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (google_id) DO UPDATE SET name=$4, picture=$5`,
+      [userId, googleId, email, name, picture, Date.now()]
+    );
+
+    const token = signToken(userId);
+    res.json({ token, user: { id: userId, name, email, picture } });
+  } catch (err) {
+    console.error("Google auth error:", err.message);
+    res.status(401).json({ error: "Failed to verify Google token" });
+  }
+});
+
+app.get("/api/auth/me", async (req, res) => {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: "Not authenticated" });
+
+  const payload = verifyToken(token);
+  if (!payload) return res.status(401).json({ error: "Invalid or expired token" });
+
+  if (!db) return res.json({ id: payload.sub, name: "User", email: "", picture: "" });
+
+  try {
+    const result = await db.query("SELECT id, name, email, picture FROM users WHERE id=$1", [payload.sub]);
+    if (!result.rows.length) return res.status(404).json({ error: "User not found" });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Auth me error:", err.message);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// ---------------------------------------------------------------------
+// Score routes (authenticated)
+// ---------------------------------------------------------------------
+
+app.post("/api/scores", authMiddleware, async (req, res) => {
+  if (!db) return res.status(503).json({ error: "Database not configured" });
+  const { delta, mode } = req.body;
+  if (typeof delta !== "number") return res.status(400).json({ error: "delta must be a number" });
+
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    await db.query(
+      "INSERT INTO scores (user_id, delta, mode, date, created_at) VALUES ($1,$2,$3,$4,$5)",
+      [req.userId, delta, mode || "unknown", today, Date.now()]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Score insert error:", err.message);
+    res.status(500).json({ error: "Failed to save score" });
+  }
+});
+
+app.get("/api/scores/summary", authMiddleware, async (req, res) => {
+  if (!db) return res.json({ today: 0, total: 0, rounds: 0 });
+
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const [todayRow, totalRow, roundsRow] = await Promise.all([
+      db.query("SELECT COALESCE(SUM(delta),0) AS val FROM scores WHERE user_id=$1 AND date=$2", [req.userId, today]),
+      db.query("SELECT COALESCE(SUM(delta),0) AS val FROM scores WHERE user_id=$1", [req.userId]),
+      db.query("SELECT COUNT(*) AS val FROM scores WHERE user_id=$1", [req.userId]),
+    ]);
+    res.json({
+      today:  parseInt(todayRow.rows[0].val),
+      total:  parseInt(totalRow.rows[0].val),
+      rounds: parseInt(roundsRow.rows[0].val),
+    });
+  } catch (err) {
+    console.error("Score summary error:", err.message);
+    res.status(500).json({ error: "Failed to fetch scores" });
+  }
+});
+
+// ---------------------------------------------------------------------
 // 1. Objection Battle
 // ---------------------------------------------------------------------
 
@@ -152,7 +325,6 @@ app.post("/api/objection/new", async (req, res) => {
 
   const difficulty = Math.ceil(Math.random() * 3);
 
-  // Serve from cache 70% of the time once warm
   if (objectionCache.length >= 20 && Math.random() < 0.70) {
     const cached = pickFromCache(objectionCache, recentlyServedObjections, "objection");
     if (cached) {
@@ -161,7 +333,6 @@ app.post("/api/objection/new", async (req, res) => {
     }
   }
 
-  // Pick a random objection type to force variety
   const randomType = OBJECTION_TYPES[Math.floor(Math.random() * OBJECTION_TYPES.length)];
 
   try {
@@ -169,15 +340,13 @@ app.post("/api/objection/new", async (req, res) => {
       `Generate ONE realistic sales objection a prospect would say during a high-ticket sales call.
 
 Use this objection type: ${randomType}
-
 Make it a "${DIFFICULTY_LABELS[difficulty]}" objection.
-
-The objection must sound natural and conversational — like a real person on a phone call, not a textbook example.
+Sound natural and conversational — like a real person on a phone call, not a textbook example.
 
 Respond with ONLY valid JSON:
 {
   "objection": "the exact line the prospect says",
-  "context": "one sentence describing the situation and scenario this came up in"
+  "context": "one sentence describing the situation this came up in"
 }`,
       300,
       HAIKU
@@ -189,7 +358,7 @@ Respond with ONLY valid JSON:
     trackRecent(recentlyServedObjections, data.objection);
     res.json(result);
   } catch (err) {
-    console.error(err);
+    console.error("objection/new error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate objection." });
   }
 });
@@ -203,39 +372,39 @@ app.post("/api/objection/feedback", async (req, res) => {
 
   try {
     const data = await askClaude(
-      `Sales objection training — feedback.
+      `Sales objection training — give feedback on this response.
 
 Prospect's objection: "${objection}"
 Context: ${context}
 Difficulty: ${difficultyLabel} (${timeAllowed}s allowed, user took ${timeTakenSeconds}s)
-
 User's response: "${userResponse}"
 
 SCORING (0–10):
-- Score on a scale of 0 to 10
-- Reward understanding of principles shown in the user's own words — do NOT require exact phrasing from training notes
+- Reward understanding of principles shown in the user's own words — don't require exact phrasing
 - Conceptually correct response in simple language = 4–6
 - Response that explicitly reframes the real belief behind the objection = 7–9
 - Generic response that takes the objection at face value = 1–2
 - No response or empty = 0
-- Calibrate for difficulty: be more lenient at level 1, stricter at level 3
-- Do NOT include any physical, environmental, or wellness advice (no tips about breathing, breaks, water, posture, etc.)
+- Calibrate for difficulty: more lenient at level 1, stricter at level 3
+- Do NOT include any physical, environmental, or wellness advice
+
+${STYLE_RULES}
 
 Return ONLY valid JSON:
 {
-  "whatYouDidWell": ["one concise bullet max 1-2 sentences", "..."],
-  "whatYouMissed": ["one concise bullet max 1-2 sentences", "..."],
-  "betterAlternative": "concrete example reply a skilled closer would give — 2-4 sentences",
-  "whatIsReallyGoingOn": "the underlying belief or emotion behind this objection — 1-2 sentences",
+  "whatYouDidWell": ["short bullet under 15 words", "..."],
+  "whatYouMissed": ["short bullet under 15 words", "..."],
+  "betterAlternative": ["line a skilled closer would say", "follow-up line if needed"],
+  "whatIsReallyGoingOn": "the real belief or fear behind this objection — 1 sentence",
   "principle": "the single most relevant principle from the sales notes",
   "score": <integer 0-10>
 }`,
-      400,
+      700,
       HAIKU
     );
     res.json(data);
   } catch (err) {
-    console.error(err);
+    console.error("objection/feedback error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to analyze response." });
   }
 });
@@ -262,7 +431,6 @@ const PATTERN_TYPES = [
 app.post("/api/pattern/new", async (req, res) => {
   if (!requireAI(res)) return;
 
-  // Serve from cache 70% of the time once warm
   if (patternCache.length >= 20 && Math.random() < 0.70) {
     const cached = pickFromCache(patternCache, recentlyServedPatterns, "statement");
     if (cached) {
@@ -279,12 +447,13 @@ app.post("/api/pattern/new", async (req, res) => {
 
 Pattern type to use: ${randomType}
 
-Write a realistic prospect statement (1-3 sentences) that SUBTLY demonstrates this pattern — not obviously. A good exercise makes the student think. The statement should sound like something a real person would say on a sales call.
+Write a realistic prospect statement (1-3 sentences) that SUBTLY demonstrates this pattern — not obviously.
+Make the student think. Sound like a real person on a sales call.
 
-Then create a 4-option multiple choice question where:
-- Exactly ONE option is correct, grounded in buyer psychology
-- The other three are plausible but wrong (e.g. surface reads, wrong principle, or close-but-not-quite)
-- All four options are written in parallel style and similar length
+Create a 4-option multiple choice question where:
+- Exactly ONE is correct, grounded in buyer psychology
+- The other three are plausible but wrong (surface reads, wrong principle, or close-but-not-quite)
+- All four options are similar length and parallel in style
 
 Return ONLY valid JSON:
 {
@@ -307,7 +476,7 @@ Return ONLY valid JSON:
     trackRecent(recentlyServedPatterns, data.statement);
     res.json(data);
   } catch (err) {
-    console.error(err);
+    console.error("pattern/new error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate exercise." });
   }
 });
@@ -323,21 +492,23 @@ Prospect said: "${statement}"
 Correct answer: ${correctAnswer} — "${options[correctAnswer]}"
 User chose: ${userAnswer} — "${options[userAnswer]}"
 
-Explain concisely. Return ONLY valid JSON:
+${STYLE_RULES}
+
+Return ONLY valid JSON:
 {
   "correct": ${isCorrect},
-  "explanation": "why ${correctAnswer} is correct, tied to buyer psychology — 1-2 sentences",
-  "howItAffectsBuying": "how this pattern affects buying behavior — 1 sentence",
-  "howToHandleIt": "how a skilled closer addresses it — 1-2 sentences",
+  "explanation": "why ${correctAnswer} is correct — 1 sentence, plain English",
+  "howItAffectsBuying": "how this pattern affects the buying decision — 1 sentence",
+  "howToHandleIt": ["what a skilled closer would do — under 15 words", "second step if needed"],
   "principle": "the single most relevant principle from the sales notes",
   "score": ${isCorrect ? 5 : -3}
 }`,
-      350,
+      500,
       HAIKU
     );
     res.json(data);
   } catch (err) {
-    console.error(err);
+    console.error("pattern/feedback error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to analyze answer." });
   }
 });
@@ -376,7 +547,7 @@ Return JSON:
     );
     res.json(data);
   } catch (err) {
-    console.error(err);
+    console.error("call/start error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to start call." });
   }
 });
@@ -390,7 +561,7 @@ app.post("/api/call/message", async (req, res) => {
       .join("\n");
 
     const sectionInstruction = section
-      ? `\nThis roleplay starts at the "${section}" phase of the One Call Close. Behave as if earlier phases already happened (rapport was built, situation was explored, etc.). Your reactions, objections, and openness should be calibrated for where you are at this stage of the call.`
+      ? `\nThis roleplay starts at the "${section}" phase of the One Call Close. Behave as if earlier phases already happened. Your reactions, objections, and openness should be calibrated for where you are at this stage.`
       : "";
 
     const msg = await anthropic.messages.create({
@@ -407,8 +578,7 @@ Profile:
 - Hidden belief (never say this explicitly, but let it leak through your resistance/objections): ${prospect.hiddenBelief}
 - Buying readiness: ${prospect.buyingReadiness}
 
-Stay completely in character as a real human prospect on a call. Speak naturally and conversationally,
-like a normal person talking — not like a teacher, not like an AI, not overly formal.
+Stay completely in character as a real human prospect. Speak naturally and conversationally.
 React realistically to the salesperson based on how well they apply Authority, Tonality,
 Identity Shift, Certainty Building, Objection Handling, and Closing principles.
 Keep responses short (1-4 sentences). Never break character. Never mention you are an AI.`,
@@ -428,7 +598,7 @@ Keep responses short (1-4 sentences). Never break character. Never mention you a
 
     res.json({ reply });
   } catch (err) {
-    console.error(err);
+    console.error("call/message error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to get prospect reply." });
   }
 });
@@ -454,42 +624,52 @@ Prospect profile: ${JSON.stringify(prospect)}
 Full transcript:
 ${historyText}
 
-Analyze the salesperson's (the "Salesperson" lines) performance, grounded in the sales study notes. Return JSON:
+${STYLE_RULES}
+
+Analyze the salesperson's performance, grounded in the sales study notes. Return JSON:
 {
   "callScore": <integer 0-100>,
-  "whatYouDidWell": ["bullet", "..."],
-  "biggestMistakes": ["bullet", "..."],
+  "whatYouDidWell": ["short bullet under 15 words", "..."],
+  "biggestMistakes": ["short bullet under 15 words", "..."],
   "missedOpportunities": [
-    { "prospectSaid": "quote from transcript", "youTreatedItAs": "...", "itWasActually": "..." }
+    { "prospectSaid": "short quote from transcript", "youTreatedItAs": "one phrase", "itWasActually": "one phrase" }
   ],
-  "whatATopCloserWouldHaveDone": ["bullet", "..."],
+  "whatATopCloserWouldHaveDone": ["short bullet under 15 words", "..."],
   "principles": [
-    { "name": "principle name from notes", "note": "how it applied to a specific moment in this call" }
+    { "name": "principle name from notes", "note": "one sentence on how it applied here" }
   ],
   "scoreDelta": <integer between -15 and 15, roughly (callScore-50)/4 rounded>
 }`,
-      1500,
+      2000,
       SONNET
     );
     res.json(data);
   } catch (err) {
-    console.error(err);
+    console.error("call/end error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate feedback report." });
   }
 });
 
 // ---------------------------------------------------------------------
+// Health + config info
+// ---------------------------------------------------------------------
 
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, aiConfigured: !!anthropic, model: SONNET });
+  res.json({
+    ok: true,
+    aiConfigured: !!anthropic,
+    authConfigured: !!(googleClient && db),
+    googleClientId: process.env.GOOGLE_CLIENT_ID || null,
+    model: SONNET,
+  });
 });
 
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Sales Camp Games running at http://localhost:${PORT}`);
-    if (!anthropic) {
-      console.log("WARNING: ANTHROPIC_API_KEY not set. AI features are disabled until you add it to .env");
-    }
+    if (!anthropic) console.warn("WARNING: ANTHROPIC_API_KEY not set — AI features disabled.");
+    if (!db)         console.warn("WARNING: DATABASE_URL not set — user scores use localStorage only.");
+    if (!googleClient) console.warn("WARNING: GOOGLE_CLIENT_ID not set — Google login disabled.");
   });
 }
 
