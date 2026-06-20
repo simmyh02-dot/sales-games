@@ -6,6 +6,10 @@ const Anthropic = require("@anthropic-ai/sdk");
 const { OAuth2Client } = require("google-auth-library");
 const { Pool } = require("pg");
 const jwt = require("jsonwebtoken");
+let stripe = null;
+if (process.env.STRIPE_SECRET_KEY) {
+  try { stripe = require("stripe")(process.env.STRIPE_SECRET_KEY); } catch (e) { console.warn("Stripe load failed:", e.message); }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,7 +55,18 @@ if (process.env.DATABASE_URL) {
       date TEXT,
       created_at BIGINT
     );
+    CREATE TABLE IF NOT EXISTS unlocked_skills (
+      user_id TEXT,
+      skill_id TEXT,
+      unlocked_at BIGINT,
+      PRIMARY KEY (user_id, skill_id)
+    );
   `).catch((e) => console.error("DB init error:", e.message));
+  db.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'free';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
+  `).catch(() => {});
 }
 
 // ---------------------------------------------------------------------
@@ -84,6 +99,78 @@ function authMiddleware(req, res, next) {
   if (!payload) return res.status(401).json({ error: "Invalid or expired token" });
   req.userId = payload.sub;
   next();
+}
+
+// ---------------------------------------------------------------------
+// Skill unlock system
+// ---------------------------------------------------------------------
+
+const PRE_UNLOCKED = new Set([
+  "tonality","t_confused","t_curious","t_concerned","t_challenging",
+  "t_playful","whatfeel","piv","tempo"
+]);
+
+const SKILL_ID_PROMPT = `Unlockable skill IDs (use exact ID strings in discovered_skills):
+spine(One-Call Close), opening(Opening), setframe(Set Frame), situation(Situation), problem(Problem), eliminate(Eliminate Solutions), buying(Buying Decision), futurepacing(Future Pacing), consequences(Consequences), presentation(Presentation), objections_phase(Objections Phase), sixneeds(6 Human Needs), maslow(Maslow's Pyramid), problemvssymptom(Problem vs Symptom), probingladder(Probing Ladder), improvementoffer(Improvement Offer), newopp(New Opportunity), pb_justtellme(Pushback-Just Tell Me), pb_allgood(Pushback-Everything Fine), limitingbeliefs(Limiting Beliefs), reframe4(4-Step Reframe), belief_types(Belief Types), reframeladder(Reframe Steps), prehandle_q(Pre-Handle Question), b_tried(Tried Before), b_companies(Talking to Others), b_youtube(Tried It Alone), b_nothing(Done Nothing), ex_time(Excuse-Time), ex_money(Excuse-Money), ex_didntknow(Excuse-DidntKnow), ex_research(Excuse-Just Looking), realbeliefs(Real Beliefs), identityframe(Identity Frame), roimath(ROI Math), rf_restaurant(Restaurant Reframe), rf_beach(Beach Reframe), rf_medal(Medal Reframe), rf_lion(Lion Reframe), rf_boats(Burn the Boats), rf_nicekind(Nice vs Kind), objections(Objections), smoke_vs_real(Smoke Screen vs Real), slowdown(Slow Down), o_think(Need to Think), o_partner(Need Partner), niche_smoke(Niche Smoke Screens), o_money(Money Objection), cdr(CDR), twofold(Two-Fold Choice), o_time(Time Objection), dmp(Decision-Making Process), dmp_partner(DMP-Partner), dmp_scale(DMP-Scale), rf_airplane(Airplane Reframe), fear(Fear Objection), abc(ABC), bossvoice(Boss Voice), identity(Identity), logiclevels(Logical Levels), identitygap(Identity Gap), desiredidentity(Desired Identity), identitybridge(Identity Bridge), realurgency(Real Urgency), straightline(Straight Line), talkmirror(Language=Self-Talk), l_wishful(Wishful Language), l_minimize(Minimizing Language), l_external(Victim Language), l_ambiguous(Ambiguous Language), authority(Authority), funnel(Funnel), theirwords(Use Their Words), selleridentity(Seller Identity)`;
+
+function optionalAuth(req, res, next) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (token) {
+    const payload = verifyToken(token);
+    if (payload) req.userId = payload.sub;
+  }
+  next();
+}
+
+async function autoUnlock(userId, discoveredSkills) {
+  if (!db || !userId || !Array.isArray(discoveredSkills) || discoveredSkills.length === 0) return;
+  const validIds = discoveredSkills.filter(id => id && !PRE_UNLOCKED.has(id));
+  const now = Date.now();
+  for (const skillId of validIds) {
+    await db.query(
+      `INSERT INTO unlocked_skills (user_id, skill_id, unlocked_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+      [userId, skillId, now]
+    ).catch(e => console.error("autoUnlock error:", e.message));
+  }
+}
+
+// ---------------------------------------------------------------------
+// Session gating
+// ---------------------------------------------------------------------
+
+const ADMIN_EMAILS = ["simmyh02@gmail.com"];
+const TIER_LIMITS  = { free: 5, pro: 60, power: Infinity };
+
+async function getMonthlySessionCount(userId) {
+  if (!db) return 0;
+  const firstOfMonth = new Date();
+  firstOfMonth.setDate(1);
+  const dateStr = firstOfMonth.toISOString().slice(0, 10);
+  try {
+    const result = await db.query(
+      "SELECT COUNT(*) AS cnt FROM scores WHERE user_id=$1 AND date >= $2",
+      [userId, dateStr]
+    );
+    return parseInt(result.rows[0].cnt) || 0;
+  } catch { return 0; }
+}
+
+async function checkSessionLimit(req, res, next) {
+  if (!req.userId || !db) return next();
+  try {
+    const row = await db.query("SELECT email, tier FROM users WHERE id=$1", [req.userId]);
+    if (!row.rows.length) return next();
+    const { email, tier } = row.rows[0];
+    if (ADMIN_EMAILS.includes(email)) return next();
+    const limit = TIER_LIMITS[tier || "free"];
+    if (!limit || limit === Infinity) return next();
+    const count = await getMonthlySessionCount(req.userId);
+    if (count >= limit) {
+      return res.status(403).json({ error: "limit_reached", tier: tier || "free", sessionsUsed: count, sessionsLimit: limit });
+    }
+    next();
+  } catch { next(); }
 }
 
 // ---------------------------------------------------------------------
@@ -149,8 +236,9 @@ const STYLE_RULES = `
 RESPONSE STYLE (follow strictly):
 - Write in plain, everyday English. No unnecessary jargon.
 - Keep each bullet point under 15 words.
-- Be direct and specific — no vague praise or vague criticism.
-- Name the exact mistake or the exact thing they did right.`;
+- Be direct and specific. No vague praise or vague criticism.
+- Name the exact mistake or the exact thing they did right.
+- Never use em-dashes (—). Use hyphens (-), colons (:), or restructure the sentence.`;
 
 const BASE_SYSTEM = `You are the AI engine behind "Sales Camp Games", a sales training app.
 Every piece of coaching, feedback, generated objection, scenario, and explanation you produce
@@ -161,6 +249,7 @@ Do not invent generic sales advice that contradicts these notes.
 
 Always respond with ONLY valid JSON matching the schema described in the user message.
 No markdown, no commentary, no code fences.
+Never use em-dashes (—) in any text field. Use hyphens (-) or colons (:) instead.
 
 === SALES STUDY NOTES ===
 ${SALES_NOTES}
@@ -189,7 +278,52 @@ function extractJSON(text) {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
+// Stripe webhook — must be before express.json()
+app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: "Stripe not configured" });
+  const sig = req.headers["stripe-signature"];
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    return res.status(400).json({ error: `Webhook error: ${err.message}` });
+  }
+  try {
+    if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
+      const sub = event.data.object;
+      const priceId = sub.items?.data?.[0]?.price?.id;
+      let tier = "free";
+      if (priceId === process.env.STRIPE_PRO_PRICE_ID)   tier = "pro";
+      if (priceId === process.env.STRIPE_POWER_PRICE_ID) tier = "power";
+      if (db && sub.customer) {
+        await db.query(
+          "UPDATE users SET tier=$1, stripe_subscription_id=$2 WHERE stripe_customer_id=$3",
+          [tier, sub.id, sub.customer]
+        );
+      }
+    }
+    if (event.type === "customer.subscription.deleted") {
+      const sub = event.data.object;
+      if (db && sub.customer) {
+        await db.query(
+          "UPDATE users SET tier='free', stripe_subscription_id=NULL WHERE stripe_customer_id=$1",
+          [sub.customer]
+        );
+      }
+    }
+    res.json({ received: true });
+  } catch (err) {
+    console.error("Webhook processing error:", err.message);
+    res.status(500).json({ error: "Webhook processing failed" });
+  }
+});
+
 app.use(express.json());
+
+// Explicit page routes (must be before express.static so they take priority)
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "landing.html")));
+app.get("/home", (req, res) => res.sendFile(path.join(__dirname, "public", "home.html")));
+
 app.use(express.static(path.join(__dirname, "public")));
 
 // ---------------------------------------------------------------------
@@ -294,6 +428,33 @@ app.get("/api/scores/summary", authMiddleware, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
+// Skill unlock endpoints
+// ---------------------------------------------------------------------
+
+app.get("/api/skills/unlocked", authMiddleware, async (req, res) => {
+  if (!db) return res.json({ unlockedIds: [...PRE_UNLOCKED] });
+  try {
+    const result = await db.query(
+      "SELECT skill_id FROM unlocked_skills WHERE user_id=$1",
+      [req.userId]
+    );
+    const unlockedIds = [...PRE_UNLOCKED, ...result.rows.map(r => r.skill_id)];
+    res.json({ unlockedIds });
+  } catch (err) {
+    console.error("skills/unlocked error:", err.message);
+    res.json({ unlockedIds: [...PRE_UNLOCKED] });
+  }
+});
+
+app.post("/api/skills/unlock", authMiddleware, async (req, res) => {
+  if (!db) return res.json({ ok: true });
+  const { skill_ids } = req.body;
+  if (!Array.isArray(skill_ids)) return res.status(400).json({ error: "skill_ids must be an array" });
+  await autoUnlock(req.userId, skill_ids);
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------
 // 1. Objection Battle
 // ---------------------------------------------------------------------
 
@@ -320,7 +481,7 @@ const DIFFICULTY_LABELS = {
   3: "hard layered objection (requires deep identity or certainty work, or a hidden belief beneath the surface excuse)",
 };
 
-app.post("/api/objection/new", async (req, res) => {
+app.post("/api/objection/new", optionalAuth, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
 
   const difficulty = Math.ceil(Math.random() * 3);
@@ -363,7 +524,7 @@ Respond with ONLY valid JSON:
   }
 });
 
-app.post("/api/objection/feedback", async (req, res) => {
+app.post("/api/objection/feedback", optionalAuth, async (req, res) => {
   if (!requireAI(res)) return;
   const { objection, context, userResponse, timeTakenSeconds, difficulty } = req.body;
 
@@ -379,29 +540,35 @@ Context: ${context}
 Difficulty: ${difficultyLabel} (${timeAllowed}s allowed, user took ${timeTakenSeconds}s)
 User's response: "${userResponse}"
 
-SCORING (0–10):
+SCORING (0-10):
 - Reward understanding of principles shown in the user's own words — don't require exact phrasing
-- Conceptually correct response in simple language = 4–6
-- Response that explicitly reframes the real belief behind the objection = 7–9
-- Generic response that takes the objection at face value = 1–2
+- Conceptually correct response in simple language = 4-6
+- Response that explicitly reframes the real belief behind the objection = 7-9
+- Generic response that takes the objection at face value = 1-2
 - No response or empty = 0
 - Calibrate for difficulty: more lenient at level 1, stricter at level 3
 - Do NOT include any physical, environmental, or wellness advice
 
 ${STYLE_RULES}
 
+${SKILL_ID_PROMPT}
+
 Return ONLY valid JSON:
 {
   "whatYouDidWell": ["short bullet under 15 words", "..."],
   "whatYouMissed": ["short bullet under 15 words", "..."],
   "betterAlternative": ["line a skilled closer would say", "follow-up line if needed"],
-  "whatIsReallyGoingOn": "the real belief or fear behind this objection — 1 sentence",
+  "whatIsReallyGoingOn": "the real belief or fear behind this objection, 1 sentence",
   "principle": "the single most relevant principle from the sales notes",
-  "score": <integer 0-10>
+  "score": <integer 0-10>,
+  "discovered_skills": ["skill_id1", "skill_id2"]
 }`,
-      700,
+      800,
       HAIKU
     );
+    if (req.userId && data.discovered_skills) {
+      autoUnlock(req.userId, data.discovered_skills);
+    }
     res.json(data);
   } catch (err) {
     console.error("objection/feedback error:", err.stack || err.message);
@@ -428,31 +595,38 @@ const PATTERN_TYPES = [
   "scarcity / loss aversion (reasoning from fear of losing rather than hope of gaining)",
 ];
 
-app.post("/api/pattern/new", async (req, res) => {
+app.post("/api/pattern/new", optionalAuth, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
+  const difficulty = parseInt(req.body.difficulty) || 2;
 
-  if (patternCache.length >= 20 && Math.random() < 0.70) {
+  // Only use cache for level 2 (default difficulty)
+  if (difficulty === 2 && patternCache.length >= 20 && Math.random() < 0.70) {
     const cached = pickFromCache(patternCache, recentlyServedPatterns, "statement");
     if (cached) {
       trackRecent(recentlyServedPatterns, cached.statement);
-      return res.json(cached);
+      return res.json({ ...cached, difficulty });
     }
   }
 
   const randomType = PATTERN_TYPES[Math.floor(Math.random() * PATTERN_TYPES.length)];
+
+  const level1Extra = difficulty === 1 ? `
+The prospect statement must be a SINGLE short sentence — direct and conversational.
+Randomly decide (independently each time): about 30% of the time, make TWO of the four options defensibly correct (but one is the primary best answer). If you do, set "twoCorrect": true and "secondCorrect" to the letter of the second valid option. Otherwise set "twoCorrect": false and omit "secondCorrect".` : `
+The prospect statement can be 1-3 sentences, and should be subtly layered.`;
 
   try {
     const data = await askClaude(
       `Generate ONE pattern recognition exercise for buyer psychology training.
 
 Pattern type to use: ${randomType}
+${level1Extra}
 
-Write a realistic prospect statement (1-3 sentences) that SUBTLY demonstrates this pattern — not obviously.
-Make the student think. Sound like a real person on a sales call.
+Write a realistic prospect statement that SUBTLY demonstrates this pattern — not obviously. Make the student think. Sound like a real person on a sales call.
 
 Create a 4-option multiple choice question where:
-- Exactly ONE is correct, grounded in buyer psychology
-- The other three are plausible but wrong (surface reads, wrong principle, or close-but-not-quite)
+- The primary correct answer is grounded in buyer psychology
+- The other options are plausible but wrong (surface reads, wrong principle, or close-but-not-quite)
 - All four options are similar length and parallel in style
 
 Return ONLY valid JSON:
@@ -465,48 +639,66 @@ Return ONLY valid JSON:
     "C": "option text",
     "D": "option text"
   },
-  "correctAnswer": "A"
+  "correctAnswer": "A",
+  "twoCorrect": false
 }`,
-      400,
+      450,
       HAIKU
     );
 
-    patternCache.push(data);
-    saveCache(PAT_CACHE_FILE, patternCache);
+    if (difficulty === 2) {
+      patternCache.push(data);
+      saveCache(PAT_CACHE_FILE, patternCache);
+    }
     trackRecent(recentlyServedPatterns, data.statement);
-    res.json(data);
+    res.json({ ...data, difficulty });
   } catch (err) {
     console.error("pattern/new error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate exercise." });
   }
 });
 
-app.post("/api/pattern/feedback", async (req, res) => {
+app.post("/api/pattern/feedback", optionalAuth, async (req, res) => {
   if (!requireAI(res)) return;
-  const { statement, question, options, correctAnswer, userAnswer } = req.body;
-  const isCorrect = userAnswer === correctAnswer;
+  const { statement, question, options, correctAnswer, userAnswer, twoCorrect, secondCorrect } = req.body;
+  const pickedBest   = userAnswer === correctAnswer;
+  const pickedSecond = twoCorrect && secondCorrect && userAnswer === secondCorrect;
+  const isCorrect    = pickedBest || pickedSecond;
+  const score        = pickedBest ? 5 : pickedSecond ? 3 : -3;
+  const twoCorrectNote = pickedSecond
+    ? "Two valid answers this round. Yours also works, but the primary answer is the stronger read."
+    : null;
+
   try {
     const data = await askClaude(
       `Pattern recognition feedback.
 Prospect said: "${statement}"
-Correct answer: ${correctAnswer} — "${options[correctAnswer]}"
-User chose: ${userAnswer} — "${options[userAnswer]}"
+Best answer: ${correctAnswer} - "${options[correctAnswer]}"${twoCorrect && secondCorrect ? `\nAlso valid: ${secondCorrect} - "${options[secondCorrect]}"` : ""}
+User chose: ${userAnswer} - "${options[userAnswer]}"
 
 ${STYLE_RULES}
+
+Each item in "howToHandleIt" must end with a specific action the salesperson should take, phrased as "...so you should [concrete action]."
+
+${SKILL_ID_PROMPT}
 
 Return ONLY valid JSON:
 {
   "correct": ${isCorrect},
-  "explanation": "why ${correctAnswer} is correct — 1 sentence, plain English",
-  "howItAffectsBuying": "how this pattern affects the buying decision — 1 sentence",
-  "howToHandleIt": ["what a skilled closer would do — under 15 words", "second step if needed"],
+  "explanation": "why ${correctAnswer} is the best answer, 1 sentence, plain English",
+  "howItAffectsBuying": "how this pattern affects the buying decision, 1 sentence",
+  "howToHandleIt": ["insight about the pattern, so you should [take specific action]", "second step if needed, so you should [action]"],
   "principle": "the single most relevant principle from the sales notes",
-  "score": ${isCorrect ? 5 : -3}
+  "score": ${score},
+  "discovered_skills": ["skill_id1"]
 }`,
-      500,
+      600,
       HAIKU
     );
-    res.json(data);
+    if (req.userId && data.discovered_skills) {
+      autoUnlock(req.userId, data.discovered_skills);
+    }
+    res.json({ ...data, score, correct: isCorrect, ...(twoCorrectNote ? { twoCorrectNote } : {}) });
   } catch (err) {
     console.error("pattern/feedback error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to analyze answer." });
@@ -517,7 +709,7 @@ Return ONLY valid JSON:
 // 3. Sales Call Mode
 // ---------------------------------------------------------------------
 
-app.post("/api/call/start", async (req, res) => {
+app.post("/api/call/start", optionalAuth, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
   const { scenario, customDescription, section } = req.body;
 
@@ -581,7 +773,8 @@ Profile:
 Stay completely in character as a real human prospect. Speak naturally and conversationally.
 React realistically to the salesperson based on how well they apply Authority, Tonality,
 Identity Shift, Certainty Building, Objection Handling, and Closing principles.
-Keep responses short (1-4 sentences). Never break character. Never mention you are an AI.`,
+Keep responses short (1-4 sentences). Never break character. Never mention you are an AI.
+Never use em-dashes (—) in your responses. Use hyphens (-) or plain punctuation instead.`,
       messages: [
         {
           role: "user",
@@ -603,7 +796,7 @@ Keep responses short (1-4 sentences). Never break character. Never mention you a
   }
 });
 
-app.post("/api/call/end", async (req, res) => {
+app.post("/api/call/end", optionalAuth, async (req, res) => {
   if (!requireAI(res)) return;
   const { scenario, prospect, history, section } = req.body;
   try {
@@ -626,6 +819,8 @@ ${historyText}
 
 ${STYLE_RULES}
 
+${SKILL_ID_PROMPT}
+
 Analyze the salesperson's performance, grounded in the sales study notes. Return JSON:
 {
   "callScore": <integer 0-100>,
@@ -638,15 +833,71 @@ Analyze the salesperson's performance, grounded in the sales study notes. Return
   "principles": [
     { "name": "principle name from notes", "note": "one sentence on how it applied here" }
   ],
-  "scoreDelta": <integer between -15 and 15, roughly (callScore-50)/4 rounded>
+  "scoreDelta": <integer between -15 and 15, roughly (callScore-50)/4 rounded>,
+  "discovered_skills": ["skill_id1", "skill_id2", "skill_id3"]
 }`,
-      2000,
+      2200,
       SONNET
     );
+    if (req.userId && data.discovered_skills) {
+      autoUnlock(req.userId, data.discovered_skills);
+    }
     res.json(data);
   } catch (err) {
     console.error("call/end error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate feedback report." });
+  }
+});
+
+// ---------------------------------------------------------------------
+// User status + Stripe checkout
+// ---------------------------------------------------------------------
+
+app.get("/api/user/status", authMiddleware, async (req, res) => {
+  if (!db) return res.json({ tier: "free", sessionsUsed: 0, sessionsLimit: 5 });
+  try {
+    const row = await db.query("SELECT email, tier FROM users WHERE id=$1", [req.userId]);
+    if (!row.rows.length) return res.status(404).json({ error: "User not found" });
+    const { email, tier } = row.rows[0];
+    const isAdmin = ADMIN_EMAILS.includes(email);
+    const effectiveTier  = isAdmin ? "power" : (tier || "free");
+    const limit = isAdmin ? null : (TIER_LIMITS[effectiveTier] === Infinity ? null : TIER_LIMITS[effectiveTier]);
+    res.json({ tier: effectiveTier, sessionsUsed: await getMonthlySessionCount(req.userId), sessionsLimit: limit, email });
+  } catch (err) {
+    console.error("user/status error:", err.message);
+    res.status(500).json({ error: "Failed to fetch user status" });
+  }
+});
+
+app.post("/api/stripe/create-checkout", authMiddleware, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: "Stripe not configured. Add STRIPE_SECRET_KEY to .env" });
+  if (!db)     return res.status(503).json({ error: "Database not configured" });
+  const { tier } = req.body;
+  const priceId = tier === "pro" ? process.env.STRIPE_PRO_PRICE_ID : process.env.STRIPE_POWER_PRICE_ID;
+  if (!priceId) return res.status(400).json({ error: `Price ID for '${tier}' not set. Add STRIPE_PRO_PRICE_ID or STRIPE_POWER_PRICE_ID to .env` });
+  try {
+    const row = await db.query("SELECT email, stripe_customer_id FROM users WHERE id=$1", [req.userId]);
+    if (!row.rows.length) return res.status(404).json({ error: "User not found" });
+    const { email, stripe_customer_id } = row.rows[0];
+    let customerId = stripe_customer_id;
+    if (!customerId) {
+      const customer = await stripe.customers.create({ email });
+      customerId = customer.id;
+      await db.query("UPDATE users SET stripe_customer_id=$1 WHERE id=$2", [customerId, req.userId]);
+    }
+    const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: "subscription",
+      payment_method_types: ["card"],
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${appUrl}/home?upgraded=1`,
+      cancel_url:  `${appUrl}/home`,
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error("create-checkout error:", err.message);
+    res.status(500).json({ error: "Failed to create checkout session" });
   }
 });
 

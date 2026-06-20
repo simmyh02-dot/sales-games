@@ -12,7 +12,7 @@
 
   <div class="shell">
     <div class="topbar">
-      <a href="/" class="back-link">
+      <a href="/home" class="back-link">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 12H5M12 19l-7-7 7-7"></path>
         </svg>
@@ -53,6 +53,14 @@
       </p>
     </div>
 
+    <div class="diff-bar">
+      <span class="diff-bar-label">Difficulty</span>
+      <div class="diff-toggle">
+        <button class="diff-btn active" data-level="1">Level 1</button>
+        <button class="diff-btn" data-level="2">Level 2</button>
+      </div>
+    </div>
+
     <div id="game-area">
       <div id="exercises-feed"></div>
 
@@ -64,6 +72,7 @@
 
   <script src="/js/score.js"></script>
   <script src="/js/auth.js"></script>
+  <script src="/js/pricing.js"></script>
   <script src="/js/pattern-recognition.js"></script>
 </body>
 </html>

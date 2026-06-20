@@ -15,6 +15,17 @@
 
   const TIER_R = { 1:32, 2:18, 3:10 };
 
+  const PRE_UNLOCKED = new Set([
+    "tonality","t_confused","t_curious","t_concerned","t_challenging",
+    "t_playful","whatfeel","piv","tempo"
+  ]);
+
+  let unlockedSet = new Set(PRE_UNLOCKED); // starts with only pre-unlocked
+
+  function isLocked(d) {
+    return !unlockedSet.has(d.id);
+  }
+
   /* ------------------------------------------------------------------ */
   /* Node data (~71 nodes)                                               */
   /* ------------------------------------------------------------------ */
@@ -326,6 +337,14 @@
     nodeSel.attr("transform", d => `translate(${d.x},${d.y})`);
   });
 
+  sim.on("end", () => {
+    const xs = NODES.map(n => n.x), ys = NODES.map(n => n.y);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    svg.call(zoom.transform,
+      d3.zoomIdentity.translate(W() / 2 - cx * 0.65, H() / 2 - cy * 0.65).scale(0.65));
+  });
+
   /* ------------------------------------------------------------------ */
   /* Hover                                                               */
   /* ------------------------------------------------------------------ */
@@ -349,8 +368,8 @@
         const tid = typeof e.target === "object" ? e.target.id : e.target;
         return sid === d.id || tid === d.id ? 0.95 : 0.04;
       });
-      ttLabel.textContent = d.label;
-      ttDesc.textContent  = d.desc;
+      ttLabel.textContent = isLocked(d) ? `${d.label} (locked)` : d.label;
+      ttDesc.textContent  = isLocked(d) ? "Complete training sessions to unlock this skill." : d.desc;
       tooltip.style.display = "block";
       moveTooltip(event);
     })
@@ -390,7 +409,7 @@
   function openPanel(d) {
     const cat = CATS[d.cat];
     spTitle.textContent = d.label;
-    spBadge.textContent = `${d.cat} — ${cat.label}`;
+    spBadge.textContent = `${d.cat} · ${cat.label}`;
     spBadge.style.color       = cat.color;
     spBadge.style.borderColor = cat.color;
     spDesc.textContent  = d.desc;
@@ -461,6 +480,54 @@
   searchInput.addEventListener("keydown", function(e) {
     if (e.key === "Escape") { this.value = ""; resetOpacity(); }
   });
+
+  /* ------------------------------------------------------------------ */
+  /* Lock state                                                          */
+  /* ------------------------------------------------------------------ */
+  function applyLockState() {
+    nodeSel.select("circle")
+      .attr("fill", d => isLocked(d) ? "#1e1e1e" : CATS[d.cat].color)
+      .attr("fill-opacity", d => isLocked(d) ? 0.5 : d.tier === 1 ? 0.9 : d.tier === 2 ? 0.65 : 0.45)
+      .attr("stroke", d => isLocked(d) ? "#333" : CATS[d.cat].color)
+      .attr("filter", d => (d.tier === 1 && !isLocked(d)) ? `url(#glow-${d.cat})` : null);
+
+    nodeSel.select("text.node-label")
+      .attr("fill", d => isLocked(d) ? "#444" : "#f0f0f0");
+
+    // Remove old locked labels then re-add
+    nodeSel.selectAll("text.locked-label").remove();
+    nodeSel.filter(d => isLocked(d) && d.tier !== 3)
+      .append("text")
+      .attr("class", "locked-label")
+      .attr("fill", "#555")
+      .attr("font-size", "7px")
+      .attr("font-family", "DM Mono, monospace")
+      .attr("text-anchor", "middle")
+      .attr("dominant-baseline", "middle")
+      .attr("dy", d => TIER_R[d.tier] + 9)
+      .attr("pointer-events", "none")
+      .text("locked");
+  }
+
+  async function fetchUnlockedSkills() {
+    const token = localStorage.getItem("scg_auth_token");
+    if (!token) return; // not logged in — stays with PRE_UNLOCKED only
+    try {
+      const res = await fetch("/api/skills/unlocked", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      unlockedSet = new Set(data.unlockedIds || []);
+      // Ensure pre-unlocked are always in the set
+      PRE_UNLOCKED.forEach(id => unlockedSet.add(id));
+      applyLockState();
+    } catch {
+      // Silently fall back to PRE_UNLOCKED only
+    }
+  }
+
+  fetchUnlockedSkills();
 
   /* ------------------------------------------------------------------ */
   /* Resize                                                              */

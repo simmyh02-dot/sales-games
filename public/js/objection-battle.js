@@ -110,11 +110,23 @@
     });
 
     try {
+      const token = localStorage.getItem("scg_auth_token");
       const res = await fetch("/api/objection/new", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: "{}",
       });
+      if (res.status === 403) {
+        const d = await res.json().catch(() => ({}));
+        if (d.error === "limit_reached" && typeof SCG_PRICING !== "undefined") SCG_PRICING.showModal();
+        card.classList.remove("loading");
+        card.querySelector(".card-context").textContent = "Monthly session limit reached.";
+        card.querySelector(".card-quote").textContent   = "Upgrade to keep training.";
+        return;
+      }
       if (!res.ok) throw new Error("request failed");
       const data = await res.json();
       currentObjection = data;
@@ -125,7 +137,7 @@
 
       const cfg = DIFFICULTY_CONFIG[data.difficulty] || DIFFICULTY_CONFIG[2];
       const badge = card.querySelector(".difficulty-badge");
-      badge.textContent = `${cfg.label} — ${cfg.seconds}s`;
+      badge.textContent = `${cfg.label} · ${cfg.seconds}s`;
       badge.dataset.difficulty = cfg.color;
 
       startTimer(card, cfg.seconds);
@@ -141,7 +153,7 @@
     submitted = true;
     clearInterval(timerHandle);
 
-    const userResponse = card.querySelector(".response-input").value.trim() || "(no response — time ran out)";
+    const userResponse = card.querySelector(".response-input").value.trim() || "(no response, time ran out)";
     const cfg = DIFFICULTY_CONFIG[(currentObjection || {}).difficulty] || DIFFICULTY_CONFIG[2];
     const timeTakenSeconds = cfg.seconds - remaining;
 

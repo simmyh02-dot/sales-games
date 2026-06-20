@@ -63,6 +63,10 @@ const SCG_AUTH = (() => {
       if (!res.ok) throw new Error("Auth failed");
       const { token, user } = await res.json();
       storeSession(token, user);
+      if (window._authRedirectAfterLogin) {
+        window.location.href = window._authRedirectAfterLogin;
+        return;
+      }
       renderAuthWidget(user);
       // Sync scores from server after sign-in
       if (typeof SCG !== "undefined") SCG.syncFromServer();

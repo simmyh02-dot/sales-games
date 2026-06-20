@@ -107,15 +107,26 @@
     els.confirmSectionBtn.textContent  = "Connecting...";
 
     try {
+      const token = localStorage.getItem("scg_auth_token");
       const res = await fetch("/api/call/start", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           scenario:          selectedScenario,
           customDescription: selectedScenario === "Custom Scenario" ? els.customInput.value.trim() : "",
           section:           selectedSection,
         }),
       });
+      if (res.status === 403) {
+        const d = await res.json().catch(() => ({}));
+        if (d.error === "limit_reached" && typeof SCG_PRICING !== "undefined") SCG_PRICING.showModal();
+        els.confirmSectionBtn.disabled  = false;
+        els.confirmSectionBtn.textContent = "Start call";
+        return;
+      }
       if (!res.ok) throw new Error("request failed");
       prospect         = await res.json();
       history          = [];
@@ -125,8 +136,8 @@
       els.prospectAvatar.textContent = (prospect.name || "?").charAt(0).toUpperCase();
       els.prospectScenario.textContent =
         selectedScenario === "Custom Scenario"
-          ? `${els.customInput.value.trim()} — ${selectedSection}`
-          : `${selectedScenario} — ${selectedSection}`;
+          ? `${els.customInput.value.trim()} · ${selectedSection}`
+          : `${selectedScenario} · ${selectedSection}`;
 
       els.chatWindow.innerHTML = "";
       addBubble("prospect", prospect.openingMessage);
@@ -190,7 +201,7 @@
       addBubble("prospect", data.reply);
       history.push({ role: "assistant", content: data.reply });
       els.callStatus.textContent = userMessageCount >= TARGET_MESSAGES
-        ? "You've hit the suggested call length — wrap it up when ready."
+        ? "You've hit the suggested call length, wrap it up when ready."
         : "";
     } catch {
       els.callStatus.textContent = "Something went wrong reaching the prospect.";
@@ -263,7 +274,7 @@
     missedWrap.innerHTML = "";
     (data.missedOpportunities || []).forEach((m) => {
       const block = document.createElement("div");
-      block.className = "feedback-block info";
+      block.className = "feedback-block bad";
       block.innerHTML = `
         <div class="quote-block">"${escapeHtml(m.prospectSaid || "")}"</div>
         <p><strong>You treated it as:</strong> ${escapeHtml(m.youTreatedItAs || "")}</p>
@@ -280,7 +291,7 @@
     (data.principles || []).forEach((p) => {
       const block = document.createElement("div");
       block.className = "quote-block";
-      block.innerHTML = `<strong>${escapeHtml(p.name || "")}</strong> — ${escapeHtml(p.note || "")}`;
+      block.innerHTML = `<strong>${escapeHtml(p.name || "")}</strong>: ${escapeHtml(p.note || "")}`;
       block.style.marginBottom = "8px";
       principlesWrap.appendChild(block);
     });
