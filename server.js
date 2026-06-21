@@ -174,12 +174,16 @@ async function checkSessionLimit(req, res, next) {
 }
 
 // ---------------------------------------------------------------------
-// Cache (uses /tmp on Vercel, ./cache locally)
+// Cache — Postgres-backed when DATABASE_URL is set (so generated
+// exercises survive serverless cold starts and are shared across
+// instances), falls back to a local file when there's no DB.
 // ---------------------------------------------------------------------
 
 const CACHE_DIR      = process.env.VERCEL ? "/tmp/scg-cache" : path.join(__dirname, "cache");
 const OBJ_CACHE_FILE = path.join(CACHE_DIR, "objections.json");
 const PAT_CACHE_FILE = path.join(CACHE_DIR, "patterns.json");
+const CACHE_LOAD_LIMIT = 200;
+const CACHE_MEMORY_LIMIT = 300;
 
 let objectionCache = [];
 let patternCache   = [];
@@ -187,7 +191,36 @@ const recentlyServedObjections = [];
 const recentlyServedPatterns   = [];
 const RECENT_WINDOW = 5;
 
-function loadCaches() {
+if (db) {
+  db.query(`
+    CREATE TABLE IF NOT EXISTS generated_cache (
+      id SERIAL PRIMARY KEY,
+      kind TEXT,
+      payload JSONB,
+      created_at BIGINT
+    );
+  `).catch((e) => console.error("DB init error (generated_cache):", e.message));
+}
+
+async function loadCaches() {
+  if (db) {
+    try {
+      const objRows = await db.query(
+        `SELECT payload FROM generated_cache WHERE kind = 'objection' ORDER BY id DESC LIMIT $1`,
+        [CACHE_LOAD_LIMIT]
+      );
+      objectionCache = objRows.rows.map((r) => r.payload);
+      const patRows = await db.query(
+        `SELECT payload FROM generated_cache WHERE kind = 'pattern' ORDER BY id DESC LIMIT $1`,
+        [CACHE_LOAD_LIMIT]
+      );
+      patternCache = patRows.rows.map((r) => r.payload);
+      console.log(`Cache loaded from DB: ${objectionCache.length} objections, ${patternCache.length} patterns`);
+    } catch (e) {
+      console.error("Cache load from DB failed:", e.message);
+    }
+    return;
+  }
   try {
     if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
     if (fs.existsSync(OBJ_CACHE_FILE))
@@ -197,11 +230,19 @@ function loadCaches() {
     if (fs.existsSync(PAT_CACHE_FILE))
       patternCache = JSON.parse(fs.readFileSync(PAT_CACHE_FILE, "utf-8"));
   } catch { patternCache = []; }
-  console.log(`Cache loaded: ${objectionCache.length} objections, ${patternCache.length} patterns`);
+  console.log(`Cache loaded from file: ${objectionCache.length} objections, ${patternCache.length} patterns`);
 }
 
-function saveCache(filePath, data) {
-  fs.promises.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8")
+function saveCache(kind, item, filePath, arr) {
+  if (arr.length > CACHE_MEMORY_LIMIT) arr.shift();
+  if (db) {
+    db.query(
+      `INSERT INTO generated_cache (kind, payload, created_at) VALUES ($1, $2, $3)`,
+      [kind, JSON.stringify(item), Date.now()]
+    ).catch((e) => console.error("Cache write failed:", e.message));
+    return;
+  }
+  fs.promises.writeFile(filePath, JSON.stringify(arr, null, 2), "utf-8")
     .catch((e) => console.error("Cache write failed:", e.message));
 }
 
@@ -515,7 +556,7 @@ Respond with ONLY valid JSON:
 
     const result = { ...data, difficulty };
     objectionCache.push(result);
-    saveCache(OBJ_CACHE_FILE, objectionCache);
+    saveCache("objection", result, OBJ_CACHE_FILE, objectionCache);
     trackRecent(recentlyServedObjections, data.objection);
     res.json(result);
   } catch (err) {
@@ -609,6 +650,7 @@ app.post("/api/pattern/new", optionalAuth, checkSessionLimit, async (req, res) =
   }
 
   const randomType = PATTERN_TYPES[Math.floor(Math.random() * PATTERN_TYPES.length)];
+  const correctSlot = ["A", "B", "C", "D"][Math.floor(Math.random() * 4)];
 
   const level1Extra = difficulty === 1 ? `
 The prospect statement must be a SINGLE short sentence — direct and conversational.
@@ -625,11 +667,10 @@ ${level1Extra}
 Write a realistic prospect statement that SUBTLY demonstrates this pattern — not obviously. Make the student think. Sound like a real person on a sales call.
 
 Create a 4-option multiple choice question where:
-- The primary correct answer is grounded in buyer psychology
-- The other options are plausible but wrong (surface reads, wrong principle, or close-but-not-quite)
-- All four options are similar length and parallel in style
+- Option "${correctSlot}" must hold the primary correct answer, grounded in buyer psychology. The other three letters hold plausible-but-wrong options (surface reads, wrong principle, or close-but-not-quite).
+- All four options must be nearly identical in length (word count) and tone — count words if you have to. None should be noticeably longer, more detailed, or more jargon-heavy than the others. A test-taker must NOT be able to spot the correct answer just because it sounds more "textbook" or packs in more psychology keywords than the rest.
 
-Return ONLY valid JSON:
+Return ONLY valid JSON. "correctAnswer" MUST be "${correctSlot}":
 {
   "statement": "the prospect's exact line",
   "question": "What is the central issue here?",
@@ -639,7 +680,7 @@ Return ONLY valid JSON:
     "C": "option text",
     "D": "option text"
   },
-  "correctAnswer": "A",
+  "correctAnswer": "${correctSlot}",
   "twoCorrect": false
 }`,
       450,
@@ -648,7 +689,7 @@ Return ONLY valid JSON:
 
     if (difficulty === 2) {
       patternCache.push(data);
-      saveCache(PAT_CACHE_FILE, patternCache);
+      saveCache("pattern", data, PAT_CACHE_FILE, patternCache);
     }
     trackRecent(recentlyServedPatterns, data.statement);
     res.json({ ...data, difficulty });

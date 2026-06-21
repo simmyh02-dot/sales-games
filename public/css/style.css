@@ -1140,13 +1140,21 @@ input.custom-input:focus {
   bottom: 0;
   padding: 20px 0 32px;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   background: linear-gradient(to bottom, transparent 0%, var(--bg-0) 55%);
   pointer-events: none;
   z-index: 10;
 }
 
 #next-bar .btn {
+  pointer-events: all;
+}
+
+.timer-toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   pointer-events: all;
 }
 

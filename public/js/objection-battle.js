@@ -12,10 +12,31 @@
   let remaining = 30;
   let currentObjection = null;
   let submitted = false;
+  let timerEnabled = localStorage.getItem("scg_timer_enabled") !== "off";
+  let roundStartTime = 0;
 
   const feed    = document.getElementById("rounds-feed");
   const nextBar = document.getElementById("next-bar");
   const nextBtn = document.getElementById("next-btn");
+  const timerOnBtn  = document.getElementById("timer-on-btn");
+  const timerOffBtn = document.getElementById("timer-off-btn");
+
+  function syncTimerToggleUI() {
+    timerOnBtn.classList.toggle("active", timerEnabled);
+    timerOffBtn.classList.toggle("active", !timerEnabled);
+  }
+
+  timerOnBtn.addEventListener("click", () => {
+    timerEnabled = true;
+    localStorage.setItem("scg_timer_enabled", "on");
+    syncTimerToggleUI();
+  });
+  timerOffBtn.addEventListener("click", () => {
+    timerEnabled = false;
+    localStorage.setItem("scg_timer_enabled", "off");
+    syncTimerToggleUI();
+  });
+  syncTimerToggleUI();
 
   function escapeHtml(str) {
     const div = document.createElement("div");
@@ -55,9 +76,17 @@
 
   function startTimer(card, totalSeconds) {
     remaining = totalSeconds;
+    clearInterval(timerHandle);
+
+    if (!timerEnabled) {
+      const ring = card.querySelector(".timer-ring");
+      if (ring) ring.style.opacity = "0.3";
+      card.querySelector(".timer-value").textContent = "∞";
+      return;
+    }
+
     const progressEl = card.querySelector(".progress");
     const valueEl    = card.querySelector(".timer-value");
-    clearInterval(timerHandle);
 
     function tick() {
       valueEl.textContent = remaining;
@@ -137,9 +166,10 @@
 
       const cfg = DIFFICULTY_CONFIG[data.difficulty] || DIFFICULTY_CONFIG[2];
       const badge = card.querySelector(".difficulty-badge");
-      badge.textContent = `${cfg.label} · ${cfg.seconds}s`;
+      badge.textContent = timerEnabled ? `${cfg.label} · ${cfg.seconds}s` : `${cfg.label} · no timer`;
       badge.dataset.difficulty = cfg.color;
 
+      roundStartTime = Date.now();
       startTimer(card, cfg.seconds);
     } catch {
       card.classList.remove("loading");
@@ -154,8 +184,7 @@
     clearInterval(timerHandle);
 
     const userResponse = card.querySelector(".response-input").value.trim() || "(no response, time ran out)";
-    const cfg = DIFFICULTY_CONFIG[(currentObjection || {}).difficulty] || DIFFICULTY_CONFIG[2];
-    const timeTakenSeconds = cfg.seconds - remaining;
+    const timeTakenSeconds = Math.round((Date.now() - roundStartTime) / 1000);
 
     const submitBtn  = card.querySelector(".submit-btn");
     const statusLine = card.querySelector(".status-line");
