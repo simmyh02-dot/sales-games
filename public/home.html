@@ -11,157 +11,143 @@
   <div class="bg-canvas"></div>
 
   <div class="shell">
-    <div class="topbar">
-      <a href="/home" class="brand">
-        <span class="brand-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#03130c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <div class="home-topbar">
+      <div id="auth-widget"></div>
+    </div>
+
+    <!-- Progress is the main focus, centered at the top -->
+    <section class="progress-hero">
+      <div class="ph-brand">
+        <span class="ph-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="9"></circle>
             <circle cx="12" cy="12" r="4.5"></circle>
-            <circle cx="12" cy="12" r="0.5" fill="#03130c"></circle>
+            <circle cx="12" cy="12" r="0.5" fill="#0a0a0a"></circle>
           </svg>
         </span>
-        <span class="brand-text">
+        <div class="ph-brand-text">
           Sales Camp Games
-          <span>Training Arena</span>
-        </span>
-      </a>
-
-      <div class="topbar-right">
-        <div class="score-pill">
-          <div class="score-item">
-            <span class="score-label">Today</span>
-            <span class="score-value" data-scg-today>+0</span>
-          </div>
-          <div class="divider"></div>
-          <div class="score-item">
-            <span class="score-label">Total</span>
-            <span class="score-value" data-scg-total>0</span>
-          </div>
+          <span>Your training progress</span>
         </div>
-        <div id="auth-widget"></div>
       </div>
-    </div>
 
-    <section class="hero">
-      <div class="hero-eyebrow">// Train between calls</div>
-      <h1>Sharpen your sales<br /><span class="accent">while the phone is quiet.</span></h1>
-      <p>
-        Three focused training modes built from your own sales study notes.
-        Pick a mode, run the drill, and watch your daily score move.
-      </p>
+      <div class="ph-progress">
+        <div class="ph-level-row">
+          <span class="ph-level" data-scg-level>Level 1</span>
+          <span class="ph-tonext"><span data-scg-tonext>100</span> pts to next level</span>
+        </div>
+        <div class="ph-bar"><div class="ph-bar-fill" data-scg-bar-fill style="width:0%"></div></div>
+      </div>
+
+      <div class="ph-stats">
+        <div class="ph-stat">
+          <span class="ph-stat-value" data-scg-total-card>0</span>
+          <span class="ph-stat-label">Total points</span>
+        </div>
+        <div class="ph-stat-divider"></div>
+        <div class="ph-stat">
+          <span class="ph-stat-value" data-scg-today-card>+0</span>
+          <span class="ph-stat-label">Today</span>
+        </div>
+        <div class="ph-stat-divider"></div>
+        <div class="ph-stat">
+          <span class="ph-stat-value" data-scg-rounds-card>0</span>
+          <span class="ph-stat-label">Rounds trained</span>
+        </div>
+      </div>
+
+      <!-- Compete with friends -->
+      <div class="ph-compete" id="compete-card">
+        <div class="ph-compete-head">
+          <span class="ph-compete-title">// Compete</span>
+          <span class="ph-compete-sub">Add a friend by email and race them up the levels.</span>
+        </div>
+        <div id="leaderboard" class="leaderboard"></div>
+        <form id="add-rival-form" class="add-rival-row" autocomplete="off">
+          <input type="email" id="rival-email" class="rival-input" placeholder="friend@email.com" />
+          <button type="submit" class="btn btn-secondary" id="add-rival-btn">Add</button>
+        </form>
+        <div class="ph-compete-msg" id="compete-msg"></div>
+      </div>
     </section>
 
-    <div class="stats-bar">
-      <div class="stat-item">
-        <span class="stat-label">Today's Score</span>
-        <span class="stat-value" data-scg-today-card>+0</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-label">Total Score</span>
-        <span class="stat-value" data-scg-total-card>0</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-label">Rounds Trained</span>
-        <span class="stat-value" data-scg-rounds-card>0</span>
-      </div>
-    </div>
-
+    <!-- Game modes -->
     <section class="mode-section">
-      <h2 class="section-title">// Select a training mode</h2>
+      <h2 class="section-title">// Pick where to train</h2>
 
-      <div class="mode-grid">
-        <a href="/pages/objection-battle.html" class="mode-card accent-yellow">
-          <div class="mode-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2 4 5v6c0 5 3.5 9.5 8 11 4.5-1.5 8-6 8-11V5l-8-3z"></path>
-              <path d="M9.5 12.5l1.8 1.8 3.2-3.6"></path>
-            </svg>
+      <div class="mode-stack">
+        <!-- Flagship -->
+        <a href="/pages/sales-call.html" class="mode-card flagship accent-red">
+          <div class="flagship-main">
+            <div class="mode-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.97.36 1.92.68 2.83a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.86.55 2.83.68A2 2 0 0 1 22 16.92z"></path>
+              </svg>
+            </div>
+            <div class="mode-tag">Flagship · Full Simulation</div>
+            <h3>Sales Call Mode</h3>
+            <p>
+              The main event. Pick a scenario, an offer and a prospect personality, then run a
+              full live call from rapport to close. After it, your call gets marked up line by line -
+              what landed, what to sharpen - plus the one thing to remember next time.
+            </p>
+            <span class="mode-cta">
+              Take the call
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6"></path>
+              </svg>
+            </span>
           </div>
-          <div class="mode-tag">Mode 01 · Speed Drill</div>
-          <h3>Objection Battle</h3>
-          <p>
-            A prospect throws an objection. You get 30 seconds to respond.
-            Train the reflex of finding the real belief behind the words
-            instead of arguing with the surface objection.
-          </p>
-          <span class="mode-cta">
-            Enter the arena
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M5 12h14M13 6l6 6-6 6"></path>
-            </svg>
-          </span>
         </a>
 
-        <a href="/pages/pattern-recognition.html" class="mode-card accent-teal">
-          <div class="mode-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-          </div>
-          <div class="mode-tag">Mode 02 · Read The Room</div>
-          <h3>Pattern Recognition</h3>
-          <p>
-            A prospect makes a statement. What's really going on underneath it?
-            A limiting belief, an identity issue, a hidden objection. Spot the
-            pattern before you can ever fix it.
-          </p>
-          <span class="mode-cta">
-            Start spotting patterns
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M5 12h14M13 6l6 6-6 6"></path>
-            </svg>
-          </span>
-        </a>
+        <div class="mode-grid-small">
+          <a href="/pages/objection-battle.html" class="mode-card accent-yellow">
+            <div class="mode-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2 4 5v6c0 5 3.5 9.5 8 11 4.5-1.5 8-6 8-11V5l-8-3z"></path>
+                <path d="M9.5 12.5l1.8 1.8 3.2-3.6"></path>
+              </svg>
+            </div>
+            <div class="mode-tag">Mode 01 · Speed Drill</div>
+            <h3>Objection Battle</h3>
+            <p>A prospect throws an objection. You get seconds to find the real belief behind the words.</p>
+            <span class="mode-cta">
+              Enter the arena
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+            </span>
+          </a>
 
-        <a href="/pages/sales-call.html" class="mode-card accent-red">
-          <div class="mode-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.97.36 1.92.68 2.83a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.86.55 2.83.68A2 2 0 0 1 22 16.92z"></path>
-            </svg>
-          </div>
-          <div class="mode-tag">Mode 03 · Full Simulation</div>
-          <h3>Sales Call Mode</h3>
-          <p>
-            The main event. Pick a scenario, get a generated prospect, and run
-            a full call from rapport to close. Walk away with a detailed
-            breakdown of every move you made.
-          </p>
-          <span class="mode-cta">
-            Take the call
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M5 12h14M13 6l6 6-6 6"></path>
-            </svg>
-          </span>
-        </a>
+          <a href="/pages/pattern-recognition.html" class="mode-card accent-teal">
+            <div class="mode-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </div>
+            <div class="mode-tag">Mode 02 · Read The Room</div>
+            <h3>Pattern Recognition</h3>
+            <p>A prospect makes a statement. Spot the limiting belief, identity issue or hidden objection underneath.</p>
+            <span class="mode-cta">
+              Start spotting
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+            </span>
+          </a>
 
-        <a href="/pages/skill-map.html" class="mode-card accent-purple">
-          <div class="mode-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="5" r="2"></circle>
-              <circle cx="5" cy="19" r="2"></circle>
-              <circle cx="19" cy="19" r="2"></circle>
-              <line x1="12" y1="7" x2="5" y2="17"></line>
-              <line x1="12" y1="7" x2="19" y2="17"></line>
-              <line x1="5" y1="19" x2="19" y2="19"></line>
-            </svg>
-          </div>
-          <div class="mode-tag">Mode 04 · Concept Map</div>
-          <h3>Sales Skill Network</h3>
-          <p>
-            See the entire sales methodology as a living map. 70+ concepts,
-            color-coded by category, connected into one system. Skills unlock
-            as you train.
-          </p>
-          <span class="mode-cta">
-            Explore the map
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M5 12h14M13 6l6 6-6 6"></path>
-            </svg>
-          </span>
-        </a>
+          <a href="/pages/skill-map.html" class="mode-card accent-purple">
+            <div class="mode-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3v4M12 7l-5 4M12 7l5 4M7 11v3M17 11v3M7 14l-3 4M7 14l3 4M17 14l-3 4M17 14l3 4"></path>
+              </svg>
+            </div>
+            <div class="mode-tag">Reference · Skill Trees</div>
+            <h3>Skill Tree</h3>
+            <p>The whole methodology as branching skill trees. Skills unlock as you train across the modes.</p>
+            <span class="mode-cta">
+              Explore the trees
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+            </span>
+          </a>
+        </div>
       </div>
     </section>
   </div>
@@ -200,5 +186,6 @@
   <script src="/js/score.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/pricing.js"></script>
+  <script src="/js/home.js"></script>
 </body>
 </html>

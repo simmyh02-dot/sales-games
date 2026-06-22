@@ -61,6 +61,12 @@ if (process.env.DATABASE_URL) {
       unlocked_at BIGINT,
       PRIMARY KEY (user_id, skill_id)
     );
+    CREATE TABLE IF NOT EXISTS rivals (
+      user_id TEXT,
+      rival_email TEXT,
+      created_at BIGINT,
+      PRIMARY KEY (user_id, rival_email)
+    );
   `).catch((e) => console.error("DB init error:", e.message));
   db.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'free';
@@ -111,7 +117,7 @@ const PRE_UNLOCKED = new Set([
 ]);
 
 const SKILL_ID_PROMPT = `Unlockable skill IDs (use exact ID strings in discovered_skills):
-spine(One-Call Close), opening(Opening), setframe(Set Frame), situation(Situation), problem(Problem), eliminate(Eliminate Solutions), buying(Buying Decision), futurepacing(Future Pacing), consequences(Consequences), presentation(Presentation), objections_phase(Objections Phase), sixneeds(6 Human Needs), maslow(Maslow's Pyramid), problemvssymptom(Problem vs Symptom), probingladder(Probing Ladder), improvementoffer(Improvement Offer), newopp(New Opportunity), pb_justtellme(Pushback-Just Tell Me), pb_allgood(Pushback-Everything Fine), limitingbeliefs(Limiting Beliefs), reframe4(4-Step Reframe), belief_types(Belief Types), reframeladder(Reframe Steps), prehandle_q(Pre-Handle Question), b_tried(Tried Before), b_companies(Talking to Others), b_youtube(Tried It Alone), b_nothing(Done Nothing), ex_time(Excuse-Time), ex_money(Excuse-Money), ex_didntknow(Excuse-DidntKnow), ex_research(Excuse-Just Looking), realbeliefs(Real Beliefs), identityframe(Identity Frame), roimath(ROI Math), rf_restaurant(Restaurant Reframe), rf_beach(Beach Reframe), rf_medal(Medal Reframe), rf_lion(Lion Reframe), rf_boats(Burn the Boats), rf_nicekind(Nice vs Kind), objections(Objections), smoke_vs_real(Smoke Screen vs Real), slowdown(Slow Down), o_think(Need to Think), o_partner(Need Partner), niche_smoke(Niche Smoke Screens), o_money(Money Objection), cdr(CDR), twofold(Two-Fold Choice), o_time(Time Objection), dmp(Decision-Making Process), dmp_partner(DMP-Partner), dmp_scale(DMP-Scale), rf_airplane(Airplane Reframe), fear(Fear Objection), abc(ABC), bossvoice(Boss Voice), identity(Identity), logiclevels(Logical Levels), identitygap(Identity Gap), desiredidentity(Desired Identity), identitybridge(Identity Bridge), realurgency(Real Urgency), straightline(Straight Line), talkmirror(Language=Self-Talk), l_wishful(Wishful Language), l_minimize(Minimizing Language), l_external(Victim Language), l_ambiguous(Ambiguous Language), authority(Authority), funnel(Funnel), theirwords(Use Their Words), selleridentity(Seller Identity)`;
+spine(One-Call Close), opening(Opening), setframe(Set Frame), situation(Situation), problem(Problem), eliminate(Eliminate Solutions), buying(Buying Decision), futurepacing(Future Pacing), consequences(Consequences), presentation(Presentation), objections_phase(Objections Phase), sixneeds(6 Human Needs), maslow(Maslow's Pyramid), problemvssymptom(Problem vs Symptom), probingladder(Probing Ladder), improvementoffer(Improvement Offer), newopp(New Opportunity), pb_justtellme(Pushback-Just Tell Me), pb_allgood(Pushback-Everything Fine), limitingbeliefs(Limiting Beliefs), reframe4(4-Step Reframe), belief_types(Belief Types), reframeladder(Reframe Steps), prehandle_q(Pre-Handle Question), b_tried(Tried Before), b_companies(Talking to Others), b_youtube(Tried It Alone), b_nothing(Done Nothing), ex_time(Excuse-Time), ex_money(Excuse-Money), ex_didntknow(Excuse-DidntKnow), ex_research(Excuse-Just Looking), realbeliefs(Real Beliefs), identityframe(Identity Frame), roimath(ROI Math), rf_restaurant(Restaurant Reframe), rf_beach(Beach Reframe), rf_medal(Medal Reframe), rf_lion(Lion Reframe), rf_boats(Burn the Boats), rf_nicekind(Nice vs Kind), objections(Objections), smoke_vs_real(Smoke Screen vs Real), slowdown(Slow Down), o_think(Need to Think), o_partner(Need Partner), niche_smoke(Niche Smoke Screens), o_money(Money Objection), cdr(CDR), twofold(Two-Fold Choice), o_time(Time Objection), dmp(Decision-Making Process), dmp_partner(DMP-Partner), dmp_scale(DMP-Scale), rf_airplane(Airplane Reframe), fear(Fear Objection), abc(ABC), bossvoice(Boss Voice), identity(Identity), logiclevels(Logical Levels), identitygap(Identity Gap), desiredidentity(Desired Identity), identitybridge(Identity Bridge), realurgency(Real Urgency), straightline(Straight Line), talkmirror(Language=Self-Talk), l_wishful(Wishful Language), l_minimize(Minimizing Language), l_external(Victim Language), l_ambiguous(Ambiguous Language), authority(Authority), funnel(Funnel), theirwords(Use Their Words), selleridentity(Seller Identity), discovery(Discovery), openq(Open Questions), dozenq(A Dozen Questions), threefour(3-4 Problem Rule), talklisten(Talk-Listen Ratio), seqq(Sequence Questions), objframework(5-Step Framework), rootcauses(3 Root Causes), feelfeltfound(Feel-Felt-Found), proactive(Pre-empt Objections), fundamentals(Fundamentals), remote(Remote High-Ticket), cameraon(Camera On), framecontrol(Frame Control), remoteopen(Remote Opening), derisk(De-Risk not Discount)`;
 
 function optionalAuth(req, res, next) {
   const header = req.headers.authorization || "";
@@ -319,6 +325,51 @@ function extractJSON(text) {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
+// ---------------------------------------------------------------------
+// Low-effort / not-serious input guard for Sales Call mode.
+// Catches obvious trolling and keyboard-mashing so we never spend tokens
+// roleplaying against someone who isn't actually practicing. Deliberately
+// conservative: terse but real replies ("Yes.", "Tell me more", "Why?")
+// must pass; only clear junk is blocked. Mirrored client-side so the
+// request is never even sent.
+// ---------------------------------------------------------------------
+
+const TROLL_PHRASES = new Set([
+  "asdf","asdfasdf","asdfgh","qwerty","qwert","zxcv","zxcvbn","test","testing","test test",
+  "lol","lmao","lmfao","haha","hahaha","hehe","xd","idk","idc","blah","blah blah","meh",
+  "yo","sup","wassup","poop","fart","penis","boobs","butt","skip","skip this","whatever",
+  "hi hi","aaa","bbb","spam","gibberish","random","abc","abcabc","123","12345","hello hello",
+]);
+
+function isLowEffortMessage(raw) {
+  const text = (raw || "").trim();
+  if (text.length < 2) return true;
+
+  const lower = text.toLowerCase();
+  const wordChars = lower.replace(/[^a-z]/g, "");
+
+  // Long run of one repeated character: "aaaaa", "!!!!!", "hahahaha".
+  if (/(.)\1{4,}/.test(lower)) return true;
+
+  // Curated junk phrases (only when the whole message is the phrase).
+  const stripped = lower.replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+  if (TROLL_PHRASES.has(stripped)) return true;
+
+  // Adjacent keyboard-row mashing.
+  if (/(asdf|sdfg|dfgh|qwer|wert|erty|zxcv|xcvb|cvbn|hjkl|jkl;|uiop|poiu)/.test(lower)) return true;
+
+  // No letters at all and short ("123", "...", "!!!", ":)").
+  if (wordChars.length === 0 && text.length < 8) return true;
+
+  // Gibberish: a reasonably long alphabetic blob with almost no vowels.
+  if (wordChars.length >= 5) {
+    const vowels = (wordChars.match(/[aeiou]/g) || []).length;
+    if (vowels / wordChars.length < 0.18) return true;
+  }
+
+  return false;
+}
+
 // Stripe webhook — must be before express.json()
 app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
   if (!stripe) return res.status(503).json({ error: "Stripe not configured" });
@@ -465,6 +516,92 @@ app.get("/api/scores/summary", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("Score summary error:", err.message);
     res.status(500).json({ error: "Failed to fetch scores" });
+  }
+});
+
+// ---------------------------------------------------------------------
+// Rivals / compete — add friends by email and compare progress
+// ---------------------------------------------------------------------
+
+async function scoreSummaryForUserId(userId) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [todayRow, totalRow, roundsRow] = await Promise.all([
+    db.query("SELECT COALESCE(SUM(delta),0) AS val FROM scores WHERE user_id=$1 AND date=$2", [userId, today]),
+    db.query("SELECT COALESCE(SUM(delta),0) AS val FROM scores WHERE user_id=$1", [userId]),
+    db.query("SELECT COUNT(*) AS val FROM scores WHERE user_id=$1", [userId]),
+  ]);
+  return {
+    today:  parseInt(todayRow.rows[0].val),
+    total:  parseInt(totalRow.rows[0].val),
+    rounds: parseInt(roundsRow.rows[0].val),
+  };
+}
+
+// Build the leaderboard: the signed-in user plus everyone they've added.
+// A rival who has not created an account yet shows up as "pending".
+async function buildLeaderboard(userId) {
+  const meRow = await db.query("SELECT email, name FROM users WHERE id=$1", [userId]);
+  const me = meRow.rows[0] || { email: "", name: "You" };
+  const entries = [];
+
+  const mine = await scoreSummaryForUserId(userId);
+  entries.push({ email: me.email, name: me.name || "You", ...mine, you: true, pending: false });
+
+  const rivalRows = await db.query("SELECT rival_email FROM rivals WHERE user_id=$1 ORDER BY created_at ASC", [userId]);
+  for (const { rival_email } of rivalRows.rows) {
+    const u = await db.query("SELECT id, name FROM users WHERE LOWER(email)=LOWER($1)", [rival_email]);
+    if (!u.rows.length) {
+      entries.push({ email: rival_email, name: rival_email.split("@")[0], today: 0, total: 0, rounds: 0, you: false, pending: true });
+      continue;
+    }
+    const s = await scoreSummaryForUserId(u.rows[0].id);
+    entries.push({ email: rival_email, name: u.rows[0].name || rival_email.split("@")[0], ...s, you: false, pending: false });
+  }
+
+  entries.sort((a, b) => b.total - a.total);
+  return entries;
+}
+
+app.get("/api/rivals", authMiddleware, async (req, res) => {
+  if (!db) return res.json({ leaderboard: [], dbDisabled: true });
+  try {
+    res.json({ leaderboard: await buildLeaderboard(req.userId) });
+  } catch (err) {
+    console.error("rivals list error:", err.message);
+    res.status(500).json({ error: "Failed to load leaderboard" });
+  }
+});
+
+app.post("/api/rivals", authMiddleware, async (req, res) => {
+  if (!db) return res.status(503).json({ error: "Database not configured" });
+  const email = (req.body.email || "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
+  try {
+    const meRow = await db.query("SELECT email FROM users WHERE id=$1", [req.userId]);
+    if (meRow.rows.length && (meRow.rows[0].email || "").toLowerCase() === email) {
+      return res.status(400).json({ error: "That's you. Add someone else to compete with." });
+    }
+    const existing = await db.query("SELECT 1 FROM rivals WHERE user_id=$1 AND rival_email=$2", [req.userId, email]);
+    if (existing.rows.length) return res.status(400).json({ error: "You've already added that person." });
+    const count = await db.query("SELECT COUNT(*) AS c FROM rivals WHERE user_id=$1", [req.userId]);
+    if (parseInt(count.rows[0].c) >= 10) return res.status(400).json({ error: "You can compete with up to 10 people." });
+    await db.query("INSERT INTO rivals (user_id, rival_email, created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [req.userId, email, Date.now()]);
+    res.json({ leaderboard: await buildLeaderboard(req.userId) });
+  } catch (err) {
+    console.error("rivals add error:", err.message);
+    res.status(500).json({ error: "Failed to add competitor" });
+  }
+});
+
+app.delete("/api/rivals", authMiddleware, async (req, res) => {
+  if (!db) return res.status(503).json({ error: "Database not configured" });
+  const email = (req.body.email || "").trim().toLowerCase();
+  try {
+    await db.query("DELETE FROM rivals WHERE user_id=$1 AND rival_email=$2", [req.userId, email]);
+    res.json({ leaderboard: await buildLeaderboard(req.userId) });
+  } catch (err) {
+    console.error("rivals remove error:", err.message);
+    res.status(500).json({ error: "Failed to remove competitor" });
   }
 });
 
@@ -752,32 +889,49 @@ Return ONLY valid JSON:
 
 app.post("/api/call/start", optionalAuth, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
-  const { scenario, customDescription, section } = req.body;
+  const { scenario, customDescription, section, personality, prospectName } = req.body;
 
   const sectionContext = section
     ? `The roleplay focuses on the "${section}" phase of the One Call Close. If the section is not "Opening", the prospect's opening message should reflect that the call is already mid-flow (rapport has been built, earlier phases are done).`
     : "";
+
+  const personalityContext = personality && personality.label
+    ? `The prospect's personality is "${personality.label}": ${personality.behavior || ""} Shape their goal, openness, opening line and especially their buyingReadiness around this personality.`
+    : "";
+
+  const nameInstruction = prospectName
+    ? `Use exactly "${prospectName}" as the prospect's name.`
+    : `Give the prospect a realistic first name.`;
 
   try {
     const data = await askClaude(
       `Generate a prospect profile for a sales call roleplay simulation.
 Scenario: ${scenario}${customDescription ? ` — ${customDescription}` : ""}
 ${sectionContext}
+${personalityContext}
+${nameInstruction}
+
+The "limitingBeliefs" array is a small BANK of 3-5 distinct objections / limiting beliefs this specific
+prospect holds (surface excuses AND deeper fears), ordered from the one most likely to come up first to last.
+These are what the prospect will work through during the call. Keep each to one short sentence in the
+prospect's own voice.
 
 Return JSON:
 {
-  "name": "first name",
+  "name": "${prospectName || "first name"}",
   "age": <number>,
   "goal": "their main goal",
   "currentSituation": "their current situation",
   "problem": "their core problem",
-  "hiddenBelief": "a limiting belief they hold that they would never say out loud",
+  "hiddenBelief": "the single deepest limiting belief they would never say out loud",
+  "limitingBeliefs": ["short belief/objection 1", "2", "3"],
   "buyingReadiness": "Low" | "Medium" | "High",
   "openingMessage": "the prospect's opening line — if practicing a mid-call section, they should respond as if earlier phases already happened"
 }`,
-      600,
+      700,
       SONNET
     );
+    if (prospectName) data.name = prospectName;
     res.json(data);
   } catch (err) {
     console.error("call/start error:", err.stack || err.message);
@@ -787,7 +941,16 @@ Return JSON:
 
 app.post("/api/call/message", async (req, res) => {
   if (!requireAI(res)) return;
-  const { scenario, prospect, history, userMessage, section } = req.body;
+  const { scenario, prospect, history, userMessage, section, personality } = req.body;
+
+  // Token-free guard: never spend tokens on trolling / keyboard-mashing.
+  if (isLowEffortMessage(userMessage)) {
+    return res.json({
+      blocked: true,
+      reason: "That doesn't read like something you'd actually say on a live call. Type a real line and the prospect will respond.",
+    });
+  }
+
   try {
     const historyText = (history || [])
       .map((m) => `${m.role === "user" ? "Salesperson" : "Prospect"}: ${m.content}`)
@@ -797,11 +960,19 @@ app.post("/api/call/message", async (req, res) => {
       ? `\nThis roleplay starts at the "${section}" phase of the One Call Close. Behave as if earlier phases already happened. Your reactions, objections, and openness should be calibrated for where you are at this stage.`
       : "";
 
+    const personalityInstruction = personality && personality.label
+      ? `\nYour personality: ${personality.label} - ${personality.behavior || ""}`
+      : "";
+
+    const beliefBank = Array.isArray(prospect.limitingBeliefs) && prospect.limitingBeliefs.length
+      ? prospect.limitingBeliefs.map((b, i) => `${i + 1}. ${b}`).join("\n")
+      : "(none specified — improvise realistic ones from your hidden belief)";
+
     const msg = await anthropic.messages.create({
       model: SONNET,
       max_tokens: 300,
       system: `You are roleplaying as a sales prospect named ${prospect.name} in a "${scenario}" sales call simulation.
-${sectionInstruction}
+${sectionInstruction}${personalityInstruction}
 
 Profile:
 - Age: ${prospect.age}
@@ -811,11 +982,24 @@ Profile:
 - Hidden belief (never say this explicitly, but let it leak through your resistance/objections): ${prospect.hiddenBelief}
 - Buying readiness: ${prospect.buyingReadiness}
 
-Stay completely in character as a real human prospect. Speak naturally and conversationally.
-React realistically to the salesperson based on how well they apply Authority, Tonality,
-Identity Shift, Certainty Building, Objection Handling, and Closing principles.
-Keep responses short (1-4 sentences). Never break character. Never mention you are an AI.
-Never use em-dashes (—) in your responses. Use hyphens (-) or plain punctuation instead.`,
+Your limiting beliefs / objections bank (work through these like a real person):
+${beliefBank}
+
+MEMORY AND PROGRESSION (act like a conscious, real human, not a loop):
+- Remember everything the salesperson has already said in this conversation. Track which of your beliefs
+  and objections they have already addressed.
+- When the salesperson genuinely handles or reframes one of your beliefs convincingly, accept it, drop it,
+  and MOVE ON to the next thing on your mind. Do not raise a belief again once it has been broken.
+- Never repeat an objection or point you've already made. Never restate the same concern in new words.
+- If they have handled most of your beliefs well, soften and move toward a decision like a real person would.
+- If they handle something poorly or dodge it, stay on it - don't let them off the hook.
+
+STYLE:
+- Be straightforward and concise. Say what a real busy human would say, no filler, no monologuing,
+  no repeating yourself. 1-3 sentences unless your personality is explicitly talkative.
+- React realistically based on how well they apply Authority, Tonality, Identity, Certainty,
+  Objection Handling and Closing principles.
+- Stay completely in character. Never mention you are an AI. Never use em-dashes (-). Use plain punctuation.`,
       messages: [
         {
           role: "user",
@@ -841,15 +1025,49 @@ app.post("/api/call/end", optionalAuth, async (req, res) => {
   if (!requireAI(res)) return;
   const { scenario, prospect, history, section } = req.body;
   try {
-    const historyText = (history || [])
+    const turns = history || [];
+    const historyText = turns
       .map((m) => `${m.role === "user" ? "Salesperson" : "Prospect"}: ${m.content}`)
+      .join("\n");
+
+    // The salesperson's own lines, numbered, so highlights can map back to chat bubbles.
+    const userLines = turns.filter((m) => m.role === "user");
+    const numberedUserLines = userLines
+      .map((m, i) => `[#${i}] Salesperson: ${m.content}`)
       .join("\n");
 
     const sectionFocus = section
       ? `\nThis session focused on the "${section}" phase. Weight your feedback heavily on skills specific to that phase.`
       : "";
 
-    const data = await askClaude(
+    // 1) HAIKU — fast per-message highlights to paint directly onto the chat.
+    const highlightsPromise = askClaude(
+      `A sales call roleplay just ended. Below are ONLY the salesperson's own lines, each tagged [#index].
+Pick the lines that most matter for learning and tag each one. Highlight the genuinely strong moves AND
+the clear mistakes / missed reads. Do not tag every line - choose the 4 to 8 most instructive ones.
+
+Verdicts:
+- "good"    = a strong, skillful move (mark these green)
+- "improve" = workable but a better option existed
+- "bad"     = a clear mistake or missed read (mark these red)
+
+Salesperson lines:
+${numberedUserLines}
+
+${STYLE_RULES}
+
+Return ONLY valid JSON. Each note is the lesson for that exact line, under 14 words, action-focused:
+{
+  "highlights": [
+    { "index": <integer matching [#index]>, "verdict": "good" | "improve" | "bad", "note": "what to think about, under 14 words" }
+  ]
+}`,
+      900,
+      HAIKU
+    );
+
+    // 2) SONNET — the deeper learning summary that lives under the chat.
+    const summaryPromise = askClaude(
       `A sales call roleplay simulation just ended.
 Scenario: ${scenario}
 ${sectionFocus}
@@ -862,28 +1080,43 @@ ${STYLE_RULES}
 
 ${SKILL_ID_PROMPT}
 
-Analyze the salesperson's performance, grounded in the sales study notes. Return JSON:
+Analyze the salesperson's performance, grounded in the sales study notes. The goal is that they LEARN ONE
+thing they will remember and apply on the next call. Be specific to what actually happened in this transcript.
+Return JSON:
 {
   "callScore": <integer 0-100>,
+  "headline": "one-line verdict of how the call went",
+  "rememberThis": "the single most important lesson from THIS call, one memorable sentence",
+  "thinkAboutNextTime": ["forward-looking bullet, a concrete thing to do differently next call", "..."],
   "whatYouDidWell": ["short bullet under 15 words", "..."],
-  "biggestMistakes": ["short bullet under 15 words", "..."],
-  "missedOpportunities": [
-    { "prospectSaid": "short quote from transcript", "youTreatedItAs": "one phrase", "itWasActually": "one phrase" }
-  ],
-  "whatATopCloserWouldHaveDone": ["short bullet under 15 words", "..."],
-  "principles": [
-    { "name": "principle name from notes", "note": "one sentence on how it applied here" }
-  ],
+  "principle": { "name": "principle name from notes", "note": "one sentence on how it applied here" },
   "scoreDelta": <integer between -15 and 15, roughly (callScore-50)/4 rounded>,
   "discovered_skills": ["skill_id1", "skill_id2", "skill_id3"]
 }`,
-      2200,
+      1600,
       SONNET
     );
-    if (req.userId && data.discovered_skills) {
-      autoUnlock(req.userId, data.discovered_skills);
+
+    const [highlightsData, summary] = await Promise.all([
+      highlightsPromise.catch(() => ({ highlights: [] })),
+      summaryPromise,
+    ]);
+
+    // Attach the salesperson's quote to each highlight so the client can match
+    // by text if indices ever drift.
+    const highlights = (highlightsData.highlights || [])
+      .filter((h) => h && typeof h.index === "number" && userLines[h.index])
+      .map((h) => ({
+        index: h.index,
+        verdict: ["good", "improve", "bad"].includes(h.verdict) ? h.verdict : "improve",
+        note: h.note || "",
+        quote: userLines[h.index].content,
+      }));
+
+    if (req.userId && summary.discovered_skills) {
+      autoUnlock(req.userId, summary.discovered_skills);
     }
-    res.json(data);
+    res.json({ ...summary, highlights });
   } catch (err) {
     console.error("call/end error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate feedback report." });

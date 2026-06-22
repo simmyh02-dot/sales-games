@@ -70,6 +70,7 @@ const SCG_AUTH = (() => {
       renderAuthWidget(user);
       // Sync scores from server after sign-in
       if (typeof SCG !== "undefined") SCG.syncFromServer();
+      if (typeof SCG_HOME !== "undefined") SCG_HOME.refresh();
     } catch (err) {
       console.error("Sign-in error:", err.message);
     }
@@ -80,6 +81,7 @@ const SCG_AUTH = (() => {
     renderAuthWidget(null);
     if (typeof google !== "undefined") google.accounts.id.disableAutoSelect();
     if (typeof SCG !== "undefined") SCG.renderAll();
+    if (typeof SCG_HOME !== "undefined") SCG_HOME.refresh();
   }
 
   function renderAuthWidget(user) {

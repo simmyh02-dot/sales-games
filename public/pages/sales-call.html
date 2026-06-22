@@ -71,7 +71,7 @@
 
         <div class="actions-row">
           <span class="objection-context" id="scenario-status"></span>
-          <button class="btn btn-primary" id="start-call-btn" disabled>Start call</button>
+          <button class="btn btn-primary" id="start-call-btn" disabled>Next: pick a section</button>
         </div>
       </div>
 
@@ -90,77 +90,50 @@
         </div>
         <div class="actions-row">
           <button class="btn btn-secondary" id="back-to-scenario-btn">Back</button>
-          <button class="btn btn-primary" id="confirm-section-btn" disabled>Start call</button>
+          <button class="btn btn-primary" id="confirm-section-btn" disabled>Next: pick a personality</button>
+        </div>
+      </div>
+
+      <!-- Personality selection -->
+      <div class="panel" id="personality-panel" style="display:none;">
+        <div class="panel-label">// Who are you up against?</div>
+        <p class="objection-context" style="margin-bottom:0;">Each prospect plays differently. The harder personalities won't hand you the sale.</p>
+        <div class="scenario-grid personality-grid" id="personality-grid"></div>
+        <div class="actions-row">
+          <button class="btn btn-secondary" id="back-to-section-btn">Back</button>
+          <button class="btn btn-primary" id="confirm-personality-btn" disabled>Start call</button>
         </div>
       </div>
 
       <!-- Live call -->
       <div id="call-panel" style="display:none;">
-        <div class="prospect-bar">
-          <div class="prospect-id">
-            <div class="prospect-avatar" id="prospect-avatar">?</div>
-            <div class="prospect-meta">
-              <div class="prospect-name" id="prospect-name">Connecting...</div>
-              <div class="prospect-scenario" id="prospect-scenario"></div>
-            </div>
+        <div class="call-live-bar">
+          <div class="call-live-head">
+            <div class="call-live-status"><span class="live-dot"></span> Call is live</div>
+            <div class="call-progress" id="call-progress">MSG 0 / 30</div>
           </div>
-          <div class="call-progress" id="call-progress">MSG 0 / 16</div>
+          <div class="call-live-meta">
+            <div class="clm"><span class="clm-label">Prospect</span><span class="clm-val" id="cl-prospect">—</span></div>
+            <div class="clm"><span class="clm-label">Offer</span><span class="clm-val" id="cl-offer">—</span></div>
+            <div class="clm"><span class="clm-label">Personality</span><span class="clm-val" id="cl-personality">—</span></div>
+            <div class="clm"><span class="clm-label">Situation</span><span class="clm-val" id="cl-situation">—</span></div>
+          </div>
         </div>
 
         <div class="chat-window" id="chat-window"></div>
 
-        <div class="chat-input-row">
+        <div class="chat-input-row" id="chat-input-row">
           <input type="text" id="chat-input" placeholder="Type what you'd say next on this call..." />
           <button class="btn btn-primary" id="send-btn">Send</button>
         </div>
 
         <div class="call-controls">
           <span class="objection-context" id="call-status"></span>
-          <button class="btn btn-secondary" id="end-call-btn">End call &amp; get feedback</button>
-        </div>
-      </div>
-
-      <!-- Feedback report -->
-      <div id="report-panel" style="display:none;">
-        <div class="panel">
-          <div class="panel-label">// Call score</div>
-          <div class="score-result">
-            <div class="score-result-value" id="call-score-value">0</div>
-            <div class="score-result-label">out of 100 &bull; <span id="score-delta-label"></span></div>
-          </div>
-
-          <div class="feedback-block good">
-            <h4><span class="tag"></span>What you did well</h4>
-            <ul id="rep-well"></ul>
-          </div>
-
-          <div class="feedback-block bad">
-            <h4><span class="tag"></span>Biggest mistakes</h4>
-            <ul id="rep-mistakes"></ul>
-          </div>
+          <button class="btn btn-secondary" id="end-call-btn">Analyze call</button>
         </div>
 
-        <div class="panel" id="missed-panel">
-          <div class="panel-label">// Missed opportunities</div>
-          <div id="rep-missed"></div>
-        </div>
-
-        <div class="panel">
-          <div class="feedback-block info">
-            <h4><span class="tag"></span>What a top closer would have done</h4>
-            <ul id="rep-topcloser"></ul>
-          </div>
-
-          <div class="feedback-block info">
-            <h4><span class="tag"></span>Principles from your notes</h4>
-            <div id="rep-principles"></div>
-          </div>
-        </div>
-
-        <div class="actions-row">
-          <span></span>
-          <button class="btn btn-primary" id="new-call-btn">Run another call</button>
-        </div>
+        <!-- Interactive analysis summary (rendered under the chat) -->
+        <div id="summary-panel" style="display:none;"></div>
       </div>
     </div>
   </div>

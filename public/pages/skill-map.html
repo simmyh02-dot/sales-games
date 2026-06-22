@@ -3,20 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sales Skill Network — Sales Camp Games</title>
+  <title>Skill Tree — Sales Camp Games</title>
   <link rel="stylesheet" href="/css/style.css" />
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
     /* ------------------------------------------------------------------ */
-    /* Skill Map layout                                                     */
+    /* Skill Tree layout                                                    */
     /* ------------------------------------------------------------------ */
+
+    /* The shell only needs to wrap the header here; without this override the
+       global min-height:100vh leaves a full empty screen above the trees. */
+    .shell { min-height: auto; }
 
     .skill-map-wrap {
       display: flex;
       flex-direction: column;
       flex: 1;
       min-height: 0;
+    }
+
+    /* Tree heading labels drawn in the SVG */
+    .tree-title {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      text-anchor: middle;
+      pointer-events: none;
+    }
+    .tree-title-sub {
+      font-family: "DM Mono", monospace;
+      text-anchor: middle;
+      pointer-events: none;
     }
 
     .map-controls {
@@ -127,6 +144,7 @@
       overflow-y: auto;
       flex: 1;
       width: 340px;
+      position: relative;
     }
     .side-panel-inner h2 {
       font-family: var(--font-heading);
@@ -234,8 +252,9 @@
     </div>
 
     <div class="page-header" style="margin-bottom:0;">
-      <div class="mode-tag">Mode 04 — Concept Map</div>
-      <h1>Sales Skill Network</h1>
+      <div class="mode-tag">Reference · Skill Trees</div>
+      <h1>Skill Tree</h1>
+      <p>Every concept from your notes, grown into branching skill trees. Skills unlock as you train across the modes.</p>
     </div>
   </div>
 
@@ -250,6 +269,7 @@
       <button class="filter-btn" data-cat="F" style="--cat-color:#a78bfa;">Language</button>
       <button class="filter-btn" data-cat="G" style="--cat-color:#fbbf24;">Tonality</button>
       <button class="filter-btn" data-cat="H" style="--cat-color:#64748b;">Fundamentals</button>
+      <button class="filter-btn" data-cat="I" style="--cat-color:#38bdf8;">Remote</button>
       <input class="map-search" id="map-search" type="text" placeholder="Search nodes..." />
     </div>
 

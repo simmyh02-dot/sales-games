@@ -154,9 +154,30 @@ const SCG = (() => {
     if (roundsCard) roundsCard.textContent = rounds;
   }
 
+  // Level / XP progress bar (home page). 100 points per level.
+  const PER_LEVEL = 100;
+
+  function renderProgressBar() {
+    const levelEl  = document.querySelector("[data-scg-level]");
+    const toNextEl = document.querySelector("[data-scg-tonext]");
+    const fillEl   = document.querySelector("[data-scg-bar-fill]");
+    if (!levelEl && !fillEl && !toNextEl) return;
+
+    const total   = Math.max(0, getLocal().total);
+    const level   = Math.floor(total / PER_LEVEL) + 1;
+    const inLevel = total % PER_LEVEL;
+    const toNext  = PER_LEVEL - inLevel;
+    const pct     = Math.min(100, Math.round((inLevel / PER_LEVEL) * 100));
+
+    if (levelEl)  levelEl.textContent  = `Level ${level}`;
+    if (toNextEl) toNextEl.textContent = toNext;
+    if (fillEl)   fillEl.style.width   = `${pct}%`;
+  }
+
   function renderAll() {
     renderPill();
     renderDashboard();
+    renderProgressBar();
   }
 
   document.addEventListener("DOMContentLoaded", () => {
