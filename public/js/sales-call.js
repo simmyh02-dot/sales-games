@@ -24,6 +24,12 @@
     backToScenarioBtn: document.getElementById("back-to-scenario-btn"),
     confirmSectionBtn: document.getElementById("confirm-section-btn"),
 
+    setterOfferPanel:      document.getElementById("setter-offer-panel"),
+    setterOfferGrid:       document.getElementById("setter-offer-grid"),
+    setterCustomInput:     document.getElementById("setter-custom-input"),
+    setterOfferNextBtn:    document.getElementById("setter-offer-next-btn"),
+    backToModeFromOfferBtn:document.getElementById("back-to-mode-from-offer-btn"),
+
     personalityPanel:     document.getElementById("personality-panel"),
     personalityGrid:      document.getElementById("personality-grid"),
     backToSectionBtn:     document.getElementById("back-to-section-btn"),
@@ -49,6 +55,7 @@
 
   let callMode           = null;    // "closer" | "setter"
   let selectedScenario   = null;
+  let selectedOffer      = null;    // setter-only: which remote-income opportunity
   let selectedSection    = null;
   let selectedPersonality = null;   // picker choice: a persona object or "random"
   let activePersona       = null;   // the resolved persona for the live call
@@ -109,11 +116,41 @@
     callMode = btn.dataset.mode;             // "closer" | "setter"
     els.modePanel.style.display = "none";
     if (callMode === "setter") {
-      // Setter skips scenario + section — the offer is fixed, persona is the variable.
-      els.personalityPanel.style.display = "block";
+      // Setter skips the section step — it always practices the full call structure.
+      els.setterOfferPanel.style.display = "block";
     } else {
       els.scenarioPanel.style.display = "block";
     }
+  });
+
+  // --- Step 1b: Offer selection (Setter only) -----------------------------
+
+  els.setterOfferGrid.addEventListener("click", (e) => {
+    const btn = e.target.closest(".scenario-btn");
+    if (!btn) return;
+    [...els.setterOfferGrid.children].forEach((b) => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    selectedOffer = btn.dataset.offer;
+    els.setterCustomInput.style.display = selectedOffer === "Custom Offer" ? "block" : "none";
+    updateSetterOfferButton();
+  });
+
+  els.setterCustomInput.addEventListener("input", updateSetterOfferButton);
+
+  function updateSetterOfferButton() {
+    els.setterOfferNextBtn.disabled =
+      !selectedOffer ||
+      (selectedOffer === "Custom Offer" && !els.setterCustomInput.value.trim());
+  }
+
+  els.setterOfferNextBtn.addEventListener("click", () => {
+    els.setterOfferPanel.style.display = "none";
+    els.personalityPanel.style.display = "block";
+  });
+
+  els.backToModeFromOfferBtn.addEventListener("click", () => {
+    els.setterOfferPanel.style.display = "none";
+    els.modePanel.style.display = "block";
   });
 
   // --- Step 1: Scenario selection (Closer only) ---------------------------
@@ -197,7 +234,7 @@
   els.backToSectionBtn.addEventListener("click", () => {
     els.personalityPanel.style.display = "none";
     if (callMode === "setter") {
-      els.modePanel.style.display = "block";
+      els.setterOfferPanel.style.display = "block";
     } else {
       els.sectionPanel.style.display = "block";
     }
@@ -223,7 +260,7 @@
 
     const isSetter = callMode === "setter";
     const offerText = isSetter
-      ? "Remote Setter Recruitment"
+      ? (selectedOffer === "Custom Offer" ? els.setterCustomInput.value.trim() : selectedOffer)
       : (selectedScenario === "Custom Scenario" ? els.customInput.value.trim() : selectedScenario);
     const prospectName = nextProspectName();
 
@@ -237,7 +274,12 @@
       const token = localStorage.getItem("scg_auth_token");
       const endpoint = isSetter ? "/api/setter/start" : "/api/call/start";
       const body = isSetter
-        ? { personality: persona, prospectName }
+        ? {
+            offer:             selectedOffer,
+            customDescription: selectedOffer === "Custom Offer" ? offerText : "",
+            personality:       persona,
+            prospectName,
+          }
         : {
             scenario:          selectedScenario,
             customDescription: selectedScenario === "Custom Scenario" ? offerText : "",
@@ -365,7 +407,11 @@
     try {
       const endpoint = isSetter ? "/api/setter/message" : "/api/call/message";
       const body = isSetter
-        ? { prospect, history, userMessage: text, personality: activePersona }
+        ? {
+            offer:             selectedOffer,
+            customDescription: selectedOffer === "Custom Offer" ? els.setterCustomInput.value.trim() : "",
+            prospect, history, userMessage: text, personality: activePersona,
+          }
         : { scenario: selectedScenario, prospect, history, userMessage: text, section: selectedSection, personality: activePersona };
       const res = await fetch(endpoint, {
         method: "POST",
@@ -437,7 +483,11 @@
       const isSetter = callMode === "setter";
       const endpoint = isSetter ? "/api/setter/end" : "/api/call/end";
       const body = isSetter
-        ? { prospect, history, personality: activePersona, liveBooking }
+        ? {
+            offer:             selectedOffer,
+            customDescription: selectedOffer === "Custom Offer" ? els.setterCustomInput.value.trim() : "",
+            prospect, history, personality: activePersona, liveBooking,
+          }
         : { scenario: selectedScenario, prospect, history, section: selectedSection, personality: activePersona };
       const res = await fetch(endpoint, {
         method: "POST",

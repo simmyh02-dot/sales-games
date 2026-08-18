@@ -98,6 +98,25 @@
         </div>
       </div>
 
+      <!-- Offer selection (Setter only) -->
+      <div class="panel" id="setter-offer-panel" style="display:none;">
+        <div class="panel-label">// What opportunity did this lead watch a video about?</div>
+        <div class="scenario-grid" id="setter-offer-grid">
+          <button class="scenario-btn" data-offer="Remote Setter">Remote Setter<br><small>Work-from-anywhere appointment setting</small></button>
+          <button class="scenario-btn" data-offer="Remote Closer">Remote Closer<br><small>Work-from-anywhere sales closing</small></button>
+          <button class="scenario-btn" data-offer="Affiliate Marketing">Affiliate Marketing<br><small>Earning commissions promoting products online</small></button>
+          <button class="scenario-btn" data-offer="Dropshipping">Dropshipping<br><small>Running an online store without holding inventory</small></button>
+          <button class="scenario-btn" data-offer="Coaching Certification">Coaching Certification<br><small>Getting certified to coach in a niche</small></button>
+          <button class="scenario-btn" data-offer="Custom Offer">Custom Offer</button>
+        </div>
+        <input type="text" class="custom-input" id="setter-custom-input" placeholder="Describe the custom opportunity (e.g. becoming a virtual assistant)" style="display:none;" />
+        <div class="actions-row">
+          <button class="btn btn-secondary" id="back-to-mode-from-offer-btn">Back</button>
+          <span class="objection-context" id="setter-offer-status"></span>
+          <button class="btn btn-primary" id="setter-offer-next-btn" disabled>Next: pick a prospect</button>
+        </div>
+      </div>
+
       <!-- Persona selection (both modes) -->
       <div class="panel" id="personality-panel" style="display:none;">
         <div class="panel-label">// Who are you up against?</div>

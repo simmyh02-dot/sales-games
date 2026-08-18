@@ -1183,7 +1183,21 @@ Return JSON:
 // challenging persona and resists, exactly like Closer mode.
 // ---------------------------------------------------------------------
 
-const SETTER_OFFER = "Becoming a remote setter (appointment setter) — a work-from-anywhere income path. The lead responded to a video about it and booked this call.";
+// Selectable remote-income opportunities the lead watched a video about.
+// Keyed by the client's `data-offer` value; "Custom Offer" falls through to
+// the trainee's free-text customDescription instead of a canned description.
+const SETTER_OFFERS = {
+  "Remote Setter":           "becoming a remote appointment setter — a work-from-anywhere income path booking sales calls for other businesses",
+  "Remote Closer":           "becoming a remote sales closer — a work-from-anywhere income path closing sales calls for other businesses",
+  "Affiliate Marketing":     "affiliate marketing — earning commissions promoting other companies' products online",
+  "Dropshipping":            "starting a dropshipping e-commerce business — running an online store without holding inventory",
+  "Coaching Certification":  "getting certified as a coach in a niche and building a coaching business",
+};
+
+function setterOfferText(offer, customDescription) {
+  if (offer === "Custom Offer") return customDescription || "a remote income opportunity";
+  return SETTER_OFFERS[offer] || SETTER_OFFERS["Remote Setter"];
+}
 
 // The ideal call STRUCTURE (order matters). Used only for grading — never fed
 // to the prospect. Loose guide, not a verbatim script.
@@ -1211,7 +1225,8 @@ function setterStagesForPrompt() {
 
 app.post("/api/setter/start", optionalAuth, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
-  const { personality, prospectName } = req.body;
+  const { offer, customDescription, personality, prospectName } = req.body;
+  const offerText = setterOfferText(offer, customDescription);
 
   const personaContext = personality && personality.label
     ? `This lead is a background persona: "${personality.label}".\n${personaDetail(personality)}\nShape their current situation, the problem/pain that made them respond to the video, their goal, their limiting beliefs and their buyingReadiness around this persona's economic reality and TYPE of resistance.`
@@ -1223,8 +1238,8 @@ app.post("/api/setter/start", optionalAuth, checkSessionLimit, async (req, res) 
 
   try {
     const data = await askClaude(
-      `Generate a prospect profile for a REMOTE-SETTER RECRUITMENT call roleplay.
-The offer: ${SETTER_OFFER}
+      `Generate a prospect profile for a REMOTE-INCOME RECRUITMENT call roleplay.
+The offer: ${offerText}
 The trainee is a SETTER phoning this warm lead. The lead has NOT been sold anything yet — they only watched a video and are curious/skeptical.
 ${personaContext}
 ${nameInstruction}
@@ -1256,7 +1271,8 @@ Return JSON:
 
 app.post("/api/setter/message", async (req, res) => {
   if (!requireAI(res)) return;
-  const { prospect, history, userMessage, personality } = req.body;
+  const { offer, customDescription, prospect, history, userMessage, personality } = req.body;
+  const offerText = setterOfferText(offer, customDescription);
 
   if (isLowEffortMessage(userMessage)) {
     return res.json({
@@ -1281,7 +1297,7 @@ app.post("/api/setter/message", async (req, res) => {
     const msg = await anthropic.messages.create({
       model: SONNET,
       max_tokens: 350,
-      system: `You are roleplaying as ${prospect.name}, a warm LEAD on a phone call. You recently watched a video about becoming a remote setter (a work-from-anywhere appointment-setting income path) and left your details, so someone from their team (the SETTER, the person you're talking to) is now calling you. You are curious but skeptical. You do NOT know any sales script and must never reference one.
+      system: `You are roleplaying as ${prospect.name}, a warm LEAD on a phone call. You recently watched a video about ${offerText} and left your details, so someone from their team (the SETTER, the person you're talking to) is now calling you. You are curious but skeptical. You do NOT know any sales script and must never reference one.
 ${personaInstruction}
 
 Profile:
@@ -1338,7 +1354,8 @@ Return ONLY valid JSON:
 
 app.post("/api/setter/end", optionalAuth, async (req, res) => {
   if (!requireAI(res)) return;
-  const { prospect, history, liveBooking, personality } = req.body;
+  const { offer, customDescription, prospect, history, liveBooking, personality } = req.body;
+  const offerText = setterOfferText(offer, customDescription);
   try {
     const turns = history || [];
     const historyText = turns
@@ -1352,7 +1369,7 @@ app.post("/api/setter/end", optionalAuth, async (req, res) => {
 
     // 1) HAIKU — per-line highlights painted onto the chat.
     const highlightsPromise = askClaude(
-      `A remote-setter recruitment call just ended. Below are ONLY the setter's own lines, each tagged [#index].
+      `A remote-income recruitment call just ended. Below are ONLY the setter's own lines, each tagged [#index].
 Pick the 4 to 8 most instructive lines and tag each. Highlight strong moves AND clear mistakes / missed reads.
 
 Verdicts:
@@ -1373,7 +1390,8 @@ Return ONLY valid JSON. Each note is the lesson for that exact line, under 14 wo
 
     // 2) SONNET — grade against the TRIAGE structure + decide the outcome.
     const summaryPromise = askClaude(
-      `A REMOTE-SETTER RECRUITMENT call roleplay just ended. Grade the SETTER (the trainee) against the ideal call structure and objectives below.
+      `A REMOTE-INCOME RECRUITMENT call roleplay just ended. The offer being recruited for: ${offerText}
+Grade the SETTER (the trainee) against the ideal call structure and objectives below.
 
 THE IDEAL STRUCTURE (order matters, but it's a loose guide — reward following the STRUCTURE and having a real conversation, not reciting questions verbatim):
 ${setterStagesForPrompt()}
