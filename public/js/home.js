@@ -6,6 +6,10 @@
    ========================================================================== */
 
 const SCG_HOME = (() => {
+  // Rivals / leaderboard is PARKED, not deleted. The UI markup and the
+  // /api/rivals routes are left intact; flip this to true to re-enable it.
+  const RIVALS_ENABLED = false;
+
   const els = {};
   let loading = false;
 
@@ -71,6 +75,7 @@ const SCG_HOME = (() => {
   }
 
   async function load() {
+    if (!RIVALS_ENABLED || !els.leaderboard) return;
     if (loading) return;
     loading = true;
     const token = (typeof SCG_AUTH !== "undefined") ? SCG_AUTH.getToken() : null;
@@ -112,6 +117,7 @@ const SCG_HOME = (() => {
   }
 
   function init() {
+    if (!RIVALS_ENABLED) return;
     els.leaderboard = $("leaderboard");
     els.form        = $("add-rival-form");
     els.email       = $("rival-email");

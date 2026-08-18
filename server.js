@@ -67,6 +67,18 @@ if (process.env.DATABASE_URL) {
       created_at BIGINT,
       PRIMARY KEY (user_id, rival_email)
     );
+    CREATE TABLE IF NOT EXISTS lessons (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT,
+      content TEXT,
+      headline TEXT,
+      source TEXT,
+      persona TEXT,
+      call_score INTEGER,
+      reviewed BOOLEAN DEFAULT FALSE,
+      pinned BOOLEAN DEFAULT FALSE,
+      created_at BIGINT
+    );
   `).catch((e) => console.error("DB init error:", e.message));
   db.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'free';
@@ -139,6 +151,18 @@ async function autoUnlock(userId, discoveredSkills) {
       [userId, skillId, now]
     ).catch(e => console.error("autoUnlock error:", e.message));
   }
+}
+
+// Persist a call's key takeaway as a Lesson (Sales Call modes only).
+// Reuses the /end analysis output that used to be shown once and discarded.
+async function saveLesson(userId, { content, headline, source, persona, callScore }) {
+  if (!db || !userId || !content) return;
+  await db.query(
+    `INSERT INTO lessons (user_id, content, headline, source, persona, call_score, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [userId, content, headline || null, source || null, persona || null,
+     Number.isFinite(callScore) ? callScore : null, Date.now()]
+  ).catch(e => console.error("saveLesson error:", e.message));
 }
 
 // ---------------------------------------------------------------------
@@ -415,6 +439,7 @@ app.use(express.json());
 // Explicit page routes (must be before express.static so they take priority)
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "landing.html")));
 app.get("/home", (req, res) => res.sendFile(path.join(__dirname, "public", "home.html")));
+app.get("/lessons", (req, res) => res.sendFile(path.join(__dirname, "public", "pages", "lessons.html")));
 
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -887,6 +912,20 @@ Return ONLY valid JSON:
 // 3. Sales Call Mode
 // ---------------------------------------------------------------------
 
+// Render a background persona's structured fields into a prompt block.
+// Falls back to the legacy one-line `behavior` if the rich fields are absent.
+function personaDetail(p) {
+  if (!p) return "";
+  const lines = [];
+  if (p.economicSituation) lines.push(`- Economic situation: ${p.economicSituation}`);
+  if (p.primaryPain)       lines.push(`- Primary pain: ${p.primaryPain}`);
+  if (p.objectionStyle)    lines.push(`- Objection style: ${p.objectionStyle}`);
+  if (p.decisionTempo)     lines.push(`- Decision tempo: ${p.decisionTempo}`);
+  if (p.saysYesWhen)       lines.push(`- Says yes when: ${p.saysYesWhen}`);
+  if (lines.length) return lines.join("\n");
+  return p.behavior ? `- ${p.behavior}` : "";
+}
+
 app.post("/api/call/start", optionalAuth, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
   const { scenario, customDescription, section, personality, prospectName } = req.body;
@@ -896,7 +935,9 @@ app.post("/api/call/start", optionalAuth, checkSessionLimit, async (req, res) =>
     : "";
 
   const personalityContext = personality && personality.label
-    ? `The prospect's personality is "${personality.label}": ${personality.behavior || ""} Shape their goal, openness, opening line and especially their buyingReadiness around this personality.`
+    ? `This prospect is a background persona: "${personality.label}".
+${personaDetail(personality)}
+Shape their goal, current situation, problem, limiting beliefs, opening line and especially their buyingReadiness around this persona's economic reality and the TYPE of resistance described above. The limitingBeliefs bank should reflect this persona's objection style, not generic ones.`
     : "";
 
   const nameInstruction = prospectName
@@ -961,7 +1002,7 @@ app.post("/api/call/message", async (req, res) => {
       : "";
 
     const personalityInstruction = personality && personality.label
-      ? `\nYour personality: ${personality.label} - ${personality.behavior || ""}`
+      ? `\nYou are "${personality.label}", a specific type of prospect.\n${personaDetail(personality)}\nStay true to this persona's economic reality, pain and objection style throughout.`
       : "";
 
     const beliefBank = Array.isArray(prospect.limitingBeliefs) && prospect.limitingBeliefs.length
@@ -1023,7 +1064,7 @@ STYLE:
 
 app.post("/api/call/end", optionalAuth, async (req, res) => {
   if (!requireAI(res)) return;
-  const { scenario, prospect, history, section } = req.body;
+  const { scenario, prospect, history, section, personality } = req.body;
   try {
     const turns = history || [];
     const historyText = turns
@@ -1116,10 +1157,354 @@ Return JSON:
     if (req.userId && summary.discovered_skills) {
       autoUnlock(req.userId, summary.discovered_skills);
     }
+    if (req.userId && summary.rememberThis) {
+      saveLesson(req.userId, {
+        content: summary.rememberThis,
+        headline: summary.headline,
+        source: "Closer",
+        persona: personality && personality.label ? personality.label : null,
+        callScore: summary.callScore,
+      });
+    }
     res.json({ ...summary, highlights });
   } catch (err) {
     console.error("call/end error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate feedback report." });
+  }
+});
+
+// ---------------------------------------------------------------------
+// SETTER MODE
+// A remote-setter RECRUITMENT call. The trainee is the setter, phoning a
+// warm lead who responded to a video about becoming a remote setter. The
+// TRIAGE script below is the trainee's PLAYBOOK — it is NEVER shown to the
+// AI prospect. It drives only (a) the grading of the trainee's structure and
+// (b) the Qualified / Not Qualified outcome. The AI prospect just plays a
+// challenging persona and resists, exactly like Closer mode.
+// ---------------------------------------------------------------------
+
+const SETTER_OFFER = "Becoming a remote setter (appointment setter) — a work-from-anywhere income path. The lead responded to a video about it and booked this call.";
+
+// The ideal call STRUCTURE (order matters). Used only for grading — never fed
+// to the prospect. Loose guide, not a verbatim script.
+const SETTER_STAGES = [
+  { key: "soft_intro_frame", label: "Soft Intro + Frame",        desc: "Neutral, low-pressure open; names why they're calling (the video) and frames the call as understanding where the lead is and where they want to go." },
+  { key: "shot_across_bow",  label: "Shot Across the Bow (Intent)", desc: "Surfaces intent — what caught their attention in the video and motivated them to reach out." },
+  { key: "situation",        label: "Situation",                 desc: "What they do now, how long, whether they like it (and a 2nd-truth check on why change if it's fine)." },
+  { key: "problem",          label: "Problem",                   desc: "What they don't like about their current situation; clarifies and digs (what do you mean / tell me more / in what way)." },
+  { key: "impact",           label: "Impact",                    desc: "The personal impact of the problem — how it makes them feel, how long it's gone on, what's happening." },
+  { key: "solution_awareness", label: "Solution Awareness",      desc: "What they've already tried and why it didn't work; why fixing this matters NOW after all this time." },
+  { key: "goals",            label: "Goals",                     desc: "Where they want to get to — income to replace, the bigger vision, why that goal matters to them." },
+  { key: "impact_goal",      label: "Impact (of goal)",          desc: "How long it's been a goal, how long until they'd get there on their current path; challenges weak answers, establishes why now." },
+  { key: "transition",       label: "Transition",                desc: "Asks permission to share thoughts; mirrors their pain and goals back; frames remote setting as the fit (hell island vs heaven island)." },
+  { key: "pitch",            label: "Pitch the Closing Call",    desc: "Positions a 2nd call with a closer/coach as the next step, explains what that call does, then offers a specific time slot to book it." },
+];
+
+const SETTER_OBJECTIVES = `TWO objectives decide qualification:
+1. UNDERSTAND THE PAIN — the setter genuinely uncovered the lead's real problem, its impact, and their goal (not just surface facts).
+2. POSITION THE 2ND CALL — the setter positioned a call with a closer/coach as the logical next step and got the lead to book a specific time.
+A lead is QUALIFIED only if BOTH objectives are met. Missing either = NOT QUALIFIED.`;
+
+function setterStagesForPrompt() {
+  return SETTER_STAGES.map((s, i) => `${i + 1}. ${s.label} — ${s.desc}`).join("\n");
+}
+
+app.post("/api/setter/start", optionalAuth, checkSessionLimit, async (req, res) => {
+  if (!requireAI(res)) return;
+  const { personality, prospectName } = req.body;
+
+  const personaContext = personality && personality.label
+    ? `This lead is a background persona: "${personality.label}".\n${personaDetail(personality)}\nShape their current situation, the problem/pain that made them respond to the video, their goal, their limiting beliefs and their buyingReadiness around this persona's economic reality and TYPE of resistance.`
+    : "";
+
+  const nameInstruction = prospectName
+    ? `Use exactly "${prospectName}" as the lead's name.`
+    : `Give the lead a realistic first name.`;
+
+  try {
+    const data = await askClaude(
+      `Generate a prospect profile for a REMOTE-SETTER RECRUITMENT call roleplay.
+The offer: ${SETTER_OFFER}
+The trainee is a SETTER phoning this warm lead. The lead has NOT been sold anything yet — they only watched a video and are curious/skeptical.
+${personaContext}
+${nameInstruction}
+
+The "limitingBeliefs" array is a BANK of 3-5 distinct objections/hesitations this lead holds about pursuing remote setting and about committing to a next step (surface excuses AND deeper fears), ordered most-likely-first. Keep each to one short sentence in the lead's own voice.
+
+Return JSON:
+{
+  "name": "${prospectName || "first name"}",
+  "age": <number>,
+  "goal": "what they ultimately want (income / lifestyle / change)",
+  "currentSituation": "their current work and income situation",
+  "problem": "what they dislike about their current situation — the pain that made them respond to the video",
+  "hiddenBelief": "the single deepest doubt they would never say out loud",
+  "limitingBeliefs": ["short belief/objection 1", "2", "3"],
+  "buyingReadiness": "Low" | "Medium" | "High",
+  "openingMessage": "the lead answering the phone — brief, a little unsure/guarded, e.g. 'Hello?' or 'Yeah, this is <name>...' They do NOT launch into anything; the setter leads the call."
+}`,
+      700,
+      SONNET
+    );
+    if (prospectName) data.name = prospectName;
+    res.json(data);
+  } catch (err) {
+    console.error("setter/start error:", err.stack || err.message);
+    res.status(500).json({ error: "Failed to start call." });
+  }
+});
+
+app.post("/api/setter/message", async (req, res) => {
+  if (!requireAI(res)) return;
+  const { prospect, history, userMessage, personality } = req.body;
+
+  if (isLowEffortMessage(userMessage)) {
+    return res.json({
+      blocked: true,
+      reason: "That doesn't read like something you'd actually say on a live call. Type a real line and the lead will respond.",
+    });
+  }
+
+  try {
+    const historyText = (history || [])
+      .map((m) => `${m.role === "user" ? "Setter" : "Lead"}: ${m.content}`)
+      .join("\n");
+
+    const personaInstruction = personality && personality.label
+      ? `\nYou are "${personality.label}", a specific type of lead.\n${personaDetail(personality)}\nStay true to this persona's economic reality, pain and objection style throughout.`
+      : "";
+
+    const beliefBank = Array.isArray(prospect.limitingBeliefs) && prospect.limitingBeliefs.length
+      ? prospect.limitingBeliefs.map((b, i) => `${i + 1}. ${b}`).join("\n")
+      : "(none specified — improvise realistic ones from your hidden belief)";
+
+    const msg = await anthropic.messages.create({
+      model: SONNET,
+      max_tokens: 350,
+      system: `You are roleplaying as ${prospect.name}, a warm LEAD on a phone call. You recently watched a video about becoming a remote setter (a work-from-anywhere appointment-setting income path) and left your details, so someone from their team (the SETTER, the person you're talking to) is now calling you. You are curious but skeptical. You do NOT know any sales script and must never reference one.
+${personaInstruction}
+
+Profile:
+- Age: ${prospect.age}
+- Goal: ${prospect.goal}
+- Current situation: ${prospect.currentSituation}
+- Problem / pain that made you respond: ${prospect.problem}
+- Hidden doubt (never say this explicitly, let it leak through resistance): ${prospect.hiddenBelief}
+- Readiness: ${prospect.buyingReadiness}
+
+Your hesitations / objections bank (work through these like a real person):
+${beliefBank}
+
+BEHAVIOUR:
+- Act like a real, conscious human, not a loop. Remember everything already said. Never repeat an objection once it's been genuinely handled — drop it and move on.
+- Make the setter EARN it. Don't hand over your real problem, its impact, or your goals unless they actually ask good questions and make you feel understood. If they interrogate you or jump to pitching without understanding you, stay guarded and non-committal.
+- You only agree to book a call with a "closer" / "coach" when the setter has (a) genuinely understood your pain and goals AND (b) made that next call feel worth your time AND (c) offered a specific time. Only then do you accept a SPECIFIC time slot.
+
+BOOKING FLAG (be strict and honest):
+- "none"      = you have not agreed to a next call, or the setter hasn't pitched one.
+- "soft"      = you're interested / open to hearing more, but you have NOT committed to a specific time ("sounds good, tell me more" is soft, not confirmed).
+- "confirmed" = you have firmly accepted a SPECIFIC time slot for the call with the closer (e.g. "yeah, tomorrow at 3 works"). Never mark confirmed for vague interest.
+
+STYLE:
+- Straightforward and concise, 1-3 sentences unless your persona is talkative. No filler, no monologuing. Stay completely in character. Never mention you are an AI. Never use em-dashes. Use plain punctuation.
+
+Return ONLY valid JSON:
+{ "reply": "your spoken reply, in character", "booking": "none" | "soft" | "confirmed" }`,
+      messages: [
+        {
+          role: "user",
+          content: `Conversation so far:\n${historyText}\n\nSetter: ${userMessage}\n\nRespond only as ${prospect.name}. Return the JSON described.`,
+        },
+      ],
+    });
+
+    const raw = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    let reply = raw, booking = "none";
+    try {
+      const parsed = extractJSON(raw);
+      reply = (parsed.reply || "").trim() || raw;
+      booking = ["none", "soft", "confirmed"].includes(parsed.booking) ? parsed.booking : "none";
+    } catch {
+      // Model didn't return clean JSON — fall back to treating the text as the reply.
+      reply = raw;
+      booking = "none";
+    }
+    res.json({ reply, booking });
+  } catch (err) {
+    console.error("setter/message error:", err.stack || err.message);
+    res.status(500).json({ error: "Failed to get lead reply." });
+  }
+});
+
+app.post("/api/setter/end", optionalAuth, async (req, res) => {
+  if (!requireAI(res)) return;
+  const { prospect, history, liveBooking, personality } = req.body;
+  try {
+    const turns = history || [];
+    const historyText = turns
+      .map((m) => `${m.role === "user" ? "Setter" : "Lead"}: ${m.content}`)
+      .join("\n");
+
+    const userLines = turns.filter((m) => m.role === "user");
+    const numberedUserLines = userLines
+      .map((m, i) => `[#${i}] Setter: ${m.content}`)
+      .join("\n");
+
+    // 1) HAIKU — per-line highlights painted onto the chat.
+    const highlightsPromise = askClaude(
+      `A remote-setter recruitment call just ended. Below are ONLY the setter's own lines, each tagged [#index].
+Pick the 4 to 8 most instructive lines and tag each. Highlight strong moves AND clear mistakes / missed reads.
+
+Verdicts:
+- "good"    = a strong, skillful move
+- "improve" = workable but a better option existed
+- "bad"     = a clear mistake or missed read
+
+Setter lines:
+${numberedUserLines}
+
+${STYLE_RULES}
+
+Return ONLY valid JSON. Each note is the lesson for that exact line, under 14 words, action-focused:
+{ "highlights": [ { "index": <integer>, "verdict": "good" | "improve" | "bad", "note": "under 14 words" } ] }`,
+      900,
+      HAIKU
+    );
+
+    // 2) SONNET — grade against the TRIAGE structure + decide the outcome.
+    const summaryPromise = askClaude(
+      `A REMOTE-SETTER RECRUITMENT call roleplay just ended. Grade the SETTER (the trainee) against the ideal call structure and objectives below.
+
+THE IDEAL STRUCTURE (order matters, but it's a loose guide — reward following the STRUCTURE and having a real conversation, not reciting questions verbatim):
+${setterStagesForPrompt()}
+
+${SETTER_OBJECTIVES}
+
+Lead profile: ${JSON.stringify(prospect)}
+
+Full transcript:
+${historyText}
+
+During the live call the lead's booking flag reached: "${liveBooking || "none"}".
+BOOKING VALIDATION (two-stage guard): only treat the call as BOOKED if the transcript actually shows the setter pitching the closer call AND the lead firmly accepting a SPECIFIC time. If the live flag says confirmed but the transcript doesn't support a firm yes + a specific time, set booked=false and explain. If the lead gave a firm yes + time WITHOUT the setter earning it (no real pain uncovered, structure skipped), set booked=true but unearned=true and call it out.
+
+${STYLE_RULES}
+
+${SKILL_ID_PROMPT}
+
+Return JSON:
+{
+  "callScore": <integer 0-100>,
+  "outcome": "Qualified" | "Not Qualified",
+  "booked": <boolean>,
+  "unearned": <boolean, true only if booked but not earned>,
+  "bookingRationale": "one or two sentences: was the closer call booked, and was it earned?",
+  "objectives": { "understoodPain": <boolean>, "positionedCloserCall": <boolean> },
+  "structure": [ { "key": "<stage key from the list>", "status": "hit" | "partial" | "missed", "note": "under 14 words, specific to this call" } ],
+  "headline": "one-line verdict of how the call went",
+  "rememberThis": "the single most important lesson from THIS call, one memorable sentence",
+  "thinkAboutNextTime": ["forward-looking, concrete thing to do differently next call", "..."],
+  "whatYouDidWell": ["short bullet under 15 words", "..."],
+  "principle": { "name": "principle name", "note": "one sentence on how it applied here" },
+  "discovered_skills": ["skill_id1", "skill_id2"]
+}
+The "structure" array MUST include one entry for every stage key: ${SETTER_STAGES.map((s) => s.key).join(", ")}.`,
+      2000,
+      SONNET
+    );
+
+    const [highlightsData, summary] = await Promise.all([
+      highlightsPromise.catch(() => ({ highlights: [] })),
+      summaryPromise,
+    ]);
+
+    const highlights = (highlightsData.highlights || [])
+      .filter((h) => h && typeof h.index === "number" && userLines[h.index])
+      .map((h) => ({
+        index: h.index,
+        verdict: ["good", "improve", "bad"].includes(h.verdict) ? h.verdict : "improve",
+        note: h.note || "",
+        quote: userLines[h.index].content,
+      }));
+
+    // Attach each stage's label so the client doesn't need to know the rubric.
+    const stageLabels = Object.fromEntries(SETTER_STAGES.map((s) => [s.key, s.label]));
+    const structure = Array.isArray(summary.structure)
+      ? summary.structure.map((s) => ({ ...s, label: stageLabels[s.key] || s.key }))
+      : [];
+
+    if (req.userId && summary.discovered_skills) {
+      autoUnlock(req.userId, summary.discovered_skills);
+    }
+    if (req.userId && summary.rememberThis) {
+      saveLesson(req.userId, {
+        content: summary.rememberThis,
+        headline: summary.headline,
+        source: "Setter",
+        persona: personality && personality.label ? personality.label : null,
+        callScore: summary.callScore,
+      });
+    }
+    res.json({ ...summary, structure, highlights });
+  } catch (err) {
+    console.error("setter/end error:", err.stack || err.message);
+    res.status(500).json({ error: "Failed to generate feedback report." });
+  }
+});
+
+// ---------------------------------------------------------------------
+// Lessons library (Sales Call modes only)
+// ---------------------------------------------------------------------
+
+app.get("/api/lessons", authMiddleware, async (req, res) => {
+  if (!db) return res.json({ dbDisabled: true, lessons: [] });
+  try {
+    const rows = await db.query(
+      `SELECT id, content, headline, source, persona, call_score, reviewed, pinned, created_at
+       FROM lessons WHERE user_id=$1
+       ORDER BY pinned DESC, created_at DESC`,
+      [req.userId]
+    );
+    res.json({ lessons: rows.rows });
+  } catch (err) {
+    console.error("lessons list error:", err.message);
+    res.status(500).json({ error: "Failed to load lessons." });
+  }
+});
+
+app.patch("/api/lessons/:id", authMiddleware, async (req, res) => {
+  if (!db) return res.status(400).json({ error: "Database not configured." });
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) return res.status(400).json({ error: "Bad id." });
+  const fields = [];
+  const values = [];
+  if (typeof req.body.reviewed === "boolean") { values.push(req.body.reviewed); fields.push(`reviewed=$${values.length}`); }
+  if (typeof req.body.pinned === "boolean")   { values.push(req.body.pinned);   fields.push(`pinned=$${values.length}`); }
+  if (!fields.length) return res.status(400).json({ error: "Nothing to update." });
+  values.push(id, req.userId);
+  try {
+    const result = await db.query(
+      `UPDATE lessons SET ${fields.join(", ")} WHERE id=$${values.length - 1} AND user_id=$${values.length} RETURNING id`,
+      values
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "Lesson not found." });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("lessons update error:", err.message);
+    res.status(500).json({ error: "Failed to update lesson." });
+  }
+});
+
+app.delete("/api/lessons/:id", authMiddleware, async (req, res) => {
+  if (!db) return res.status(400).json({ error: "Database not configured." });
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) return res.status(400).json({ error: "Bad id." });
+  try {
+    await db.query("DELETE FROM lessons WHERE id=$1 AND user_id=$2", [id, req.userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("lessons delete error:", err.message);
+    res.status(500).json({ error: "Failed to delete lesson." });
   }
 });
 

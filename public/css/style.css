@@ -2357,3 +2357,209 @@ input.custom-input:focus {
   padding: 10px 20px;
   font-size: 13px;
 }
+
+/* ---------------------------------------------------------------------- */
+/* Sales Call — Setter/Closer mode choice                                  */
+/* ---------------------------------------------------------------------- */
+
+.mode-choice-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+
+.mode-choice-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 28px 24px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 20px;
+}
+.mode-choice-btn small {
+  font-family: var(--font-mono);
+  font-weight: 300;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+@media (max-width: 720px) { .mode-choice-grid { grid-template-columns: 1fr; } }
+
+/* Live booking indicator (setter only) */
+.clm-val.booking-none      { color: var(--text-1); }
+.clm-val.booking-soft      { color: var(--warn); }
+.clm-val.booking-confirmed { color: var(--good); }
+
+/* ---------------------------------------------------------------------- */
+/* Sales Call — Setter debrief                                             */
+/* ---------------------------------------------------------------------- */
+
+.setter-outcome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+}
+.setter-outcome.outcome-qualified    { border-color: var(--good); background: rgba(71, 255, 170, 0.06); }
+.setter-outcome.outcome-notqualified { border-color: var(--bad);  background: var(--accent-2-dim); }
+
+.setter-outcome-badge {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 24px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.outcome-qualified .setter-outcome-badge    { color: var(--good); }
+.outcome-notqualified .setter-outcome-badge { color: var(--bad); }
+.setter-outcome-side .summary-score-val { font-size: 28px; }
+.setter-outcome-side .summary-score-sub { font-size: 13px; color: var(--text-2); margin-left: 4px; }
+
+.setter-booking-line {
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 12px 16px;
+  border-left: 3px solid var(--panel-border);
+  margin-bottom: 16px;
+  color: var(--text-0);
+}
+.setter-booking-line.booking-confirmed { border-left-color: var(--good); }
+.setter-booking-line.booking-soft      { border-left-color: var(--warn); }
+.setter-booking-line.booking-none      { border-left-color: var(--bad); }
+
+.summary-headline-p { font-size: 15px; color: var(--text-1); margin-bottom: 16px; line-height: 1.6; }
+
+.setter-objectives { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+.setter-obj {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600;
+  padding: 8px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+}
+.setter-obj.ok   { color: var(--good); border-color: rgba(71,255,170,0.35); }
+.setter-obj.miss { color: var(--bad);  border-color: rgba(255,71,71,0.35); }
+.setter-obj-mark { font-size: 15px; }
+
+.setter-stages { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.setter-stage {
+  padding: 10px 14px;
+  border-left: 3px solid var(--panel-border);
+  background: rgba(255,255,255,0.02);
+}
+.setter-stage.stage-hit     { border-left-color: var(--good); }
+.setter-stage.stage-partial { border-left-color: var(--warn); }
+.setter-stage.stage-missed  { border-left-color: var(--bad); }
+
+.setter-stage-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.setter-stage-name { font-size: 13.5px; font-weight: 600; color: var(--text-0); }
+.setter-stage-badge {
+  font-family: var(--font-mono);
+  font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 2px 8px;
+}
+.setter-stage-badge.stage-hit     { color: var(--good); }
+.setter-stage-badge.stage-partial { color: var(--warn); }
+.setter-stage-badge.stage-missed  { color: var(--bad); }
+.setter-stage-note { font-size: 12px; color: var(--text-2); margin-top: 4px; line-height: 1.5; }
+
+/* ---------------------------------------------------------------------- */
+/* Lessons library                                                         */
+/* ---------------------------------------------------------------------- */
+
+.lessons-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.lessons-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.lesson-filter {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+}
+.lesson-filter:hover { color: var(--text-0); }
+.lesson-filter.selected { color: var(--bg, #0a0a0a); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+.lesson-persona-filter {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-0);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.lessons-list { display: flex; flex-direction: column; gap: 12px; }
+
+.lessons-empty {
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--text-2);
+  font-size: 14px;
+  border: 1px dashed var(--panel-border);
+  border-radius: var(--radius-sm);
+}
+
+.lesson-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  padding: 18px 20px;
+  transition: border-color var(--transition), opacity var(--transition);
+}
+.lesson-card.pinned   { border-left-color: var(--accent); }
+.lesson-card.reviewed { opacity: 0.62; }
+
+.lesson-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.lesson-badges   { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.lesson-badge {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 9px;
+  border: 1px solid var(--panel-border);
+  color: var(--text-1);
+}
+.lesson-badge.source-setter { color: var(--warn);   border-color: rgba(255,174,71,0.4); }
+.lesson-badge.source-closer { color: var(--accent); border-color: rgba(232,255,71,0.4); }
+.lesson-badge.persona       { color: var(--text-1); }
+.lesson-score { font-family: var(--font-mono); font-size: 11px; color: var(--good); }
+.lesson-date  { font-family: var(--font-mono); font-size: 11px; color: var(--text-2); }
+
+.lesson-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.lesson-act {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-2);
+  font-size: 14px;
+  width: 30px; height: 30px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition), background var(--transition);
+}
+.lesson-act:hover { color: var(--text-0); background: rgba(255,255,255,0.04); }
+.lesson-pin.on    { color: var(--accent); }
+.lesson-review.on { color: var(--good); }
+.lesson-del:hover { color: var(--bad); }
+
+.lesson-content { font-size: 15.5px; line-height: 1.6; color: var(--text-0); font-weight: 500; }
+.lesson-headline { font-size: 12.5px; color: var(--text-2); margin-top: 8px; font-style: italic; }

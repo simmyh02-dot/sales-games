@@ -162,12 +162,12 @@
   }
 
   function renderFeedbackInCard(card, data) {
-    SCG.addScore(typeof data.score === "number" ? data.score : 0, "pattern-recognition");
+    // Record the round for the billing/limit meter (score is not shown).
+    SCG.addScore(0, "pattern-recognition");
 
-    const score      = typeof data.score === "number" ? data.score : 0;
-    const isCorrect  = data.correct;
-    const scoreClass = score > 0 ? "positive" : score < 0 ? "negative" : "neutral";
-    const scoreLabel = isCorrect ? "Correct" : "Incorrect";
+    const isCorrect   = data.correct;
+    const verdictClass = isCorrect ? "positive" : "negative";
+    const verdictLabel = isCorrect ? "Correct" : "Incorrect";
 
     // howToHandleIt is now an array of steps
     const handleItems = Array.isArray(data.howToHandleIt)
@@ -182,8 +182,7 @@
     const feedbackEl = card.querySelector(".feedback-inline");
     feedbackEl.innerHTML = `
       <div class="score-result">
-        <div class="score-result-value ${scoreClass}">${score > 0 ? "+" : ""}${score}</div>
-        <div class="score-result-label">${scoreLabel}</div>
+        <div class="score-result-value ${verdictClass}">${verdictLabel}</div>
       </div>
       ${twoCorrectNote}
       <div class="feedback-block ${resultClass}">

@@ -1,26 +1,17 @@
 (() => {
   const TARGET_MESSAGES = 30;
 
-  // Prospect personalities. Difficulty: 1 easy, 2 medium, 3 hard to close.
-  const PERSONALITIES = [
-    { key: "friendly",    label: "Friendly & Open",         difficulty: 1,
-      behavior: "Warm and talkative, shares freely, warms up fast and raises only light objections." },
-    { key: "busy",        label: "Busy & Impatient",        difficulty: 2,
-      behavior: "Short on time, wants the point fast, gives clipped answers and has no patience for waffle." },
-    { key: "noncommittal",label: "Polite but Non-committal", difficulty: 2,
-      behavior: "Agreeable on the surface but dodges commitment, hides the real objection behind smoke screens." },
-    { key: "analytical",  label: "Analytical & Skeptical",  difficulty: 3,
-      behavior: "Wants proof, numbers and guarantees, questions every claim and is slow to trust." },
-    { key: "guarded",     label: "Guarded & Closed-off",    difficulty: 3,
-      behavior: "Suspicious and gives little away. You have to earn every answer before they open up." },
-    { key: "dismissive",  label: "Dismissive & Combative",  difficulty: 3,
-      behavior: "Challenges your frame, pushes back hard and stays dismissive until you show real authority." },
-  ];
-  const DIFFICULTY_TEXT = { 1: "Easy to close", 2: "Medium", 3: "Harder to close" };
+  // Background prospect personas live in personas.js (SCG_PERSONAS). Each
+  // carries a different TYPE of resistance. "Randomize" is the default so you
+  // don't only ever train against your favourite.
+  const PERSONAS = (typeof SCG_PERSONAS !== "undefined") ? SCG_PERSONAS : [];
 
   const els = {
     apiNotice: document.getElementById("api-notice"),
     gameArea:  document.getElementById("game-area"),
+
+    modePanel: document.getElementById("mode-panel"),
+    modeGrid:  document.getElementById("mode-grid"),
 
     scenarioPanel: document.getElementById("scenario-panel"),
     scenarioGrid:  document.getElementById("scenario-grid"),
@@ -43,6 +34,9 @@
     clOffer:     document.getElementById("cl-offer"),
     clPersonality: document.getElementById("cl-personality"),
     clSituation: document.getElementById("cl-situation"),
+    clmSituation:document.getElementById("clm-situation"),
+    clmBooking:  document.getElementById("clm-booking"),
+    clBooking:   document.getElementById("cl-booking"),
     callProgress:document.getElementById("call-progress"),
     chatWindow:  document.getElementById("chat-window"),
     chatInputRow:document.getElementById("chat-input-row"),
@@ -53,9 +47,12 @@
     summaryPanel:document.getElementById("summary-panel"),
   };
 
+  let callMode           = null;    // "closer" | "setter"
   let selectedScenario   = null;
   let selectedSection    = null;
-  let selectedPersonality = null;
+  let selectedPersonality = null;   // picker choice: a persona object or "random"
+  let activePersona       = null;   // the resolved persona for the live call
+  let liveBooking        = "none";  // setter only: highest booking level reached ("none" < "soft" < "confirmed")
   let prospect           = null;
   let history            = [];
   let userMessageCount   = 0;
@@ -104,7 +101,22 @@
     return false;
   }
 
-  // --- Step 1: Scenario selection -----------------------------------------
+  // --- Step 0: Mode choice (Setter vs Closer) -----------------------------
+
+  els.modeGrid.addEventListener("click", (e) => {
+    const btn = e.target.closest(".mode-choice-btn");
+    if (!btn) return;
+    callMode = btn.dataset.mode;             // "closer" | "setter"
+    els.modePanel.style.display = "none";
+    if (callMode === "setter") {
+      // Setter skips scenario + section — the offer is fixed, persona is the variable.
+      els.personalityPanel.style.display = "block";
+    } else {
+      els.scenarioPanel.style.display = "block";
+    }
+  });
+
+  // --- Step 1: Scenario selection (Closer only) ---------------------------
 
   els.scenarioGrid.addEventListener("click", (e) => {
     const btn = e.target.closest(".scenario-btn");
@@ -153,28 +165,42 @@
   // --- Step 3: Personality selection --------------------------------------
 
   function renderPersonalities() {
-    els.personalityGrid.innerHTML = PERSONALITIES.map((p) => `
+    const randomCard = `
+      <button class="scenario-btn personality-btn selected" data-key="random">
+        🎲 Randomize
+        <small>Draw a random prospect each call so you don't only train against your favourite. Recommended.</small>
+      </button>`;
+    const personaCards = PERSONAS.map((p) => `
       <button class="scenario-btn personality-btn" data-key="${p.key}">
         ${p.label}
-        <span class="difficulty-badge" data-difficulty="${p.difficulty}">${DIFFICULTY_TEXT[p.difficulty]}</span>
-        <small>${p.behavior}</small>
+        <small>${p.primaryPain} ${p.objectionStyle}</small>
       </button>
     `).join("");
+    els.personalityGrid.innerHTML = randomCard + personaCards;
   }
   renderPersonalities();
+  // Randomize is selected by default, so the call can start immediately.
+  selectedPersonality = "random";
+  els.confirmPersonalityBtn.disabled = false;
 
   els.personalityGrid.addEventListener("click", (e) => {
     const btn = e.target.closest(".personality-btn");
     if (!btn) return;
     [...els.personalityGrid.children].forEach((b) => b.classList.remove("selected"));
     btn.classList.add("selected");
-    selectedPersonality = PERSONALITIES.find((p) => p.key === btn.dataset.key);
+    selectedPersonality = btn.dataset.key === "random"
+      ? "random"
+      : PERSONAS.find((p) => p.key === btn.dataset.key);
     els.confirmPersonalityBtn.disabled = false;
   });
 
   els.backToSectionBtn.addEventListener("click", () => {
     els.personalityPanel.style.display = "none";
-    els.sectionPanel.style.display     = "block";
+    if (callMode === "setter") {
+      els.modePanel.style.display = "block";
+    } else {
+      els.sectionPanel.style.display = "block";
+    }
   });
 
   els.confirmPersonalityBtn.addEventListener("click", startCall);
@@ -195,26 +221,37 @@
     els.confirmPersonalityBtn.disabled    = true;
     els.confirmPersonalityBtn.textContent = "Connecting...";
 
-    const offerText = selectedScenario === "Custom Scenario"
-      ? els.customInput.value.trim()
-      : selectedScenario;
+    const isSetter = callMode === "setter";
+    const offerText = isSetter
+      ? "Remote Setter Recruitment"
+      : (selectedScenario === "Custom Scenario" ? els.customInput.value.trim() : selectedScenario);
     const prospectName = nextProspectName();
+
+    // Resolve "Randomize" into a concrete persona now, so the rest of the call
+    // (header, server prompt, lessons) works against a real archetype.
+    const persona = selectedPersonality === "random"
+      ? PERSONAS[Math.floor(Math.random() * PERSONAS.length)]
+      : selectedPersonality;
 
     try {
       const token = localStorage.getItem("scg_auth_token");
-      const res = await fetch("/api/call/start", {
+      const endpoint = isSetter ? "/api/setter/start" : "/api/call/start";
+      const body = isSetter
+        ? { personality: persona, prospectName }
+        : {
+            scenario:          selectedScenario,
+            customDescription: selectedScenario === "Custom Scenario" ? offerText : "",
+            section:           selectedSection,
+            personality:       persona,
+            prospectName,
+          };
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { "Authorization": `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          scenario:          selectedScenario,
-          customDescription: selectedScenario === "Custom Scenario" ? offerText : "",
-          section:           selectedSection,
-          personality:       selectedPersonality,
-          prospectName,
-        }),
+        body: JSON.stringify(body),
       });
       if (res.status === 403) {
         const d = await res.json().catch(() => ({}));
@@ -230,12 +267,19 @@
       userMessageCount = 0;
       analyzed         = false;
       userBubbles      = [];
+      liveBooking      = "none";
 
       // Populate the live call header.
       els.clProspect.textContent    = prospectName;
       els.clOffer.textContent       = offerText;
-      els.clPersonality.textContent = selectedPersonality ? selectedPersonality.label : "—";
-      els.clSituation.textContent   = selectedSection;
+      els.clPersonality.textContent = persona ? persona.label : "—";
+      // Keep the resolved persona around for the message route and the debrief.
+      activePersona = persona;
+      // Setter has no section but tracks booking; Closer shows the section.
+      els.clmSituation.style.display = isSetter ? "none" : "";
+      els.clmBooking.style.display   = isSetter ? "" : "none";
+      if (isSetter) setBookingIndicator("none");
+      else els.clSituation.textContent = selectedSection;
 
       els.summaryPanel.style.display = "none";
       els.summaryPanel.innerHTML     = "";
@@ -256,12 +300,20 @@
       els.callPanel.style.display        = "block";
       els.chatInput.focus();
     } catch {
-      els.scenarioStatus.textContent        = "Couldn't reach the AI. Try again.";
       els.confirmPersonalityBtn.disabled    = false;
       els.confirmPersonalityBtn.textContent = "Start call";
-      els.personalityPanel.style.display    = "none";
-      els.scenarioPanel.style.display       = "block";
+      // Stay on the persona panel so they can retry.
+      els.personalityPanel.style.display    = "block";
     }
+  }
+
+  // Setter booking indicator: none -> soft -> confirmed (never downgrades live).
+  const BOOKING_RANK = { none: 0, soft: 1, confirmed: 2 };
+  const BOOKING_TEXT = { none: "Not booked", soft: "Warming up", confirmed: "Booked (live)" };
+  function setBookingIndicator(level) {
+    const lvl = BOOKING_TEXT[level] ? level : "none";
+    els.clBooking.textContent = BOOKING_TEXT[lvl];
+    els.clBooking.className = `clm-val booking-${lvl}`;
   }
 
   // --- Chat ----------------------------------------------------------------
@@ -304,23 +356,21 @@
     history.push({ role: "user", content: text });
     userMessageCount += 1;
     updateProgress();
+    const isSetter = callMode === "setter";
     els.chatInput.value    = "";
     els.chatInput.disabled = true;
     els.sendBtn.disabled   = true;
-    els.callStatus.textContent = "Prospect is responding...";
+    els.callStatus.textContent = isSetter ? "Lead is responding..." : "Prospect is responding...";
 
     try {
-      const res = await fetch("/api/call/message", {
+      const endpoint = isSetter ? "/api/setter/message" : "/api/call/message";
+      const body = isSetter
+        ? { prospect, history, userMessage: text, personality: activePersona }
+        : { scenario: selectedScenario, prospect, history, userMessage: text, section: selectedSection, personality: activePersona };
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          scenario:    selectedScenario,
-          prospect,
-          history,
-          userMessage: text,
-          section:     selectedSection,
-          personality: selectedPersonality,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("request failed");
       const data = await res.json();
@@ -338,6 +388,12 @@
 
       addBubble("prospect", data.reply);
       history.push({ role: "assistant", content: data.reply });
+
+      // Setter: escalate the live booking indicator, never downgrade.
+      if (isSetter && data.booking && BOOKING_RANK[data.booking] > BOOKING_RANK[liveBooking]) {
+        liveBooking = data.booking;
+        setBookingIndicator(liveBooking);
+      }
       els.callStatus.textContent = userMessageCount >= TARGET_MESSAGES
         ? "You've hit the suggested call length - wrap it up and analyze when ready."
         : "";
@@ -378,19 +434,22 @@
     els.callStatus.textContent = "Reading back through the call...";
 
     try {
-      const res = await fetch("/api/call/end", {
+      const isSetter = callMode === "setter";
+      const endpoint = isSetter ? "/api/setter/end" : "/api/call/end";
+      const body = isSetter
+        ? { prospect, history, personality: activePersona, liveBooking }
+        : { scenario: selectedScenario, prospect, history, section: selectedSection, personality: activePersona };
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          scenario: selectedScenario, prospect, history,
-          section: selectedSection, personality: selectedPersonality,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("request failed");
       const data = await res.json();
       analyzed = true;
       applyHighlights(data.highlights || []);
-      renderSummary(data);
+      if (isSetter) renderSetterSummary(data);
+      else renderSummary(data);
       els.chatInputRow.style.display = "none";
       els.endCallBtn.style.display   = "none";
       els.callStatus.textContent     = "";
@@ -423,8 +482,8 @@
   }
 
   function renderSummary(data) {
-    SCG.addScore(typeof data.scoreDelta === "number" ? data.scoreDelta : 0, "sales-call");
-    const delta = data.scoreDelta || 0;
+    // Record the session for the billing/limit meter (points are not shown).
+    SCG.addScore(0, "sales-call");
 
     els.summaryPanel.innerHTML = `
       <div class="panel summary-card">
@@ -436,9 +495,97 @@
           </div>
           <div class="summary-headline">
             <p>${esc(data.headline || "")}</p>
-            <div class="summary-delta">${delta > 0 ? "+" : ""}${delta} points added to your score</div>
           </div>
         </div>
+
+        ${data.rememberThis ? `
+        <div class="remember-block">
+          <div class="remember-label">Remember this</div>
+          <div class="remember-text">${esc(data.rememberThis)}</div>
+        </div>` : ""}
+
+        <div class="feedback-block info">
+          <h4><span class="tag"></span>Think about this next time</h4>
+          <ul>${listItems(data.thinkAboutNextTime)}</ul>
+        </div>
+
+        <div class="feedback-block good">
+          <h4><span class="tag"></span>What you did well</h4>
+          <ul>${listItems(data.whatYouDidWell)}</ul>
+        </div>
+
+        ${data.principle && data.principle.name ? `
+        <div class="quote-block"><strong>${esc(data.principle.name)}</strong>: ${esc(data.principle.note || "")}</div>` : ""}
+
+        <div class="actions-row">
+          <span class="objection-context">Green, amber and red marks above show your strongest and weakest moves.</span>
+          <button class="btn btn-primary" id="new-call-btn">Run another call</button>
+        </div>
+      </div>`;
+
+    els.summaryPanel.style.display = "block";
+    const newBtn = document.getElementById("new-call-btn");
+    if (newBtn) newBtn.addEventListener("click", resetAll);
+    els.summaryPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function renderSetterSummary(data) {
+    // Record the session for the billing/limit meter (points are not shown).
+    SCG.addScore(0, "setter");
+
+    const qualified = data.outcome === "Qualified";
+    const outcomeClass = qualified ? "outcome-qualified" : "outcome-notqualified";
+    const outcomeLabel = data.outcome || (qualified ? "Qualified" : "Not Qualified");
+
+    const bookingLine = data.booked
+      ? (data.unearned
+          ? `Closer call booked — but unearned. ${esc(data.bookingRationale || "")}`
+          : `Closer call booked. ${esc(data.bookingRationale || "")}`)
+      : `No closer call booked. ${esc(data.bookingRationale || "")}`;
+    const bookingClass = data.booked ? (data.unearned ? "booking-soft" : "booking-confirmed") : "booking-none";
+
+    const obj = data.objectives || {};
+    const objRow = (ok, label) =>
+      `<div class="setter-obj ${ok ? "ok" : "miss"}"><span class="setter-obj-mark">${ok ? "✓" : "✗"}</span>${label}</div>`;
+
+    const STATUS_LABEL = { hit: "Hit", partial: "Partial", missed: "Missed" };
+    const structureRows = (data.structure || []).map((s) => {
+      const st = ["hit", "partial", "missed"].includes(s.status) ? s.status : "partial";
+      return `
+        <div class="setter-stage stage-${st}">
+          <div class="setter-stage-head">
+            <span class="setter-stage-name">${esc(s.label || s.key || "")}</span>
+            <span class="setter-stage-badge stage-${st}">${STATUS_LABEL[st]}</span>
+          </div>
+          ${s.note ? `<div class="setter-stage-note">${esc(s.note)}</div>` : ""}
+        </div>`;
+    }).join("");
+
+    els.summaryPanel.innerHTML = `
+      <div class="panel summary-card">
+        <div class="panel-label">// Setter debrief - did you qualify and book the lead?</div>
+
+        <div class="setter-outcome ${outcomeClass}">
+          <div class="setter-outcome-badge">${esc(outcomeLabel)}</div>
+          <div class="setter-outcome-side">
+            <div class="summary-score-val">${data.callScore ?? "—"}<span class="summary-score-sub">/ 100</span></div>
+          </div>
+        </div>
+
+        <div class="setter-booking-line ${bookingClass}">${bookingLine}</div>
+
+        ${data.headline ? `<p class="summary-headline-p">${esc(data.headline)}</p>` : ""}
+
+        <div class="setter-objectives">
+          ${objRow(!!obj.understoodPain, "Understood the pain")}
+          ${objRow(!!obj.positionedCloserCall, "Positioned the closer call")}
+        </div>
+
+        ${structureRows ? `
+        <div class="feedback-block info">
+          <h4><span class="tag"></span>How you followed the structure</h4>
+          <div class="setter-stages">${structureRows}</div>
+        </div>` : ""}
 
         ${data.rememberThis ? `
         <div class="remember-block">
@@ -488,24 +635,31 @@
     els.callPanel.style.display     = "none";
     els.summaryPanel.style.display  = "none";
     els.summaryPanel.innerHTML      = "";
-    els.scenarioPanel.style.display = "block";
+    // Back to the very first step: the mode choice.
+    els.scenarioPanel.style.display    = "none";
+    els.sectionPanel.style.display     = "none";
+    els.personalityPanel.style.display = "none";
+    els.modePanel.style.display        = "block";
 
     els.callStatus.textContent        = "";
     els.callStatus.classList.remove("call-status-warn");
     els.startBtn.textContent          = "Next: pick a section";
     els.confirmSectionBtn.disabled    = true;
-    els.confirmSectionBtn.textContent = "Next: pick a personality";
-    els.confirmPersonalityBtn.disabled    = true;
+    els.confirmSectionBtn.textContent = "Next: pick a prospect";
     els.confirmPersonalityBtn.textContent = "Start call";
 
     [...els.scenarioGrid.children].forEach((b) => b.classList.remove("selected"));
     [...els.sectionGrid.children].forEach((b)  => b.classList.remove("selected"));
-    [...els.personalityGrid.children].forEach((b) => b.classList.remove("selected"));
+    [...els.personalityGrid.children].forEach((b, i) => b.classList.toggle("selected", i === 0));
     els.customInput.style.display = "none";
     els.customInput.value         = "";
+    callMode            = null;
     selectedScenario    = null;
     selectedSection     = null;
-    selectedPersonality = null;
+    selectedPersonality = "random";   // back to the Randomize default
+    activePersona       = null;
+    liveBooking         = "none";
+    els.confirmPersonalityBtn.disabled = false;
     updateStartButton();
   }
 

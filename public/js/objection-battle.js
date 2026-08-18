@@ -221,10 +221,8 @@
   }
 
   function renderFeedbackInCard(card, data) {
-    SCG.addScore(typeof data.score === "number" ? data.score : 0, "objection-battle");
-
-    const score = typeof data.score === "number" ? data.score : 0;
-    const scoreClass = score >= 7 ? "positive" : score >= 4 ? "neutral" : "negative";
+    // Record the round for the billing/limit meter (score is not shown).
+    SCG.addScore(0, "objection-battle");
 
     const wellItems   = (data.whatYouDidWell || []).map(b => `<li>${escapeHtml(b)}</li>`).join("") || "<li>Nothing notable.</li>";
     const missedItems = (data.whatYouMissed  || []).map(b => `<li>${escapeHtml(b)}</li>`).join("") || "<li>Nothing notable.</li>";
@@ -236,10 +234,6 @@
 
     const feedbackEl = card.querySelector(".feedback-inline");
     feedbackEl.innerHTML = `
-      <div class="score-result">
-        <div class="score-result-value ${scoreClass}">${score}/10</div>
-        <div class="score-result-label">this round</div>
-      </div>
       <div class="feedback-block good">
         <h4><span class="tag"></span>What you did well</h4>
         <ul>${wellItems}</ul>

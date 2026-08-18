@@ -20,17 +20,6 @@
       </a>
 
       <div class="topbar-right">
-        <div class="score-pill">
-          <div class="score-item">
-            <span class="score-label">Today</span>
-            <span class="score-value" data-scg-today>+0</span>
-          </div>
-          <div class="divider"></div>
-          <div class="score-item">
-            <span class="score-label">Total</span>
-            <span class="score-value" data-scg-total>0</span>
-          </div>
-        </div>
         <div id="auth-widget"></div>
       </div>
     </div>
@@ -55,8 +44,23 @@
     </div>
 
     <div id="game-area">
-      <!-- Scenario selection -->
-      <div class="panel" id="scenario-panel">
+      <!-- Mode choice: Setter vs Closer -->
+      <div class="panel" id="mode-panel">
+        <div class="panel-label">// What kind of call do you want to run?</div>
+        <div class="scenario-grid mode-choice-grid" id="mode-grid">
+          <button class="scenario-btn mode-choice-btn" data-mode="closer">
+            Closer Call
+            <small>The full one-call close. Pick a scenario and offer, then run a live call from rapport all the way to the close.</small>
+          </button>
+          <button class="scenario-btn mode-choice-btn" data-mode="setter">
+            Setter Call
+            <small>Phone a warm lead who responded to a remote-setter video. Uncover their real pain and book them onto a call with a closer.</small>
+          </button>
+        </div>
+      </div>
+
+      <!-- Scenario selection (Closer only) -->
+      <div class="panel" id="scenario-panel" style="display:none;">
 
         <div class="panel-label">// Choose a scenario</div>
         <div class="scenario-grid" id="scenario-grid">
@@ -90,14 +94,14 @@
         </div>
         <div class="actions-row">
           <button class="btn btn-secondary" id="back-to-scenario-btn">Back</button>
-          <button class="btn btn-primary" id="confirm-section-btn" disabled>Next: pick a personality</button>
+          <button class="btn btn-primary" id="confirm-section-btn" disabled>Next: pick a prospect</button>
         </div>
       </div>
 
-      <!-- Personality selection -->
+      <!-- Persona selection (both modes) -->
       <div class="panel" id="personality-panel" style="display:none;">
         <div class="panel-label">// Who are you up against?</div>
-        <p class="objection-context" style="margin-bottom:0;">Each prospect plays differently. The harder personalities won't hand you the sale.</p>
+        <p class="objection-context" style="margin-bottom:0;">Each persona brings a different kind of resistance. Randomize to keep yourself sharp, or pick one to drill a specific type.</p>
         <div class="scenario-grid personality-grid" id="personality-grid"></div>
         <div class="actions-row">
           <button class="btn btn-secondary" id="back-to-section-btn">Back</button>
@@ -115,8 +119,9 @@
           <div class="call-live-meta">
             <div class="clm"><span class="clm-label">Prospect</span><span class="clm-val" id="cl-prospect">—</span></div>
             <div class="clm"><span class="clm-label">Offer</span><span class="clm-val" id="cl-offer">—</span></div>
-            <div class="clm"><span class="clm-label">Personality</span><span class="clm-val" id="cl-personality">—</span></div>
-            <div class="clm"><span class="clm-label">Situation</span><span class="clm-val" id="cl-situation">—</span></div>
+            <div class="clm"><span class="clm-label">Persona</span><span class="clm-val" id="cl-personality">—</span></div>
+            <div class="clm" id="clm-situation"><span class="clm-label">Situation</span><span class="clm-val" id="cl-situation">—</span></div>
+            <div class="clm" id="clm-booking" style="display:none;"><span class="clm-label">Booking</span><span class="clm-val booking-none" id="cl-booking">Not booked</span></div>
           </div>
         </div>
 
@@ -141,6 +146,7 @@
   <script src="/js/score.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/pricing.js"></script>
+  <script src="/js/personas.js"></script>
   <script src="/js/sales-call.js"></script>
 </body>
 </html>
