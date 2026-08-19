@@ -5,15 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Skill Tree — Sales Camp Games</title>
   <link rel="stylesheet" href="/css/style.css" />
+  <script src="/js/theme.js"></script>
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
     /* ------------------------------------------------------------------ */
-    /* Skill Tree layout                                                    */
+    /* Skill Tree — angular "Crimson Ops" game map                          */
     /* ------------------------------------------------------------------ */
 
-    /* The shell only needs to wrap the header here; without this override the
-       global min-height:100vh leaves a full empty screen above the trees. */
     .shell { min-height: auto; }
 
     .skill-map-wrap {
@@ -23,61 +22,147 @@
       min-height: 0;
     }
 
-    /* Tree heading labels drawn in the SVG */
+    /* Discipline heading labels drawn in the SVG */
     .tree-title {
       font-family: var(--font-heading);
-      font-weight: 700;
+      font-weight: 800;
       text-anchor: middle;
       pointer-events: none;
+      fill: var(--accent);
+      letter-spacing: 0.02em;
     }
     .tree-title-sub {
       font-family: "DM Mono", monospace;
       text-anchor: middle;
       pointer-events: none;
+      fill: var(--text-2);
+      letter-spacing: 0.18em;
     }
 
+    /* --- Controls bar --- */
     .map-controls {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       flex-wrap: wrap;
       padding: 16px 0;
       border-bottom: 1px solid var(--panel-border);
-      margin-bottom: 0;
     }
 
     .filter-btn {
       font-family: var(--font-mono);
-      font-size: 11px;
+      font-size: 10.5px;
       letter-spacing: 0.12em;
       text-transform: uppercase;
       padding: 6px 12px;
       border: 1px solid var(--panel-border);
-      background: var(--bg-1);
+      background: var(--panel);
       color: var(--text-1);
       cursor: pointer;
-      transition: background 180ms, border-color 180ms, color 180ms;
+      transition: background var(--transition), border-color var(--transition), color var(--transition);
     }
-
+    .filter-btn:hover { color: var(--text-0); border-color: var(--panel-border-hover); }
     .filter-btn.active {
-      background: var(--cat-color, var(--accent));
-      border-color: var(--cat-color, var(--accent));
-      color: var(--bg-0);
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--on-accent);
+      clip-path: var(--clip-cut);
+      box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 30%, transparent);
     }
 
     .map-search {
       margin-left: auto;
-      background: var(--bg-1);
+      background: var(--panel);
       border: 1px solid var(--panel-border);
       color: var(--text-0);
       font-family: var(--font-mono);
       font-size: 13px;
-      padding: 6px 14px;
+      padding: 7px 14px;
       width: 200px;
-      transition: border-color 180ms;
+      transition: border-color var(--transition);
     }
     .map-search:focus { outline: none; border-color: var(--accent); }
     .map-search::placeholder { color: var(--text-2); }
+
+    /* --- Legend --- */
+    .map-legend {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+      padding: 12px 0;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-2);
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; }
+    .legend-node {
+      width: 16px; height: 16px;
+      clip-path: polygon(0 0, 100% 0, 100% 100%, 5px 100%, 0 calc(100% - 5px));
+      flex-shrink: 0;
+    }
+    .legend-node.acquired { background: var(--accent); box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent); }
+    .legend-node.next     { background: color-mix(in srgb, var(--accent-2) 20%, var(--panel)); border: 1.5px solid var(--accent-2); }
+    .legend-node.locked   { background: var(--panel-2); border: 1.5px dashed var(--panel-border-2); }
+
+    /* --- Remembered calls strip --- */
+    .calls-strip {
+      display: flex;
+      align-items: stretch;
+      gap: 10px;
+      padding: 4px 0 14px;
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+    .calls-strip-empty {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-2);
+      padding: 14px 16px;
+      border: 1px dashed var(--panel-border);
+      flex: 1;
+    }
+    .calls-strip-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-2);
+      align-self: center;
+      white-space: nowrap;
+      padding-right: 4px;
+    }
+    .call-chip {
+      flex-shrink: 0;
+      min-width: 180px;
+      max-width: 240px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-top: 2px solid var(--accent);
+      padding: 11px 13px;
+      cursor: pointer;
+      clip-path: var(--clip-cut);
+      transition: border-color var(--transition), background var(--transition);
+    }
+    .call-chip:hover, .call-chip.active { border-color: var(--panel-border-hover); background: var(--bg-2); }
+    .call-chip-top {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      margin-bottom: 6px;
+    }
+    .call-chip-mode {
+      font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--accent);
+    }
+    .call-chip-outcome {
+      font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-2);
+    }
+    .call-chip-outcome.win { color: var(--good); }
+    .call-chip-title { font-family: var(--font-heading); font-weight: 700; font-size: 13px; line-height: 1.25; color: var(--text-0); }
+    .call-chip-meta  { font-family: var(--font-mono); font-size: 10px; color: var(--text-2); margin-top: 4px; }
+    .call-chip-skills { font-family: var(--font-mono); font-size: 9.5px; color: var(--accent-2); margin-top: 6px; }
 
     .map-body {
       display: flex;
@@ -89,11 +174,14 @@
     #map-svg-wrap {
       flex: 1;
       min-height: 0;
-      height: calc(100vh - 260px);
-      min-height: 520px;
+      height: calc(100vh - 300px);
+      min-height: 480px;
       position: relative;
       overflow: hidden;
-      background: var(--bg-0);
+      background:
+        radial-gradient(circle at 50% 108%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%),
+        var(--bg-0);
+      border: 1px solid var(--panel-border);
     }
 
     #map-svg {
@@ -103,124 +191,110 @@
     }
     #map-svg:active { cursor: grabbing; }
 
-    /* Tooltip */
-    #map-tooltip {
-      position: absolute;
+    /* --- Node states (fills via CSS vars so they ride the hue flow) --- */
+    .node-group { cursor: pointer; transition: opacity 200ms; }
+    .node-shape { transition: fill 200ms, stroke 200ms; }
+    .node-glyph {
       pointer-events: none;
-      background: var(--bg-2);
-      border: 1px solid var(--panel-border);
-      padding: 10px 14px;
-      max-width: 220px;
-      z-index: 20;
-      display: none;
-    }
-    #map-tooltip .tt-label {
-      font-family: var(--font-heading);
-      font-weight: 700;
-      font-size: 14px;
-      margin-bottom: 4px;
-    }
-    #map-tooltip .tt-desc {
-      font-size: 12px;
-      color: var(--text-1);
-      line-height: 1.5;
-    }
-
-    /* Side panel */
-    #side-panel {
-      width: 0;
-      overflow: hidden;
-      transition: width 240ms ease;
-      background: var(--bg-1);
-      border-left: 1px solid var(--panel-border);
-      display: flex;
-      flex-direction: column;
-    }
-    #side-panel.open {
-      width: 340px;
-    }
-    .side-panel-inner {
-      padding: 24px;
-      overflow-y: auto;
-      flex: 1;
-      width: 340px;
-      position: relative;
-    }
-    .side-panel-inner h2 {
-      font-family: var(--font-heading);
-      font-size: 20px;
-      font-weight: 700;
-      margin: 0 0 6px;
-      line-height: 1.2;
-    }
-    .side-cat-badge {
-      display: inline-block;
-      font-family: var(--font-mono);
-      font-size: 10px;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      padding: 3px 10px;
-      border: 1px solid;
-      margin-bottom: 14px;
-    }
-    .side-desc {
-      font-size: 14px;
-      color: var(--text-1);
-      line-height: 1.65;
-      margin-bottom: 18px;
-    }
-    .side-scripts-label {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--text-2);
-      margin-bottom: 10px;
-    }
-    .side-scripts ul {
-      margin: 0;
-      padding-left: 18px;
-      color: var(--text-1);
-      font-size: 13.5px;
-      line-height: 1.75;
-    }
-    .side-close {
-      position: absolute;
-      top: 16px;
-      right: 16px;
-      background: none;
-      border: 1px solid var(--panel-border);
-      color: var(--text-2);
-      font-size: 16px;
-      width: 28px;
-      height: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: color 180ms, border-color 180ms;
-    }
-    .side-close:hover { color: var(--text-0); border-color: var(--text-1); }
-
-    /* D3 SVG styles */
-    .node-circle {
-      cursor: pointer;
-      transition: opacity 200ms;
+      text-anchor: middle;
+      dominant-baseline: central;
+      font-family: "DM Mono", monospace;
+      font-weight: 600;
     }
     .node-label {
       pointer-events: none;
       font-family: "DM Mono", monospace;
       dominant-baseline: central;
       text-anchor: middle;
+      fill: var(--text-1);
     }
-    .edge {
-      transition: opacity 200ms;
+
+    /* Locked */
+    .state-locked  .node-shape { fill: var(--panel-2); stroke: var(--panel-border-2); stroke-width: 1.5; stroke-dasharray: 3 4; }
+    .state-locked  .node-glyph { fill: var(--text-2); }
+    .state-locked  .node-label { fill: var(--text-2); }
+
+    /* Next (unlockable frontier) — amber */
+    .state-next .node-shape { fill: color-mix(in srgb, var(--accent-2) 16%, var(--panel)); stroke: var(--accent-2); stroke-width: 2; }
+    .state-next .node-glyph { fill: var(--accent-2); }
+    .state-next .node-label { fill: var(--text-0); }
+    .state-next.tier-1 .node-shape,
+    .state-next.tier-2 .node-shape { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent-2) 55%, transparent)); }
+
+    /* Acquired — accent */
+    .state-acquired .node-shape { fill: color-mix(in srgb, var(--accent) 20%, var(--panel)); stroke: var(--accent); stroke-width: 2; }
+    .state-acquired .node-glyph { fill: var(--accent); }
+    .state-acquired .node-label { fill: var(--text-0); }
+    .state-acquired.tier-1 .node-shape { fill: var(--accent); }
+    .state-acquired.tier-1 .node-glyph { fill: var(--on-accent); }
+    .state-acquired.tier-1 .node-shape,
+    .state-acquired.tier-2 .node-shape { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 60%, transparent)); }
+
+    /* Highlighted (from a remembered call) */
+    .node-group.call-hit .node-shape { stroke: var(--accent-2); stroke-width: 3; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent-2) 70%, transparent)); }
+
+    /* Links */
+    .edge { transition: opacity 200ms, stroke 200ms; }
+    .branch-edge.to-acquired { stroke: var(--accent);   stroke-width: 2;   stroke-opacity: 0.75; }
+    .branch-edge.to-next     { stroke: var(--accent-2); stroke-width: 2;   stroke-opacity: 0.6;  }
+    .branch-edge.to-locked   { stroke: var(--panel-border-2); stroke-width: 1.5; stroke-opacity: 0.5; stroke-dasharray: 3 5; }
+    .cross-edge { stroke: var(--panel-border-2); stroke-width: 0.9; stroke-opacity: 0.28; stroke-dasharray: 4 4; }
+
+    /* Tooltip */
+    #map-tooltip {
+      position: absolute;
+      pointer-events: none;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-top: 2px solid var(--accent);
+      padding: 10px 14px;
+      max-width: 240px;
+      z-index: 20;
+      display: none;
+      clip-path: var(--clip-cut);
     }
+    #map-tooltip .tt-label { font-family: var(--font-heading); font-weight: 700; font-size: 14px; margin-bottom: 4px; color: var(--text-0); }
+    #map-tooltip .tt-state { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 6px; }
+    #map-tooltip .tt-desc  { font-size: 12px; color: var(--text-1); line-height: 1.5; }
+
+    /* Side panel */
+    #side-panel {
+      width: 0;
+      overflow: hidden;
+      transition: width 240ms ease;
+      background: var(--panel);
+      border-left: 1px solid var(--panel-border);
+      display: flex;
+      flex-direction: column;
+    }
+    #side-panel.open { width: 340px; }
+    .side-panel-inner { padding: 24px; overflow-y: auto; flex: 1; width: 340px; position: relative; }
+    .side-panel-inner h2 { font-family: var(--font-heading); font-size: 20px; font-weight: 800; margin: 0 0 6px; line-height: 1.2; }
+    .side-cat-badge {
+      display: inline-block; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em;
+      text-transform: uppercase; padding: 3px 10px; border: 1px solid var(--accent); color: var(--accent); margin-bottom: 6px;
+    }
+    .side-state-badge {
+      display: inline-block; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+      padding: 3px 9px; margin: 0 0 14px 8px;
+    }
+    .side-state-badge.state-acquired { background: var(--accent); color: var(--on-accent); }
+    .side-state-badge.state-next     { border: 1px solid var(--accent-2); color: var(--accent-2); }
+    .side-state-badge.state-locked   { border: 1px dashed var(--panel-border-2); color: var(--text-2); }
+    .side-desc { font-size: 14px; color: var(--text-1); line-height: 1.65; margin-bottom: 18px; }
+    .side-scripts-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-2); margin-bottom: 10px; }
+    .side-scripts ul { margin: 0; padding-left: 18px; color: var(--text-1); font-size: 13.5px; line-height: 1.75; }
+    .side-close {
+      position: absolute; top: 16px; right: 16px; background: none; border: 1px solid var(--panel-border);
+      color: var(--text-2); font-size: 16px; width: 28px; height: 28px; display: flex; align-items: center;
+      justify-content: center; cursor: pointer; transition: color var(--transition), border-color var(--transition);
+    }
+    .side-close:hover { color: var(--text-0); border-color: var(--text-1); }
 
     @media (max-width: 640px) {
       #side-panel.open { width: 100%; }
       .side-panel-inner { width: 100%; }
-      .map-search { width: 120px; }
+      .map-search { width: 120px; margin-left: 0; }
     }
   </style>
 </head>
@@ -241,25 +315,36 @@
     </div>
 
     <div class="page-header" style="margin-bottom:0;">
-      <div class="mode-tag">Reference · Skill Trees</div>
+      <div class="mode-tag">Reference · Skill Tree</div>
       <h1>Skill Tree</h1>
-      <p>Every concept from your notes, grown into branching skill trees. Skills unlock as you train across the modes.</p>
+      <p>Every concept from your notes, grown into branching skill trees. Skills light up as your calls touch them — the more you train, the more of the tree you own.</p>
     </div>
   </div>
 
   <div class="skill-map-wrap" style="padding: 0 24px;">
     <div class="map-controls">
-      <button class="filter-btn active" data-cat="ALL" style="--cat-color:#e8ff47;">All</button>
-      <button class="filter-btn" data-cat="A" style="--cat-color:#2dd4bf;">Call Flow</button>
-      <button class="filter-btn" data-cat="B" style="--cat-color:#fb923c;">Discovery</button>
-      <button class="filter-btn" data-cat="C" style="--cat-color:#4ade80;">Beliefs</button>
-      <button class="filter-btn" data-cat="D" style="--cat-color:#f87171;">Objections</button>
-      <button class="filter-btn" data-cat="E" style="--cat-color:#e879f9;">Identity</button>
-      <button class="filter-btn" data-cat="F" style="--cat-color:#a78bfa;">Language</button>
-      <button class="filter-btn" data-cat="G" style="--cat-color:#fbbf24;">Tonality</button>
-      <button class="filter-btn" data-cat="H" style="--cat-color:#64748b;">Fundamentals</button>
-      <button class="filter-btn" data-cat="I" style="--cat-color:#38bdf8;">Remote</button>
+      <button class="filter-btn active" data-cat="ALL">All</button>
+      <button class="filter-btn" data-cat="A">Call Flow</button>
+      <button class="filter-btn" data-cat="B">Discovery</button>
+      <button class="filter-btn" data-cat="C">Beliefs</button>
+      <button class="filter-btn" data-cat="D">Objections</button>
+      <button class="filter-btn" data-cat="E">Identity</button>
+      <button class="filter-btn" data-cat="F">Language</button>
+      <button class="filter-btn" data-cat="H">Fundamentals</button>
+      <button class="filter-btn" data-cat="I">Remote</button>
       <input class="map-search" id="map-search" type="text" placeholder="Search nodes..." />
+    </div>
+
+    <div class="map-legend">
+      <div class="legend-item"><span class="legend-node acquired"></span> Acquired</div>
+      <div class="legend-item"><span class="legend-node next"></span> Next up</div>
+      <div class="legend-item"><span class="legend-node locked"></span> Locked</div>
+      <div class="legend-item" style="margin-left:auto;color:var(--text-2)">Scroll to zoom · drag to pan</div>
+    </div>
+
+    <div class="calls-strip" id="calls-strip">
+      <span class="calls-strip-label">Remembered<br>calls</span>
+      <div class="calls-strip-empty" id="calls-empty">Your calls appear here after you run them — each one lights up the skills it touched, even if you skip the review.</div>
     </div>
 
     <div class="map-body">
@@ -267,6 +352,7 @@
         <svg id="map-svg"></svg>
         <div id="map-tooltip">
           <div class="tt-label" id="tt-label"></div>
+          <div class="tt-state" id="tt-state"></div>
           <div class="tt-desc" id="tt-desc"></div>
         </div>
       </div>
@@ -275,7 +361,10 @@
         <div class="side-panel-inner" id="side-content">
           <button class="side-close" id="side-close-btn" title="Close">✕</button>
           <h2 id="sp-title"></h2>
-          <div class="side-cat-badge" id="sp-badge"></div>
+          <div>
+            <span class="side-cat-badge" id="sp-badge"></span>
+            <span class="side-state-badge" id="sp-state"></span>
+          </div>
           <p class="side-desc" id="sp-desc"></p>
           <div class="side-scripts" id="sp-scripts"></div>
         </div>

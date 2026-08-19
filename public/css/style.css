@@ -4,25 +4,53 @@
 
 @import url("https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap");
 
+/* --------------------------------------------------------------------- */
+/* Theme — "Crimson Ops". Default = dark FLOW (accents animate            */
+/* red -> pink -> purple -> blue). data-theme="light" = STILL crimson.   */
+/* The accent is a registered custom property so it can interpolate;      */
+/* every *-dim / glow derives from it with color-mix, so the whole app    */
+/* shifts hue together while text stays put.                              */
+/* --------------------------------------------------------------------- */
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ff5a2e;
+}
+
+@keyframes accent-flow {
+  0%   { --accent: #ff5a2e; }  /* crimson-orange */
+  22%  { --accent: #ff3d6b; }  /* hot pink-red   */
+  46%  { --accent: #c24bff; }  /* violet         */
+  70%  { --accent: #5a7bff; }  /* electric blue  */
+  100% { --accent: #ff5a2e; }
+}
+
 :root {
-  --bg-0: #0a0a0a;
-  --bg-1: #111111;
-  --bg-2: #1a1a1a;
-  --panel: #111111;
-  --panel-border: #222222;
+  color-scheme: dark;
+
+  --bg-0: #0a0605;
+  --bg-1: #140d0a;
+  --bg-2: #1c120e;
+  --panel: #140d0a;
+  --panel-2: #100907;
+  --panel-border: #241713;
+  --panel-border-2: #3a2a24;
   --panel-border-hover: var(--accent);
 
-  --text-0: #f0f0f0;
-  --text-1: #999999;
-  --text-2: #666666;
+  --text-0: #f2ece9;
+  --text-1: #9a857e;
+  --text-2: #6b5750;
 
-  --accent: #e8ff47;
-  --accent-dim: rgba(232, 255, 71, 0.08);
-  --accent-2: #ff4747;
-  --accent-2-dim: rgba(255, 71, 71, 0.08);
-  --warn: #ffae47;
-  --bad: #ff4747;
-  --good: #47ffaa;
+  --accent: #ff5a2e;
+  --accent-2: #ffb85a;                                          /* amber, static "NOW / next" */
+  --on-accent: #0a0605;                                         /* text on a solid accent fill */
+  --accent-dim:   color-mix(in srgb, var(--accent) 10%, transparent);
+  --accent-soft:  color-mix(in srgb, var(--accent) 16%, transparent);
+  --accent-2-dim: color-mix(in srgb, var(--accent-2) 12%, transparent);
+
+  --warn: #ffb85a;
+  --bad:  #ff5a4e;
+  --good: #5fd08a;
 
   --radius: 0px;
   --radius-sm: 0px;
@@ -32,6 +60,50 @@
   --font-body: "DM Mono", monospace;
 
   --transition: 180ms ease;
+
+  /* angular cut-corner shared by cards, buttons and skill nodes */
+  --cut: 10px;
+  --clip-cut: polygon(0 0, 100% 0, 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+
+  /* the live hue flow (disabled in light / reduced-motion) */
+  animation: accent-flow 24s ease-in-out infinite;
+}
+
+/* Light "still" mode — warm paper, static crimson accent */
+:root[data-theme="light"] {
+  color-scheme: light;
+  animation: none;
+
+  --bg-0: #fbf6f3;
+  --bg-1: #ffffff;
+  --bg-2: #f3ebe6;
+  --panel: #ffffff;
+  --panel-2: #fbf6f3;
+  --panel-border: #ece1db;
+  --panel-border-2: #dcccc3;
+
+  --text-0: #1a1210;
+  --text-1: #8a746a;
+  --text-2: #a3897d;
+
+  --accent: #ff5a2e;
+  --accent-2: #e8912e;
+  --on-accent: #ffffff;
+
+  --bad:  #e5482f;
+  --good: #3f9d68;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { animation: none; }
+}
+
+/* During a theme swap, kill transitions for one frame so var()-derived
+   colours snap cleanly instead of sticking (a Chrome transition quirk). */
+:root.theme-switching *,
+:root.theme-switching *::before,
+:root.theme-switching *::after {
+  transition: none !important;
 }
 
 * {
@@ -64,13 +136,15 @@ body {
   overflow: hidden;
 }
 
+/* Warm accent glows — follow the live hue flow via var(--accent) */
 .bg-canvas::before {
   content: "";
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 15% 10%, rgba(232, 255, 71, 0.05), transparent 40%),
-    radial-gradient(circle at 85% 85%, rgba(255, 71, 71, 0.04), transparent 45%);
+    radial-gradient(circle at 12% 6%,  color-mix(in srgb, var(--accent) 9%, transparent), transparent 42%),
+    radial-gradient(circle at 88% 92%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 46%),
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 55%);
 }
 
 .bg-canvas::after {
@@ -78,11 +152,24 @@ body {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--text-0) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--text-0) 4%, transparent) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
 }
+
+/* Shared game motion — used by nodes, live dots, flowing accents */
+@keyframes scanpulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+@keyframes ringspin  { to { transform: rotate(360deg); } }
+@keyframes node-glow {
+  0%, 100% { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 55%, transparent)); }
+  50%      { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 80%, transparent)); }
+}
+
+/* .bg-canvas is the visible backdrop — fade IT between themes (transitioning
+   a var()-derived `background` on <body> itself sticks in Chrome). */
+.bg-canvas { transition: background 400ms ease; }
+body { transition: color 400ms ease; }
 
 /* ---------------------------------------------------------------------- */
 /* Layout shell                                                            */
@@ -116,7 +203,7 @@ body {
   width: 34px;
   height: 34px;
   background: var(--accent);
-  color: var(--bg-0);
+  color: var(--on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -682,7 +769,7 @@ body {
 
 .btn-primary {
   background: var(--accent);
-  color: var(--bg-0);
+  color: var(--on-accent);
 }
 
 .btn-primary:hover {
@@ -1118,7 +1205,7 @@ input.custom-input:focus {
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 15px;
-  color: var(--bg-0);
+  color: var(--on-accent);
   flex-shrink: 0;
 }
 
@@ -1525,9 +1612,9 @@ input.custom-input:focus {
   color: var(--text-1);
 }
 
-.difficulty-badge[data-difficulty="1"] { border-color: #47ffaa; color: #47ffaa; }
-.difficulty-badge[data-difficulty="2"] { border-color: #e8ff47; color: #e8ff47; }
-.difficulty-badge[data-difficulty="3"] { border-color: #ff4747; color: #ff4747; }
+.difficulty-badge[data-difficulty="1"] { border-color: var(--good);     color: var(--good); }
+.difficulty-badge[data-difficulty="2"] { border-color: var(--accent-2); color: var(--accent-2); }
+.difficulty-badge[data-difficulty="3"] { border-color: var(--bad);      color: var(--bad); }
 
 .objection-card-text {
   flex: 1;
@@ -1682,7 +1769,7 @@ input.custom-input:focus {
   height: 32px;
   border-radius: 50%;
   background: var(--accent);
-  color: var(--bg-0);
+  color: var(--on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1840,7 +1927,7 @@ input.custom-input:focus {
   height: 36px;
   border-radius: 50%;
   background: var(--accent);
-  color: var(--bg-0);
+  color: var(--on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2068,7 +2155,7 @@ input.custom-input:focus {
   left: 50%;
   transform: translateX(-50%);
   background: var(--accent);
-  color: var(--bg-0);
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 700;
   font-family: var(--font-mono);
@@ -2271,7 +2358,7 @@ input.custom-input:focus {
   left: 50%;
   transform: translateX(-50%);
   background: var(--accent);
-  color: var(--bg-0);
+  color: var(--on-accent);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -2336,7 +2423,7 @@ input.custom-input:focus {
   left: 50%;
   transform: translateX(-50%);
   background: var(--good);
-  color: var(--bg-0);
+  color: var(--on-accent);
   font-size: 13px;
   font-weight: 600;
   padding: 12px 24px;
@@ -2491,7 +2578,7 @@ input.custom-input:focus {
   transition: border-color var(--transition), color var(--transition);
 }
 .lesson-filter:hover { color: var(--text-0); }
-.lesson-filter.selected { color: var(--bg, #0a0a0a); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.lesson-filter.selected { color: var(--on-accent); background: var(--accent); border-color: var(--accent); font-weight: 600; }
 
 .lesson-persona-filter {
   background: var(--panel);
@@ -2563,3 +2650,94 @@ input.custom-input:focus {
 
 .lesson-content { font-size: 15.5px; line-height: 1.6; color: var(--text-0); font-weight: 500; }
 .lesson-headline { font-size: 12.5px; color: var(--text-2); margin-top: 8px; font-style: italic; }
+
+/* ====================================================================== */
+/* Crimson Ops — angular game skin (applies over the components above)     */
+/* ====================================================================== */
+
+/* Theme toggle (Flow / Still) — injected into every topbar by theme.js */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-1);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+  clip-path: var(--clip-cut);
+}
+.theme-toggle:hover { color: var(--text-0); border-color: var(--panel-border-hover); }
+.theme-toggle .tt-dot {
+  width: 8px; height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 75%, transparent);
+}
+:root[data-theme="light"] .theme-toggle .tt-dot { box-shadow: none; }
+.theme-toggle .tt-label::after { content: "FLOW"; }
+:root[data-theme="light"] .theme-toggle .tt-label::after { content: "STILL"; }
+
+/* Live status dot pulse (call bar, "session ready") */
+.live-dot,
+.status-dot-live { animation: scanpulse 1.4s ease-in-out infinite; }
+
+/* Angular primary buttons with a hue-flow glow */
+.btn-primary {
+  clip-path: var(--clip-cut);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  transition: transform var(--transition), filter var(--transition), box-shadow var(--transition);
+}
+.btn-primary:hover { box-shadow: 0 6px 22px color-mix(in srgb, var(--accent) 34%, transparent); }
+
+/* Mode cards — persistent angular cut + always-on top accent bar */
+.mode-card { clip-path: var(--clip-cut); }
+.mode-card::before { transform: scaleX(1); opacity: 0.5; height: 3px; }
+.mode-card:hover::before { opacity: 1; }
+.mode-card.flagship::before { opacity: 0.85; }
+.mode-card.accent-red    { --card-accent: var(--accent);   }   /* flagship rides the hue flow */
+.mode-card.accent-yellow { --card-accent: var(--accent-2); }
+.mode-card.accent-purple { --card-accent: #b47fff; }
+
+/* Panels can opt into an angular cut + accent edge via .panel-accent */
+.panel-accent {
+  clip-path: var(--clip-cut);
+  border-top: 3px solid var(--accent);
+}
+
+/* Selected scenario / choice buttons get the accent cut too */
+.scenario-btn.selected,
+.mode-choice-btn.selected { clip-path: var(--clip-cut); }
+
+/* Home status row — reference "● Session Ready" arcade motif */
+.home-topbar { justify-content: space-between; }
+.home-topbar-right { display: flex; align-items: center; gap: 12px; }
+.home-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.home-status .status-dot-live {
+  width: 7px; height: 7px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+/* Ghost button — quiet "End without review" action */
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--text-2);
+}
+.btn-ghost:hover { color: var(--text-0); border-color: var(--panel-border-2); }

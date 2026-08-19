@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sales Camp Games</title>
   <link rel="stylesheet" href="/css/style.css" />
+  <script src="/js/theme.js"></script>
   <script src="https://accounts.google.com/gsi/client" async></script>
 </head>
 <body>
@@ -12,7 +13,10 @@
 
   <div class="shell">
     <div class="home-topbar">
-      <div id="auth-widget"></div>
+      <div class="home-status"><span class="status-dot-live"></span> Session Ready</div>
+      <div class="home-topbar-right" id="theme-toggle-slot">
+        <div id="auth-widget"></div>
+      </div>
     </div>
 
     <!-- Progress is the main focus, centered at the top -->

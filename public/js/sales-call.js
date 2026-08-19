@@ -50,6 +50,7 @@
     sendBtn:     document.getElementById("send-btn"),
     callStatus:  document.getElementById("call-status"),
     endCallBtn:  document.getElementById("end-call-btn"),
+    quitCallBtn: document.getElementById("quit-call-btn"),
     summaryPanel:document.getElementById("summary-panel"),
   };
 
@@ -329,6 +330,11 @@
       els.endCallBtn.style.display   = "inline-flex";
       els.endCallBtn.disabled        = false;
       els.endCallBtn.textContent     = "Analyze call";
+      if (els.quitCallBtn) {
+        els.quitCallBtn.style.display = "inline-flex";
+        els.quitCallBtn.disabled      = false;
+        els.quitCallBtn.textContent   = "End — no review";
+      }
       els.chatInput.disabled         = false;
       els.sendBtn.disabled           = false;
       els.callStatus.textContent     = "";
@@ -512,6 +518,73 @@
     } finally {
       busy = false;
     }
+  }
+
+  // --- End without a review: quit and move on, no debrief, minimal tokens ---
+
+  els.quitCallBtn.addEventListener("click", quitCall);
+
+  async function quitCall() {
+    if (busy || analyzed) return;
+    busy = true;
+    analyzed = true;                       // lock the call from further input
+    els.quitCallBtn.disabled   = true;
+    els.endCallBtn.disabled    = true;
+    els.quitCallBtn.textContent = "Ending...";
+    els.chatInput.disabled     = true;
+    els.sendBtn.disabled       = true;
+    els.callStatus.classList.remove("call-status-warn");
+    els.callStatus.textContent = "Wrapping up (no review)...";
+
+    let touched = 0;
+    try {
+      const isSetter = callMode === "setter";
+      const endpoint = isSetter ? "/api/setter/quit" : "/api/call/quit";
+      const token = localStorage.getItem("scg_auth_token");
+      const body = isSetter
+        ? {
+            offer:             selectedOffer,
+            customDescription: selectedOffer === "Custom Offer" ? els.setterCustomInput.value.trim() : "",
+            prospect, history, personality: activePersona,
+          }
+        : { scenario: selectedScenario, prospect, history, section: selectedSection, personality: activePersona };
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        touched = (data.discovered_skills || []).length;
+      }
+    } catch { /* still show the ended card */ }
+    finally {
+      busy = false;
+      renderQuitCard(touched);
+    }
+  }
+
+  function renderQuitCard(touched) {
+    const skillLine = touched
+      ? `The ${touched} skill${touched === 1 ? "" : "s"} you touched ${touched === 1 ? "was" : "were"} saved to your Skill Tree.`
+      : "It's saved to your Skill Tree.";
+    els.summaryPanel.innerHTML = `
+      <div class="panel summary-card panel-accent">
+        <div class="panel-label">// Call ended - no review</div>
+        <p class="summary-headline-p">You ended the call without a debrief. ${esc(skillLine)} No tokens spent on a review.</p>
+        <div class="actions-row">
+          <a class="objection-context" href="/pages/skill-map.html" style="text-decoration:underline;color:var(--text-1);">View your Skill Tree →</a>
+          <button class="btn btn-primary" id="new-call-btn">Run another call</button>
+        </div>
+      </div>`;
+    els.summaryPanel.style.display = "block";
+    els.chatInputRow.style.display = "none";
+    els.endCallBtn.style.display   = "none";
+    els.quitCallBtn.style.display  = "none";
+    els.callStatus.textContent     = "";
+    const newBtn = document.getElementById("new-call-btn");
+    if (newBtn) newBtn.addEventListener("click", resetAll);
+    els.summaryPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   // Paint each tagged salesperson line with a green/amber/red highlight + note.

@@ -79,6 +79,19 @@ if (process.env.DATABASE_URL) {
       pinned BOOLEAN DEFAULT FALSE,
       created_at BIGINT
     );
+    CREATE TABLE IF NOT EXISTS call_history (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT,
+      mode TEXT,
+      label TEXT,
+      persona TEXT,
+      section TEXT,
+      outcome TEXT,
+      skills TEXT,
+      transcript TEXT,
+      reviewed BOOLEAN DEFAULT FALSE,
+      created_at BIGINT
+    );
   `).catch((e) => console.error("DB init error:", e.message));
   db.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'free';
@@ -163,6 +176,48 @@ async function saveLesson(userId, { content, headline, source, persona, callScor
     [userId, content, headline || null, source || null, persona || null,
      Number.isFinite(callScore) ? callScore : null, Date.now()]
   ).catch(e => console.error("saveLesson error:", e.message));
+}
+
+// Persist a compact record of a call so the Skill Tree can "remember" it.
+// The transcript is capped and the skill list is short on purpose: this
+// memory only exists to fill out the tree, it is never fed back to the AI.
+async function saveCallHistory(userId, { mode, label, persona, section, outcome, skills, transcript, reviewed }) {
+  if (!db || !userId) return;
+  const skillsJson = JSON.stringify(Array.isArray(skills) ? skills.slice(0, 12) : []);
+  const compact = typeof transcript === "string" ? transcript.slice(0, 4000) : null;
+  await db.query(
+    `INSERT INTO call_history (user_id, mode, label, persona, section, outcome, skills, transcript, reviewed, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [userId, mode || null, label || null, persona || null, section || null,
+     outcome || null, skillsJson, compact, !!reviewed, Date.now()]
+  ).catch(e => console.error("saveCallHistory error:", e.message));
+}
+
+// Minimal, cheap skill-tagging for calls ended WITHOUT a full review. One
+// small Haiku pass that returns only the skill IDs the trainee touched, so
+// the tree still fills out without spending tokens on a debrief.
+async function discoverSkillsFromTranscript(historyText, roleLabel) {
+  if (!anthropic) return [];
+  try {
+    const data = await askClaude(
+      `A ${roleLabel} sales-call roleplay was ended early with NO review requested.
+From the transcript, list ONLY the skill IDs the ${roleLabel} actually attempted or touched (even imperfectly).
+Be honest, not generous padding: usually 2 to 6 ids. No prose, no scoring.
+
+Transcript:
+${historyText}
+
+${SKILL_ID_PROMPT}
+
+Return ONLY valid JSON: { "discovered_skills": ["id1", "id2"] }`,
+      280,
+      HAIKU
+    );
+    return Array.isArray(data.discovered_skills) ? data.discovered_skills : [];
+  } catch (e) {
+    console.error("discoverSkillsFromTranscript error:", e.message);
+    return [];
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -1166,6 +1221,18 @@ Return JSON:
         callScore: summary.callScore,
       });
     }
+    if (req.userId) {
+      saveCallHistory(req.userId, {
+        mode: "Closer",
+        label: scenario,
+        persona: personality && personality.label ? personality.label : null,
+        section: section || null,
+        outcome: "Reviewed",
+        skills: summary.discovered_skills || [],
+        transcript: historyText,
+        reviewed: true,
+      });
+    }
     res.json({ ...summary, highlights });
   } catch (err) {
     console.error("call/end error:", err.stack || err.message);
@@ -1463,10 +1530,111 @@ The "structure" array MUST include one entry for every stage key: ${SETTER_STAGE
         callScore: summary.callScore,
       });
     }
+    if (req.userId) {
+      saveCallHistory(req.userId, {
+        mode: "Setter",
+        label: offerText,
+        persona: personality && personality.label ? personality.label : null,
+        section: null,
+        outcome: summary.outcome || (summary.booked ? "Booked" : "Ended"),
+        skills: summary.discovered_skills || [],
+        transcript: historyText,
+        reviewed: true,
+      });
+    }
     res.json({ ...summary, structure, highlights });
   } catch (err) {
     console.error("setter/end error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate feedback report." });
+  }
+});
+
+// ---------------------------------------------------------------------
+// End a call WITHOUT a review. Sometimes you just want to quit and move
+// on. No highlights, no debrief, no lesson - just one tiny Haiku pass to
+// tag which skills were touched, so the Skill Tree still "remembers" the
+// call and fills out. Cheap by design.
+// ---------------------------------------------------------------------
+
+app.post("/api/call/quit", optionalAuth, async (req, res) => {
+  const { scenario, prospect, history, section, personality } = req.body || {};
+  const turns = Array.isArray(history) ? history : [];
+  const historyText = turns
+    .map((m) => `${m.role === "user" ? "Salesperson" : "Prospect"}: ${m.content}`)
+    .join("\n");
+
+  // Only spend the (tiny) token budget when there's a logged-in user whose
+  // tree this can actually fill out, and a real call to read.
+  const userTurns = turns.filter((m) => m.role === "user").length;
+  const skills = (req.userId && userTurns >= 2) ? await discoverSkillsFromTranscript(historyText, "closer") : [];
+
+  if (req.userId) {
+    if (skills.length) autoUnlock(req.userId, skills);
+    saveCallHistory(req.userId, {
+      mode: "Closer",
+      label: scenario || "Sales call",
+      persona: personality && personality.label ? personality.label : null,
+      section: section || null,
+      outcome: "Ended (no review)",
+      skills,
+      transcript: historyText,
+      reviewed: false,
+    });
+  }
+  res.json({ ok: true, discovered_skills: skills });
+});
+
+app.post("/api/setter/quit", optionalAuth, async (req, res) => {
+  const { offer, customDescription, history, personality } = req.body || {};
+  const offerText = setterOfferText(offer, customDescription);
+  const turns = Array.isArray(history) ? history : [];
+  const historyText = turns
+    .map((m) => `${m.role === "user" ? "Setter" : "Lead"}: ${m.content}`)
+    .join("\n");
+
+  const userTurns = turns.filter((m) => m.role === "user").length;
+  const skills = (req.userId && userTurns >= 2) ? await discoverSkillsFromTranscript(historyText, "setter") : [];
+
+  if (req.userId) {
+    if (skills.length) autoUnlock(req.userId, skills);
+    saveCallHistory(req.userId, {
+      mode: "Setter",
+      label: offerText,
+      persona: personality && personality.label ? personality.label : null,
+      section: null,
+      outcome: "Ended (no review)",
+      skills,
+      transcript: historyText,
+      reviewed: false,
+    });
+  }
+  res.json({ ok: true, discovered_skills: skills });
+});
+
+// Recent calls the Skill Tree remembers (metadata + touched skills only).
+app.get("/api/calls/recent", authMiddleware, async (req, res) => {
+  if (!db) return res.json({ calls: [] });
+  try {
+    const result = await db.query(
+      `SELECT id, mode, label, persona, section, outcome, skills, reviewed, created_at
+         FROM call_history WHERE user_id=$1 ORDER BY created_at DESC LIMIT 12`,
+      [req.userId]
+    );
+    const calls = result.rows.map((r) => ({
+      id: r.id,
+      mode: r.mode,
+      label: r.label,
+      persona: r.persona,
+      section: r.section,
+      outcome: r.outcome,
+      reviewed: r.reviewed,
+      created_at: r.created_at,
+      skills: (() => { try { return JSON.parse(r.skills || "[]"); } catch { return []; } })(),
+    }));
+    res.json({ calls });
+  } catch (err) {
+    console.error("calls/recent error:", err.message);
+    res.json({ calls: [] });
   }
 });
 

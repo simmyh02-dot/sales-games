@@ -1,31 +1,33 @@
 (() => {
   /* ------------------------------------------------------------------ */
-  /* Category config (one discipline = one skill tree)                    */
+  /* Disciplines — one discipline = one skill tree. (Tonality removed.)   */
+  /* Colour is no longer per-category: nodes are coloured by STATE        */
+  /* (acquired / next / locked) so the whole tree rides the hue flow.     */
   /* ------------------------------------------------------------------ */
   const CATS = {
-    A: { label: "Call Flow",     color: "#2dd4bf" },
-    B: { label: "Discovery",     color: "#fb923c" },
-    C: { label: "Beliefs",       color: "#4ade80" },
-    D: { label: "Objections",    color: "#f87171" },
-    E: { label: "Identity",      color: "#e879f9" },
-    F: { label: "Language",      color: "#a78bfa" },
-    G: { label: "Tonality",      color: "#fbbf24" },
-    H: { label: "Fundamentals",  color: "#64748b" },
-    I: { label: "Remote & High-Ticket", color: "#38bdf8" },
+    A: { label: "Call Flow" },
+    B: { label: "Discovery" },
+    C: { label: "Beliefs" },
+    D: { label: "Objections" },
+    E: { label: "Identity" },
+    F: { label: "Language" },
+    H: { label: "Fundamentals" },
+    I: { label: "Remote & High-Ticket" },
   };
-  const TREE_ORDER = ["A", "B", "C", "D", "E", "F", "G", "H", "I"];
-  const TIER_R = { 1: 30, 2: 18, 3: 11 };
+  const TREE_ORDER = ["A", "B", "C", "D", "E", "F", "H", "I"];
 
+  // Node half-extent + type sizes per tier.
+  const TIER_S = { 1: 24, 2: 16, 3: 10.5 };
+
+  // Discipline roots start acquired so there's always a visible frontier.
   const PRE_UNLOCKED = new Set([
-    "tonality","t_confused","t_curious","t_concerned","t_challenging",
-    "t_playful","whatfeel","piv","tempo"
+    "spine", "discovery", "limitingbeliefs", "objections",
+    "identity", "straightline", "fundamentals", "remote",
   ]);
   let unlockedSet = new Set(PRE_UNLOCKED);
-  function isLocked(d) { return !unlockedSet.has(d.id); }
 
   /* ------------------------------------------------------------------ */
-  /* Nodes — each has a single parent within its own tree (parent:null    */
-  /* marks the tree root). Cross-tree relationships live in CROSS_LINKS.   */
+  /* Nodes — single parent within its own tree (parent:null = root).      */
   /* ------------------------------------------------------------------ */
   const NODES = [
     // A — Call Flow (root: spine)
@@ -114,23 +116,12 @@
     { id:"realurgency",  label:"Real Urgency",              cat:"E", tier:3, parent:"identitygap", desc:"A promise to themselves beats fake deadline pressure.", scripts:["'The urgency comes from the cost of staying who you are right now.'"] },
 
     // F — Language Diagnostics (root: straightline)
-    { id:"straightline", label:"The Straight Line",         cat:"F", tier:2, parent:null,           desc:"Selling is a straight line. Prospects bend off it - your job is to bend them back.", scripts:["Every answer should move them toward clarity and a decision."] },
+    { id:"straightline", label:"The Straight Line",         cat:"F", tier:1, parent:null,           desc:"Selling is a straight line. Prospects bend off it - your job is to bend them back.", scripts:["Every answer should move them toward clarity and a decision."] },
     { id:"talkmirror",   label:"Language = Self-Talk",      cat:"F", tier:2, parent:"straightline", desc:"How they talk to you mirrors how they talk to themselves.", scripts:["'They said they'll try - that's how they approach everything in life.'"] },
     { id:"l_wishful",    label:"Wishful Language",          cat:"F", tier:3, parent:"straightline", desc:"'I wish...' - call it out. Ask what they need to stop wishing.", scripts:["'You keep saying wish. What would it take to make it real?'"] },
     { id:"l_minimize",   label:"Minimizing Language",       cat:"F", tier:3, parent:"straightline", desc:"'Not that bad' - would a pro accept mediocre results anywhere else?", scripts:["'Would you settle for mediocre results anywhere else in your life?'"] },
     { id:"l_external",   label:"Victim Language",           cat:"F", tier:3, parent:"straightline", desc:"Blames outward. Find someone with the same constraints who succeeded.", scripts:["'Someone in your exact situation figured this out. What did they do differently?'"] },
     { id:"l_ambiguous",  label:"Ambiguous Language",        cat:"F", tier:3, parent:"straightline", desc:"'I think...' - repeat it back so they hear the doubt themselves.", scripts:["'You said you think you can. Do you know you can, or are you hoping?'"] },
-
-    // G — Tonality & Delivery (root: tonality)
-    { id:"tonality",     label:"Tonality",                  cat:"G", tier:2, parent:null,       desc:"Transfer emotions, not just information. Master your own state first.", scripts:["The tone you hold determines what the prospect feels - not the words."] },
-    { id:"t_confused",   label:"Confused Tone",             cat:"G", tier:3, parent:"tonality", desc:"People help the confused. They open up and explain.", scripts:["'I'm confused - help me understand...'"] },
-    { id:"t_curious",    label:"Curious Tone",              cat:"G", tier:3, parent:"tonality", desc:"Shows you want to help, not push.", scripts:["'Tell me more about that.'","Genuine curiosity = genuine trust."] },
-    { id:"t_concerned",  label:"Concerned Tone",            cat:"G", tier:3, parent:"tonality", desc:"Amplifies the pain genuinely.", scripts:["'That sounds really frustrating - how long has this been going on?'"] },
-    { id:"t_challenging",label:"Challenging Tone",          cat:"G", tier:3, parent:"tonality", desc:"Don't let them buy their limitations.", scripts:["'Is that actually true, or does it just feel true right now?'"] },
-    { id:"t_playful",    label:"Playful Tone",              cat:"G", tier:3, parent:"tonality", desc:"Defuses tension, gets them honest early.", scripts:["Playful early = trust fast.","Smile in your voice when the stakes are low."] },
-    { id:"whatfeel",     label:"What To Feel?",             cat:"G", tier:3, parent:"tonality", desc:"Choose the emotion before you choose the words.", scripts:["Before each question: what state do I want them in?"] },
-    { id:"piv",          label:"Perception-Intention-Value",cat:"G", tier:2, parent:"tonality", desc:"Three steps so they actually receive what you're saying.", scripts:["Perception: how you come across. Intention: what you want. Value: what they get."] },
-    { id:"tempo",        label:"Tempo & Timing",            cat:"G", tier:3, parent:"tonality", desc:"Medium tempo so you can emphasize. Slow down on important lines.", scripts:["Pause after the key line. Let it land."] },
 
     // H — Fundamentals (root: fundamentals)
     { id:"fundamentals", label:"Fundamentals",              cat:"H", tier:1, parent:null,           desc:"The anchors the whole call rests on: authority, funnel, their words, your identity.", scripts:["Get the basics right and everything else lands harder."] },
@@ -157,7 +148,6 @@
     ["proactive","prehandle_q"], ["feelfeltfound","cdr"], ["rootcauses","o_money"],
     ["framecontrol","setframe"], ["remoteopen","opening"], ["derisk","o_money"],
     ["talklisten","situation"], ["openq","probingladder"],
-    ["tonality","opening"], ["tonality","problem"], ["tonality","objections"],
     ["authority","spine"], ["funnel","spine"], ["theirwords","spine"],
   ];
 
@@ -165,14 +155,25 @@
   NODES.forEach(n => { nodeById[n.id] = n; });
 
   /* ------------------------------------------------------------------ */
-  /* Layout — one top-down tree per category, packed into a grid          */
+  /* State model: acquired / next (frontier) / locked                     */
   /* ------------------------------------------------------------------ */
-  const SIB_GAP   = 108;  // horizontal spacing between sibling nodes
-  const LEVEL_GAP = 100;  // vertical spacing between tree depths
-  const COLS      = 3;    // trees per row
-  const COL_GAP   = 64;
-  const ROW_GAP   = 96;
-  const HEADER_SPACE = 64;
+  function stateOf(d) {
+    if (unlockedSet.has(d.id)) return "acquired";
+    if (d.parent == null) return "next";            // an un-owned root is the entry point
+    if (unlockedSet.has(d.parent)) return "next";   // parent owned -> this is unlockable next
+    return "locked";
+  }
+  const STATE_LABEL = { acquired: "Acquired", next: "Next up", locked: "Locked" };
+
+  /* ------------------------------------------------------------------ */
+  /* Layout — one top-down tree per discipline, packed into a grid        */
+  /* ------------------------------------------------------------------ */
+  const SIB_GAP   = 108;
+  const LEVEL_GAP = 104;
+  const COLS      = 3;
+  const COL_GAP   = 70;
+  const ROW_GAP   = 100;
+  const HEADER_SPACE = 66;
 
   const trees = [];
   TREE_ORDER.forEach((cat) => {
@@ -194,15 +195,9 @@
       maxX = Math.max(maxX, d.x);
       maxDepth = Math.max(maxDepth, d.depth);
     });
-    trees.push({
-      cat, root, descendants,
-      width: (maxX - minX) || 1,
-      height: maxDepth * LEVEL_GAP,
-      minX,
-    });
+    trees.push({ cat, root, descendants, width: (maxX - minX) || 1, height: maxDepth * LEVEL_GAP, minX });
   });
 
-  // Grid packing: uniform column width, per-row height.
   const colWidth = Math.max(...trees.map(t => t.width)) + COL_GAP;
   const rowHeights = [];
   trees.forEach((t, i) => {
@@ -218,7 +213,7 @@
     const originX = cellX + (colWidth - t.width) / 2 - t.minX;
     const originY = rowY[row] + HEADER_SPACE;
     t.headerX = cellX + colWidth / 2;
-    t.headerY = rowY[row] + 18;
+    t.headerY = rowY[row] + 16;
     t.descendants.forEach(d => {
       const node = d.data;
       node.gx = originX + d.x;
@@ -227,9 +222,7 @@
     });
   });
 
-  /* ------------------------------------------------------------------ */
-  /* Adjacency (for hover highlight)                                      */
-  /* ------------------------------------------------------------------ */
+  /* Adjacency (for hover highlight) */
   const adjacency = {};
   function addAdj(a, b) { (adjacency[a] = adjacency[a] || new Set()).add(b); (adjacency[b] = adjacency[b] || new Set()).add(a); }
   NODES.forEach(n => { if (n.parent) addAdj(n.id, n.parent); });
@@ -247,68 +240,52 @@
   const svgEl     = document.getElementById("map-svg");
   const tooltip   = document.getElementById("map-tooltip");
   const ttLabel   = document.getElementById("tt-label");
+  const ttState   = document.getElementById("tt-state");
   const ttDesc    = document.getElementById("tt-desc");
   const sidePanel = document.getElementById("side-panel");
   const spTitle   = document.getElementById("sp-title");
   const spBadge   = document.getElementById("sp-badge");
+  const spState   = document.getElementById("sp-state");
   const spDesc    = document.getElementById("sp-desc");
   const spScripts = document.getElementById("sp-scripts");
   const closeSide = document.getElementById("side-close-btn");
+  const callsStrip= document.getElementById("calls-strip");
+  const callsEmpty= document.getElementById("calls-empty");
 
   const W = () => wrap.clientWidth;
   const H = () => wrap.clientHeight;
 
-  /* ------------------------------------------------------------------ */
-  /* SVG + zoom                                                          */
-  /* ------------------------------------------------------------------ */
+  /* SVG + zoom */
   const svg = d3.select(svgEl);
   const g   = svg.append("g");
   const zoom = d3.zoom().scaleExtent([0.12, 3.5]).on("zoom", e => g.attr("transform", e.transform));
   svg.call(zoom);
 
-  // Global bounding box of all placed nodes.
   function bbox() {
     const xs = NODES.map(n => n.gx), ys = NODES.map(n => n.gy);
     return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
   }
-
-  // Fit the trees to the width and anchor them at the top (no empty gap).
   function fitView() {
     const b = bbox();
-    const pad = 60;
+    const pad = 70;
     const contentW = (b.maxX - b.minX) + pad * 2;
     const scale = Math.min((W()) / contentW, 0.95);
     const tx = (W() - (b.maxX - b.minX) * scale) / 2 - b.minX * scale;
-    const ty = 28 - b.minY * scale;
+    const ty = 30 - b.minY * scale;
     svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
   }
 
   /* ------------------------------------------------------------------ */
-  /* Glow filters (one per category)                                     */
-  /* ------------------------------------------------------------------ */
-  const defs = svg.append("defs");
-  Object.keys(CATS).forEach((key) => {
-    const f = defs.append("filter").attr("id", `glow-${key}`)
-      .attr("x", "-60%").attr("y", "-60%").attr("width", "220%").attr("height", "220%");
-    f.append("feGaussianBlur").attr("stdDeviation", "4").attr("result", "blur");
-    const m = f.append("feMerge");
-    m.append("feMergeNode").attr("in", "blur");
-    m.append("feMergeNode").attr("in", "SourceGraphic");
-  });
-
-  /* ------------------------------------------------------------------ */
-  /* Tree headings                                                       */
+  /* Discipline headings                                                 */
   /* ------------------------------------------------------------------ */
   const headerG = g.append("g").attr("class", "tree-headers");
   trees.forEach(t => {
     const grp = headerG.append("g").attr("data-cat", t.cat);
     grp.append("text").attr("class", "tree-title")
-      .attr("x", t.headerX).attr("y", t.headerY)
-      .attr("fill", CATS[t.cat].color).attr("font-size", "17px")
+      .attr("x", t.headerX).attr("y", t.headerY).attr("font-size", "16px")
       .text(CATS[t.cat].label);
     grp.append("text").attr("class", "tree-title-sub")
-      .attr("x", t.headerX).attr("y", t.headerY + 18)
-      .attr("fill", "#666").attr("font-size", "10px").attr("letter-spacing", "0.16em")
+      .attr("x", t.headerX).attr("y", t.headerY + 17).attr("font-size", "9px")
       .text("SKILL TREE");
   });
 
@@ -324,22 +301,21 @@
   const crossSel = crossG.selectAll("line").data(crossLinks).join("line")
     .attr("class", "edge cross-edge")
     .attr("x1", e => e.source.gx).attr("y1", e => e.source.gy)
-    .attr("x2", e => e.target.gx).attr("y2", e => e.target.gy)
-    .attr("stroke", "#5a5a5a").attr("stroke-width", 0.9)
-    .attr("stroke-opacity", 0.38).attr("stroke-dasharray", "4,4");
+    .attr("x2", e => e.target.gx).attr("y2", e => e.target.gy);
 
   const branchG = g.append("g").attr("class", "branch-links");
   const branchSel = branchG.selectAll("path").data(branchLinks).join("path")
     .attr("class", "edge branch-edge")
     .attr("d", e => linkPath(e.source, e.target))
-    .attr("fill", "none")
-    .attr("stroke", e => CATS[e.target.cat].color)
-    .attr("stroke-width", 1.5)
-    .attr("stroke-opacity", 0.4);
+    .attr("fill", "none");
 
   /* ------------------------------------------------------------------ */
-  /* Nodes                                                               */
+  /* Nodes — angular cut-corner shapes coloured by state                  */
   /* ------------------------------------------------------------------ */
+  function nodePath(s) {
+    const c = Math.max(4, s * 0.42);
+    return `M ${-s} ${-s} L ${s} ${-s} L ${s} ${s} L ${-s + c} ${s} L ${-s} ${s - c} Z`;
+  }
   function wrapLabel(text) {
     if (text.length <= 15) return [text];
     const words = text.split(" ");
@@ -356,34 +332,48 @@
   const nodeSel = nodeG.selectAll("g.node-group").data(NODES).join("g")
     .attr("class", "node-group")
     .attr("data-cat", d => d.cat)
-    .attr("transform", d => `translate(${d.gx},${d.gy})`)
-    .attr("cursor", "pointer");
+    .attr("data-id", d => d.id)
+    .attr("transform", d => `translate(${d.gx},${d.gy})`);
 
-  nodeSel.append("circle")
-    .attr("class", "node-circle")
-    .attr("r", d => TIER_R[d.tier])
-    .attr("fill", d => CATS[d.cat].color)
-    .attr("fill-opacity", d => d.tier === 1 ? 0.9 : d.tier === 2 ? 0.62 : 0.42)
-    .attr("stroke", d => CATS[d.cat].color)
-    .attr("stroke-width", d => d.tier === 1 ? 2.5 : d.tier === 2 ? 1.4 : 0.8)
-    .attr("stroke-opacity", 0.9)
-    .attr("filter", d => d.tier === 1 ? `url(#glow-${d.cat})` : null);
+  nodeSel.append("path")
+    .attr("class", "node-shape")
+    .attr("d", d => nodePath(TIER_S[d.tier]));
+
+  // State glyph (✓ / 🔒), added per node in applyStates().
+  nodeSel.append("text").attr("class", "node-glyph");
 
   nodeSel.each(function (d) {
     const lines = wrapLabel(d.label);
     const fs = d.tier === 1 ? 12 : d.tier === 2 ? 10 : 8.5;
-    const startY = TIER_R[d.tier] + 12;
+    const startY = TIER_S[d.tier] + 13;
     const text = d3.select(this).append("text")
       .attr("class", "node-label")
-      .attr("fill", d.tier === 3 ? "#bbb" : "#f0f0f0")
       .attr("font-size", `${fs}px`)
       .attr("font-weight", d.tier === 1 ? "600" : "400")
-      .attr("font-family", "DM Mono, monospace")
       .attr("text-anchor", "middle");
     lines.forEach((ln, i) => {
       text.append("tspan").attr("x", 0).attr("y", startY + i * (fs + 2)).text(ln);
     });
   });
+
+  /* ------------------------------------------------------------------ */
+  /* Apply states — classes drive colour (via CSS vars = hue flow)        */
+  /* ------------------------------------------------------------------ */
+  function glyphFor(d, state) {
+    if (state === "acquired") return "✓";
+    if (state === "locked" && d.tier !== 3) return "🔒";
+    return "";
+  }
+  function glyphSize(d) {
+    return d.tier === 1 ? 15 : d.tier === 2 ? 11 : 8;
+  }
+  function applyStates() {
+    nodeSel.attr("class", d => `node-group tier-${d.tier} state-${stateOf(d)}`);
+    nodeSel.select("text.node-glyph")
+      .attr("font-size", d => `${glyphSize(d)}px`)
+      .text(d => glyphFor(d, stateOf(d)));
+    branchSel.attr("class", e => `edge branch-edge to-${stateOf(e.target)}`);
+  }
 
   /* ------------------------------------------------------------------ */
   /* Hover                                                               */
@@ -393,11 +383,14 @@
   nodeSel
     .on("mouseover", function (event, d) {
       const nb = adjacency[d.id] || new Set();
-      nodeSel.attr("opacity", n => (n.id === d.id || nb.has(n.id)) ? 1 : 0.1);
-      branchSel.attr("stroke-opacity", e => (e.source.id === d.id || e.target.id === d.id) ? 0.95 : 0.05);
-      crossSel.attr("stroke-opacity", e => (e.source.id === d.id || e.target.id === d.id) ? 0.85 : 0.05);
-      ttLabel.textContent = isLocked(d) ? `${d.label} (locked)` : d.label;
-      ttDesc.textContent  = isLocked(d) ? "Complete training sessions to unlock this skill." : d.desc;
+      nodeSel.attr("opacity", n => (n.id === d.id || nb.has(n.id)) ? 1 : 0.12);
+      branchSel.attr("opacity", e => (e.source.id === d.id || e.target.id === d.id) ? 1 : 0.08);
+      crossSel.attr("opacity", e => (e.source.id === d.id || e.target.id === d.id) ? 0.9 : 0.05);
+      const state = stateOf(d);
+      ttLabel.textContent = d.label;
+      ttState.textContent = STATE_LABEL[state];
+      ttState.style.color = state === "acquired" ? "var(--accent)" : state === "next" ? "var(--accent-2)" : "var(--text-2)";
+      ttDesc.textContent  = state === "locked" ? "Train the skills before it to unlock this one." : d.desc;
       tooltip.style.display = "block";
       moveTooltip(event);
     })
@@ -411,14 +404,13 @@
     const r = wrap.getBoundingClientRect();
     const x = event.clientX - r.left + 14;
     const y = event.clientY - r.top - 14;
-    tooltip.style.left = Math.min(x, r.width - 240) + "px";
+    tooltip.style.left = Math.min(x, r.width - 250) + "px";
     tooltip.style.top  = Math.max(y, 4) + "px";
   }
-
   function resetOpacity() {
-    nodeSel.attr("opacity", d => hiddenCats.has(d.cat) ? 0 : 1);
-    branchSel.attr("stroke-opacity", e => (hiddenCats.has(e.source.cat) || hiddenCats.has(e.target.cat)) ? 0 : 0.4);
-    crossSel.attr("stroke-opacity", e => (hiddenCats.has(e.source.cat) || hiddenCats.has(e.target.cat)) ? 0 : 0.38);
+    nodeSel.attr("opacity", d => hiddenCats.has(d.cat) ? 0.06 : 1);
+    branchSel.attr("opacity", e => (hiddenCats.has(e.source.cat) || hiddenCats.has(e.target.cat)) ? 0 : 1);
+    crossSel.attr("opacity", e => (hiddenCats.has(e.source.cat) || hiddenCats.has(e.target.cat)) ? 0 : 1);
   }
 
   /* ------------------------------------------------------------------ */
@@ -427,11 +419,11 @@
   function escHtml(str) { const d = document.createElement("div"); d.textContent = str; return d.innerHTML; }
 
   function openPanel(d) {
-    const cat = CATS[d.cat];
+    const state = stateOf(d);
     spTitle.textContent = d.label;
-    spBadge.textContent = cat.label;
-    spBadge.style.color = cat.color;
-    spBadge.style.borderColor = cat.color;
+    spBadge.textContent = CATS[d.cat].label;
+    spState.textContent = STATE_LABEL[state];
+    spState.className = `side-state-badge state-${state}`;
     spDesc.textContent = d.desc;
     if (d.scripts && d.scripts.length) {
       spScripts.innerHTML = `<div class="side-scripts-label">// Example lines</div><ul>${d.scripts.map(s => `<li>${escHtml(s)}</li>`).join("")}</ul>`;
@@ -444,7 +436,7 @@
   closeSide.addEventListener("click", e => { e.stopPropagation(); closePanel(); });
 
   /* ------------------------------------------------------------------ */
-  /* Category filters                                                    */
+  /* Discipline filters                                                  */
   /* ------------------------------------------------------------------ */
   function applyCatVisibility() {
     headerG.selectAll("g").attr("opacity", function () {
@@ -452,7 +444,6 @@
     });
     resetOpacity();
   }
-
   document.querySelectorAll(".filter-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const cat = btn.dataset.cat;
@@ -479,8 +470,8 @@
     if (!q) { resetOpacity(); return; }
     const matched = new Set(NODES.filter(n => n.label.toLowerCase().includes(q) || n.desc.toLowerCase().includes(q)).map(n => n.id));
     nodeSel.attr("opacity", d => matched.has(d.id) ? 1 : 0.08);
-    branchSel.attr("stroke-opacity", 0.04);
-    crossSel.attr("stroke-opacity", 0.04);
+    branchSel.attr("opacity", 0.05);
+    crossSel.attr("opacity", 0.05);
     const first = NODES.find(n => matched.has(n.id));
     if (first) {
       svg.transition().duration(600).call(zoom.transform,
@@ -492,18 +483,67 @@
   });
 
   /* ------------------------------------------------------------------ */
-  /* Lock state                                                          */
+  /* Remembered calls — the tree's memory. Each call lights up the        */
+  /* skills it touched, even ones ended without a review.                 */
   /* ------------------------------------------------------------------ */
-  function applyLockState() {
-    nodeSel.select("circle.node-circle")
-      .attr("fill", d => isLocked(d) ? "#1e1e1e" : CATS[d.cat].color)
-      .attr("fill-opacity", d => isLocked(d) ? 0.5 : d.tier === 1 ? 0.9 : d.tier === 2 ? 0.62 : 0.42)
-      .attr("stroke", d => isLocked(d) ? "#333" : CATS[d.cat].color)
-      .attr("filter", d => (d.tier === 1 && !isLocked(d)) ? `url(#glow-${d.cat})` : null);
-    nodeSel.selectAll("text.node-label tspan").attr("fill", function () { return null; });
-    nodeSel.select("text.node-label").attr("fill", d => isLocked(d) ? "#555" : (d.tier === 3 ? "#bbb" : "#f0f0f0"));
+  let activeCallId = null;
+  function highlightCallSkills(ids) {
+    const set = new Set(ids || []);
+    nodeSel.classed("call-hit", d => set.has(d.id));
+  }
+  function fmtDate(ts) {
+    if (!ts) return "";
+    const d = new Date(Number(ts));
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  function renderCalls(calls) {
+    // Drop any previously rendered chips (keep the label + empty node).
+    callsStrip.querySelectorAll(".call-chip").forEach(el => el.remove());
+    if (!calls || !calls.length) { callsEmpty.style.display = ""; return; }
+    callsEmpty.style.display = "none";
+    calls.forEach(c => {
+      const chip = document.createElement("div");
+      chip.className = "call-chip";
+      const win = /qualified|closed|booked/i.test(c.outcome || "") && !/not/i.test(c.outcome || "");
+      const skillCount = (c.skills || []).length;
+      chip.innerHTML = `
+        <div class="call-chip-top">
+          <span class="call-chip-mode">${escHtml(c.mode || "Call")}</span>
+          <span class="call-chip-outcome ${win ? "win" : ""}">${escHtml(c.outcome || "ended")}</span>
+        </div>
+        <div class="call-chip-title">${escHtml(c.label || "Sales call")}</div>
+        <div class="call-chip-meta">${escHtml([c.persona, c.section].filter(Boolean).join(" · "))}${c.created_at ? " · " + fmtDate(c.created_at) : ""}</div>
+        <div class="call-chip-skills">${skillCount ? "◈ " + skillCount + " skill" + (skillCount === 1 ? "" : "s") + " touched" : "no skills tagged"}</div>`;
+      chip.addEventListener("click", () => {
+        if (activeCallId === c.id) { activeCallId = null; chip.classList.remove("active"); highlightCallSkills([]); return; }
+        activeCallId = c.id;
+        callsStrip.querySelectorAll(".call-chip").forEach(el => el.classList.remove("active"));
+        chip.classList.add("active");
+        highlightCallSkills(c.skills || []);
+        const first = (c.skills || []).map(id => nodeById[id]).find(Boolean);
+        if (first) {
+          svg.transition().duration(600).call(zoom.transform,
+            d3.zoomIdentity.translate(W() / 2 - first.gx * 1.1, H() / 2 - first.gy * 1.1).scale(1.1));
+        }
+      });
+      callsStrip.appendChild(chip);
+    });
   }
 
+  async function fetchRecentCalls() {
+    const token = localStorage.getItem("scg_auth_token");
+    if (!token) return;
+    try {
+      const res = await fetch("/api/calls/recent", { headers: { "Authorization": `Bearer ${token}` } });
+      if (!res.ok) return;
+      const data = await res.json();
+      renderCalls(data.calls || []);
+    } catch { /* leave the empty state */ }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Unlocked skills                                                     */
+  /* ------------------------------------------------------------------ */
   async function fetchUnlockedSkills() {
     const token = localStorage.getItem("scg_auth_token");
     if (!token) return;
@@ -513,14 +553,16 @@
       const data = await res.json();
       unlockedSet = new Set(data.unlockedIds || []);
       PRE_UNLOCKED.forEach(id => unlockedSet.add(id));
-      applyLockState();
+      applyStates();
     } catch { /* keep pre-unlocked only */ }
   }
 
   /* ------------------------------------------------------------------ */
   /* Init                                                                */
   /* ------------------------------------------------------------------ */
+  applyStates();
   fitView();
   fetchUnlockedSkills();
+  fetchRecentCalls();
   window.addEventListener("resize", fitView);
 })();
