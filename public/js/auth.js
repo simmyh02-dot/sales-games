@@ -87,10 +87,17 @@ const SCG_AUTH = (() => {
   }
 
   function renderAuthWidget(user) {
+    // App pages carry a shell that owns the avatar + dropdown menu; hand the
+    // signed-in user to it. The signed-out Google button still renders into
+    // #auth-widget below (the shell just shows/hides that host).
+    const hasShell = (typeof SCG_SHELL !== "undefined");
+    if (hasShell) SCG_SHELL.setUser(user);
+
     const widget = document.getElementById("auth-widget");
     if (!widget) return;
 
     if (user) {
+      if (hasShell) { widget.innerHTML = ""; return; }   // shell drew the avatar/menu
       widget.innerHTML = `
         <div class="auth-user">
           ${user.picture

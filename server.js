@@ -166,13 +166,15 @@ async function autoUnlock(userId, discoveredSkills) {
   }
 }
 
-// Points for a completed sales call: a base award (60 closer / 15 setter)
-// scaled linearly by the 0-100 callScore, so a great call pays out near the
-// base and a poor one pays out little.
-function pointsForCall(base, callScore) {
-  const s = Math.max(0, Math.min(100, Number(callScore) || 0));
-  return Math.round(base * s / 100);
+// Points for a completed sales call: a base award (50 closer / 10 setter)
+// scaled linearly by the 0-10 call rating, so a great call pays out near the
+// base and a poor one pays out little. Outcome bonuses (close / set) are
+// added by the caller so they only land on a real success.
+function pointsForCall(base, rating) {
+  const r = Math.max(0, Math.min(10, Number(rating) || 0));
+  return Math.round(base * r / 10);
 }
+function clampRating(v) { return Math.max(0, Math.min(10, Math.round(Number(v) || 0))); }
 
 // Persist a call's key takeaway as a Lesson (Sales Call modes only).
 // Reuses the /end analysis output that used to be shown once and discarded.
@@ -502,6 +504,7 @@ app.use(express.json());
 // Explicit page routes (must be before express.static so they take priority)
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "landing.html")));
 app.get("/home", (req, res) => res.sendFile(path.join(__dirname, "public", "home.html")));
+app.get("/settings", (req, res) => res.sendFile(path.join(__dirname, "public", "settings.html")));
 app.get("/lessons", (req, res) => res.sendFile(path.join(__dirname, "public", "pages", "lessons.html")));
 
 app.use(express.static(path.join(__dirname, "public")));
@@ -750,7 +753,9 @@ const DIFFICULTY_LABELS = {
 app.post("/api/objection/new", optionalAuth, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
 
-  const difficulty = Math.ceil(Math.random() * 3);
+  // Honour a chosen difficulty from the pre-start screen; fall back to random.
+  const requestedDiff = parseInt(req.body && req.body.difficulty, 10);
+  const difficulty = [1, 2, 3].includes(requestedDiff) ? requestedDiff : Math.ceil(Math.random() * 3);
 
   if (objectionCache.length >= 20 && Math.random() < 0.70) {
     const cached = pickFromCache(objectionCache, recentlyServedObjections, "objection");
@@ -835,6 +840,10 @@ Return ONLY valid JSON:
     if (req.userId && data.discovered_skills) {
       autoUnlock(req.userId, data.discovered_skills);
     }
+    // Objection Battle: your 0-10 grade IS your points.
+    const oScore = Math.max(0, Math.min(10, Math.round(Number(data.score) || 0)));
+    data.pointsAwarded  = oScore;
+    data.pointsBreakdown = oScore > 0 ? `Answer graded ${oScore}/10 → +${oScore} pts` : `No clear response → +0 pts`;
     res.json(data);
   } catch (err) {
     console.error("objection/feedback error:", err.stack || err.message);
@@ -926,11 +935,15 @@ Return ONLY valid JSON. "correctAnswer" MUST be "${correctSlot}":
 
 app.post("/api/pattern/feedback", optionalAuth, async (req, res) => {
   if (!requireAI(res)) return;
-  const { statement, question, options, correctAnswer, userAnswer, twoCorrect, secondCorrect } = req.body;
+  const { statement, question, options, correctAnswer, userAnswer, twoCorrect, secondCorrect, difficulty } = req.body;
   const pickedBest   = userAnswer === correctAnswer;
   const pickedSecond = twoCorrect && secondCorrect && userAnswer === secondCorrect;
   const isCorrect    = pickedBest || pickedSecond;
   const score        = pickedBest ? 5 : pickedSecond ? 3 : -3;
+  // Points by level, only when correct: L1=3, L2=5, L3=7.
+  const lvl            = difficulty === 3 ? 3 : difficulty === 1 ? 1 : 2;
+  const pointsAwarded  = isCorrect ? ({ 1: 3, 2: 5, 3: 7 })[lvl] : 0;
+  const pointsBreakdown = isCorrect ? `Level ${lvl} · correct → +${pointsAwarded} pts` : `Incorrect → +0 pts`;
   const twoCorrectNote = pickedSecond
     ? "Two valid answers this round. Yours also works, but the primary answer is the stronger read."
     : null;
@@ -964,7 +977,7 @@ Return ONLY valid JSON:
     if (req.userId && data.discovered_skills) {
       autoUnlock(req.userId, data.discovered_skills);
     }
-    res.json({ ...data, score, correct: isCorrect, ...(twoCorrectNote ? { twoCorrectNote } : {}) });
+    res.json({ ...data, score, correct: isCorrect, pointsAwarded, pointsBreakdown, ...(twoCorrectNote ? { twoCorrectNote } : {}) });
   } catch (err) {
     console.error("pattern/feedback error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to analyze answer." });
@@ -1255,7 +1268,8 @@ Analyze the salesperson's performance, grounded in the sales study notes. The go
 thing they will remember and apply on the next call. Be specific to what actually happened in this transcript.
 Return JSON:
 {
-  "callScore": <integer 0-100>,
+  "callScore": <integer 0-10, overall quality of the call>,
+  "closed": <boolean, true ONLY if the transcript shows the prospect explicitly agreeing to buy / move forward with payment>,
   "headline": "one-line verdict of how the call went",
   "rememberThis": "the single most important lesson from THIS call, one memorable sentence",
   "thinkAboutNextTime": ["forward-looking bullet, a concrete thing to do differently next call", "..."],
@@ -1283,8 +1297,14 @@ Return JSON:
         quote: userLines[h.index].content,
       }));
 
-    // Closer close is worth ~60, scaled by how the call actually went.
-    const pointsAwarded = pointsForCall(60, summary.callScore);
+    // Closer: base 50 scaled by the 0-10 call quality, +15 only if the deal closed.
+    const closeBase     = pointsForCall(50, summary.callScore);
+    const closed        = !!summary.closed;
+    const closeBonus    = closed ? 15 : 0;
+    const pointsAwarded  = closeBase + closeBonus;
+    const pointsBreakdown = closed
+      ? `Deal closed — quality ${clampRating(summary.callScore)}/10 → ${closeBase}, +${closeBonus} close bonus = ${pointsAwarded}`
+      : `Call quality ${clampRating(summary.callScore)}/10 → ${pointsAwarded}`;
 
     if (req.userId && summary.discovered_skills) {
       autoUnlock(req.userId, summary.discovered_skills);
@@ -1310,7 +1330,7 @@ Return JSON:
         reviewed: true,
       });
     }
-    res.json({ ...summary, highlights, pointsAwarded });
+    res.json({ ...summary, highlights, pointsAwarded, pointsBreakdown });
   } catch (err) {
     console.error("call/end error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate feedback report." });
@@ -1565,7 +1585,7 @@ ${SKILL_ID_PROMPT}
 
 Return JSON:
 {
-  "callScore": <integer 0-100>,
+  "callScore": <integer 0-10, overall quality of the call>,
   "outcome": "Qualified" | "Not Qualified",
   "booked": <boolean>,
   "unearned": <boolean, true only if booked but not earned>,
@@ -1604,10 +1624,16 @@ The "structure" array MUST include one entry for every stage key: ${SETTER_STAGE
       ? summary.structure.map((s) => ({ ...s, label: stageLabels[s.key] || s.key }))
       : [];
 
-    // Setter close is worth ~15, scaled by the call; an earned booking floors it
-    // high so landing the appointment always feels rewarded.
-    let pointsAwarded = pointsForCall(15, summary.callScore);
-    if (summary.booked && !summary.unearned) pointsAwarded = Math.max(pointsAwarded, 12);
+    // Setter: base 10 scaled by the 0-10 call quality, +5 only for an earned booking.
+    const setBase       = pointsForCall(10, summary.callScore);
+    const earnedSet     = summary.booked && !summary.unearned;
+    const setBonus      = earnedSet ? 5 : 0;
+    const pointsAwarded  = setBase + setBonus;
+    const pointsBreakdown = earnedSet
+      ? `Appointment booked — quality ${clampRating(summary.callScore)}/10 → ${setBase}, +${setBonus} set bonus = ${pointsAwarded}`
+      : (summary.booked
+          ? `Booked but unearned — quality ${clampRating(summary.callScore)}/10 → ${pointsAwarded}`
+          : `Call quality ${clampRating(summary.callScore)}/10 → ${pointsAwarded}`);
 
     if (req.userId && summary.discovered_skills) {
       autoUnlock(req.userId, summary.discovered_skills);
@@ -1633,7 +1659,7 @@ The "structure" array MUST include one entry for every stage key: ${SETTER_STAGE
         reviewed: true,
       });
     }
-    res.json({ ...summary, structure, highlights, pointsAwarded });
+    res.json({ ...summary, structure, highlights, pointsAwarded, pointsBreakdown });
   } catch (err) {
     console.error("setter/end error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate feedback report." });

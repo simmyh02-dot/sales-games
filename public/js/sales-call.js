@@ -640,10 +640,13 @@
     els.chatWindow.scrollTop = 0;
   }
 
-  // A small "+N points" pill for the debrief. Hidden when nothing was earned.
-  function pointsBadge(points) {
-    if (!points || points <= 0) return "";
-    return `<div class="points-badge">+${points} point${points === 1 ? "" : "s"}</div>`;
+  // The "+N points" pill for the debrief, with the server's plain-English
+  // breakdown underneath so the number is always explainable.
+  function pointsBadge(points, breakdown) {
+    const n = Number.isFinite(points) ? points : 0;
+    const pill = `<div class="points-badge">+${n} point${n === 1 ? "" : "s"}</div>`;
+    const why  = breakdown ? `<div class="points-why">${esc(breakdown)}</div>` : "";
+    return pill + why;
   }
 
   function renderSummary(data) {
@@ -657,11 +660,11 @@
         <div class="summary-top">
           <div class="summary-score">
             <div class="summary-score-val">${data.callScore ?? "—"}</div>
-            <div class="summary-score-sub">/ 100</div>
+            <div class="summary-score-sub">/ 10</div>
           </div>
           <div class="summary-headline">
             <p>${esc(data.headline || "")}</p>
-            ${pointsBadge(points)}
+            ${pointsBadge(points, data.pointsBreakdown)}
           </div>
         </div>
 
@@ -736,13 +739,13 @@
         <div class="setter-outcome ${outcomeClass}">
           <div class="setter-outcome-badge">${esc(outcomeLabel)}</div>
           <div class="setter-outcome-side">
-            <div class="summary-score-val">${data.callScore ?? "—"}<span class="summary-score-sub">/ 100</span></div>
+            <div class="summary-score-val">${data.callScore ?? "—"}<span class="summary-score-sub">/ 10</span></div>
           </div>
         </div>
 
         <div class="setter-booking-line ${bookingClass}">${bookingLine}</div>
 
-        ${pointsBadge(points)}
+        ${pointsBadge(points, data.pointsBreakdown)}
 
         ${data.headline ? `<p class="summary-headline-p">${esc(data.headline)}</p>` : ""}
 

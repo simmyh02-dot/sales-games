@@ -23,6 +23,8 @@ const SCG = (() => {
         },
         body: JSON.stringify({ delta: points, mode: mode || "unknown" }),
       });
+      // Keep the app-bar points/level chip in sync with what was just earned.
+      if (typeof SCG_SHELL !== "undefined") SCG_SHELL.refreshPoints();
     } catch { /* fire-and-forget, silent fail */ }
   }
 

@@ -76,11 +76,13 @@ const SCG_MASCOT = (() => {
   const BLACK = { r: 0, g: 0, b: 0 }, WHITE = { r: 255, g: 255, b: 255 };
 
   function buildPalette(hairColor, accent) {
+    // Shades stay gentle so the right-edge column reads as soft shading, not a
+    // hard dark line down the figure.
     return Object.assign({}, FIXED, HAIR[hairColor] || HAIR.brown, {
       shirt: accent,
-      shirtShade: mix(accent, BLACK, 0.70),
+      shirtShade: mix(accent, BLACK, 0.34),
       skirt: accent,
-      skirtShade: mix(accent, BLACK, 0.65),
+      skirtShade: mix(accent, BLACK, 0.34),
       trim: mix(accent, WHITE, 0.60),
     });
   }

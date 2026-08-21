@@ -14,6 +14,7 @@
   let submitted = false;
   let timerEnabled = localStorage.getItem("scg_timer_enabled") !== "off";
   let roundStartTime = 0;
+  let chosenDifficulty = 2;   // set on the pre-start screen
 
   const feed    = document.getElementById("rounds-feed");
   const nextBar = document.getElementById("next-bar");
@@ -146,7 +147,7 @@
           "Content-Type": "application/json",
           ...(token ? { "Authorization": `Bearer ${token}` } : {}),
         },
-        body: "{}",
+        body: JSON.stringify({ difficulty: chosenDifficulty }),
       });
       if (res.status === 403) {
         const d = await res.json().catch(() => ({}));
@@ -221,12 +222,12 @@
   }
 
   function renderFeedbackInCard(card, data) {
-    // Award the round's small points (0-10 from the grader) and meter the session.
-    const points = Math.max(0, Number.isFinite(data.score) ? data.score : 0);
+    // Award the round's points (your 0-10 grade) and meter the session.
+    const points = Math.max(0, Number.isFinite(data.pointsAwarded) ? data.pointsAwarded
+      : (Number.isFinite(data.score) ? data.score : 0));
     SCG.addScore(points, "objection-battle");
-    const pointsPill = points > 0
-      ? `<div class="points-badge">+${points} point${points === 1 ? "" : "s"}</div>`
-      : "";
+    const pointsPill = `<div class="points-badge">+${points} point${points === 1 ? "" : "s"}</div>`
+      + (data.pointsBreakdown ? `<div class="points-why">${escapeHtml(data.pointsBreakdown)}</div>` : "");
 
     const wellItems   = (data.whatYouDidWell || []).map(b => `<li>${escapeHtml(b)}</li>`).join("") || "<li>Nothing notable.</li>";
     const missedItems = (data.whatYouMissed  || []).map(b => `<li>${escapeHtml(b)}</li>`).join("") || "<li>Nothing notable.</li>";
@@ -282,8 +283,40 @@
 
   nextBtn.addEventListener("click", loadNewObjection);
 
+  // Pre-start setup: pick difficulty + timer, then begin the drill.
+  const startPanel = document.getElementById("ob-start");
+  const gameArea   = document.getElementById("game-area");
+  const diffOpts   = document.getElementById("ob-difficulty");
+  const timerOpts  = document.getElementById("ob-timer");
+  const startBtn   = document.getElementById("ob-start-btn");
+
+  function syncStartTimerUI() {
+    timerOpts.querySelectorAll(".prestart-btn").forEach((b) =>
+      b.classList.toggle("active", (b.dataset.timer === "on") === timerEnabled));
+  }
+  diffOpts.querySelectorAll(".prestart-btn").forEach((b) => {
+    b.addEventListener("click", () => {
+      diffOpts.querySelectorAll(".prestart-btn").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      chosenDifficulty = parseInt(b.dataset.level, 10) || 2;
+    });
+  });
+  timerOpts.querySelectorAll(".prestart-btn").forEach((b) => {
+    b.addEventListener("click", () => {
+      timerEnabled = b.dataset.timer === "on";
+      localStorage.setItem("scg_timer_enabled", timerEnabled ? "on" : "off");
+      syncStartTimerUI();
+      syncTimerToggleUI();
+    });
+  });
+  startBtn.addEventListener("click", () => {
+    startPanel.style.display = "none";
+    gameArea.style.display = "block";
+    loadNewObjection();
+  });
+
   (async () => {
     const ok = await checkHealth();
-    if (ok) loadNewObjection();
+    if (ok) { syncStartTimerUI(); startPanel.style.display = "block"; }
   })();
 })();

@@ -6,25 +6,13 @@
   <title>Pattern Recognition — Sales Camp Games</title>
   <link rel="stylesheet" href="/css/style.css" />
   <script src="/js/theme.js"></script>
+  <script src="/js/auth-guard.js"></script>
   <script src="https://accounts.google.com/gsi/client" async></script>
 </head>
 <body>
   <div class="bg-canvas"></div>
 
   <div class="shell">
-    <div class="topbar">
-      <a href="/home" class="back-link">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 12H5M12 19l-7-7 7-7"></path>
-        </svg>
-        Training Arena
-      </a>
-
-      <div class="topbar-right">
-        <div id="auth-widget"></div>
-      </div>
-    </div>
-
     <div class="page-header">
       <div class="mode-tag">Mode 02 — Read The Room</div>
       <h1>Pattern Recognition</h1>
@@ -43,15 +31,30 @@
       </p>
     </div>
 
-    <div class="diff-bar">
+    <!-- Pre-start setup: pick a level before the first exercise -->
+    <div id="pr-start" class="prestart-panel panel-accent" style="display:none;">
+      <div class="panel-label">// Choose your level</div>
+      <div class="prestart-group">
+        <div class="prestart-label">Difficulty</div>
+        <div class="prestart-options" id="pr-levels">
+          <button type="button" class="prestart-btn active" data-level="1"><span class="pb-title">Level 1</span><span class="pb-sub">Clear reads · +3 pts</span></button>
+          <button type="button" class="prestart-btn" data-level="2"><span class="pb-title">Level 2</span><span class="pb-sub">Subtler tells · +5 pts</span></button>
+          <button type="button" class="prestart-btn" data-level="3"><span class="pb-title">Level 3</span><span class="pb-sub">Ambiguous · +7 pts</span></button>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-lg" id="pr-start-btn">Start reading</button>
+    </div>
+
+    <div class="diff-bar" id="pr-diffbar" style="display:none;">
       <span class="diff-bar-label">Difficulty</span>
       <div class="diff-toggle">
         <button class="diff-btn active" data-level="1">Level 1</button>
         <button class="diff-btn" data-level="2">Level 2</button>
+        <button class="diff-btn" data-level="3">Level 3</button>
       </div>
     </div>
 
-    <div id="game-area">
+    <div id="game-area" style="display:none;">
       <div id="exercises-feed"></div>
 
       <div id="next-bar" style="display:none;">
@@ -61,6 +64,7 @@
   </div>
 
   <script src="/js/score.js"></script>
+  <script src="/js/app-shell.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/pricing.js"></script>
   <script src="/js/pattern-recognition.js"></script>

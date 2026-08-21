@@ -162,16 +162,15 @@
   }
 
   function renderFeedbackInCard(card, data) {
-    // Award the round's small points (floored at 0) and meter the session.
-    const points = Math.max(0, Number.isFinite(data.score) ? data.score : 0);
+    // Award the round's points (3/5/7 by level, only if correct) and meter the session.
+    const points = Math.max(0, Number.isFinite(data.pointsAwarded) ? data.pointsAwarded : 0);
     SCG.addScore(points, "pattern-recognition");
 
     const isCorrect   = data.correct;
     const verdictClass = isCorrect ? "positive" : "negative";
     const verdictLabel = isCorrect ? "Correct" : "Incorrect";
-    const pointsPill = points > 0
-      ? `<div class="points-badge">+${points} point${points === 1 ? "" : "s"}</div>`
-      : "";
+    const pointsPill = `<div class="points-badge">+${points} point${points === 1 ? "" : "s"}</div>`
+      + (data.pointsBreakdown ? `<div class="points-why">${escapeHtml(data.pointsBreakdown)}</div>` : "");
 
     // howToHandleIt is now an array of steps
     const handleItems = Array.isArray(data.howToHandleIt)
@@ -215,8 +214,31 @@
 
   nextBtn.addEventListener("click", loadNewExercise);
 
+  // Pre-start setup: choose a level, then begin reading.
+  const prStart    = document.getElementById("pr-start");
+  const prDiffbar  = document.getElementById("pr-diffbar");
+  const gameArea   = document.getElementById("game-area");
+  const prLevels   = document.getElementById("pr-levels");
+  const prStartBtn = document.getElementById("pr-start-btn");
+
+  function setLevel(lvl) {
+    currentDifficulty = lvl;
+    prLevels.querySelectorAll(".prestart-btn").forEach((b) =>
+      b.classList.toggle("active", parseInt(b.dataset.level, 10) === lvl));
+    document.querySelectorAll(".diff-btn").forEach((b) =>
+      b.classList.toggle("active", parseInt(b.dataset.level, 10) === lvl));
+  }
+  prLevels.querySelectorAll(".prestart-btn").forEach((b) =>
+    b.addEventListener("click", () => setLevel(parseInt(b.dataset.level, 10) || 1)));
+  prStartBtn.addEventListener("click", () => {
+    prStart.style.display = "none";
+    prDiffbar.style.display = "flex";
+    gameArea.style.display = "block";
+    loadNewExercise();
+  });
+
   (async () => {
     const ok = await checkHealth();
-    if (ok) loadNewExercise();
+    if (ok) prStart.style.display = "block";
   })();
 })();
