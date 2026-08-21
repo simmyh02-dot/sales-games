@@ -13,22 +13,16 @@
     modePanel: document.getElementById("mode-panel"),
     modeGrid:  document.getElementById("mode-grid"),
 
-    scenarioPanel: document.getElementById("scenario-panel"),
-    scenarioGrid:  document.getElementById("scenario-grid"),
-    customInput:   document.getElementById("custom-input"),
-    startBtn:      document.getElementById("start-call-btn"),
-    scenarioStatus: document.getElementById("scenario-status"),
+    offerPanel:      document.getElementById("offer-panel"),
+    offerGrid:       document.getElementById("offer-grid"),
+    offerCustomInput:document.getElementById("offer-custom-input"),
+    offerNextBtn:    document.getElementById("offer-next-btn"),
+    backToModeBtn:   document.getElementById("back-to-mode-btn"),
 
     sectionPanel:      document.getElementById("section-panel"),
     sectionGrid:       document.getElementById("section-grid"),
-    backToScenarioBtn: document.getElementById("back-to-scenario-btn"),
+    backToOfferBtn:    document.getElementById("back-to-offer-btn"),
     confirmSectionBtn: document.getElementById("confirm-section-btn"),
-
-    setterOfferPanel:      document.getElementById("setter-offer-panel"),
-    setterOfferGrid:       document.getElementById("setter-offer-grid"),
-    setterCustomInput:     document.getElementById("setter-custom-input"),
-    setterOfferNextBtn:    document.getElementById("setter-offer-next-btn"),
-    backToModeFromOfferBtn:document.getElementById("back-to-mode-from-offer-btn"),
 
     personalityPanel:     document.getElementById("personality-panel"),
     personalityGrid:      document.getElementById("personality-grid"),
@@ -36,6 +30,7 @@
     confirmPersonalityBtn:document.getElementById("confirm-personality-btn"),
 
     callPanel:   document.getElementById("call-panel"),
+    mascotRail:  document.getElementById("mascot-rail"),
     clProspect:  document.getElementById("cl-prospect"),
     clOffer:     document.getElementById("cl-offer"),
     clPersonality: document.getElementById("cl-personality"),
@@ -55,8 +50,7 @@
   };
 
   let callMode           = null;    // "closer" | "setter"
-  let selectedScenario   = null;
-  let selectedOffer      = null;    // setter-only: which remote-income opportunity
+  let selectedOffer      = null;    // shared offer/scenario, both modes
   let selectedSection    = null;
   let selectedPersonality = null;   // picker choice: a persona object or "random"
   let activePersona       = null;   // the resolved persona for the live call
@@ -67,6 +61,21 @@
   let busy               = false;
   let analyzed           = false;
   let userBubbles        = []; // chat bubbles for the salesperson's own lines, in order
+
+  // Resolve the shared offer choice to prompt/display text (Custom → free text).
+  function currentOfferText() {
+    return selectedOffer === "Custom"
+      ? els.offerCustomInput.value.trim()
+      : selectedOffer;
+  }
+
+  // Thin wrappers so the mascot is optional — no-op if the module didn't load.
+  function mascotState(state) {
+    if (typeof SCG_MASCOT !== "undefined") SCG_MASCOT.setState(state);
+  }
+  function mascotTalk(reply) {
+    if (typeof SCG_MASCOT !== "undefined") SCG_MASCOT.talkFor(reply, "idle");
+  }
 
   async function checkHealth() {
     try {
@@ -115,68 +124,46 @@
     const btn = e.target.closest(".mode-choice-btn");
     if (!btn) return;
     callMode = btn.dataset.mode;             // "closer" | "setter"
-    els.modePanel.style.display = "none";
-    if (callMode === "setter") {
-      // Setter skips the section step — it always practices the full call structure.
-      els.setterOfferPanel.style.display = "block";
-    } else {
-      els.scenarioPanel.style.display = "block";
-    }
+    els.modePanel.style.display  = "none";
+    els.offerPanel.style.display = "block";
+    // The offer step feeds both modes; Closer then picks a section, Setter
+    // jumps straight to the prospect.
+    els.offerNextBtn.textContent = callMode === "closer"
+      ? "Next: pick a section"
+      : "Next: pick a prospect";
+    updateOfferButton();
   });
 
-  // --- Step 1b: Offer selection (Setter only) -----------------------------
+  // --- Step 1: Offer selection (shared by both modes) ---------------------
 
-  els.setterOfferGrid.addEventListener("click", (e) => {
+  els.offerGrid.addEventListener("click", (e) => {
     const btn = e.target.closest(".scenario-btn");
     if (!btn) return;
-    [...els.setterOfferGrid.children].forEach((b) => b.classList.remove("selected"));
+    [...els.offerGrid.children].forEach((b) => b.classList.remove("selected"));
     btn.classList.add("selected");
     selectedOffer = btn.dataset.offer;
-    els.setterCustomInput.style.display = selectedOffer === "Custom Offer" ? "block" : "none";
-    updateSetterOfferButton();
+    els.offerCustomInput.style.display = selectedOffer === "Custom" ? "block" : "none";
+    updateOfferButton();
   });
 
-  els.setterCustomInput.addEventListener("input", updateSetterOfferButton);
+  els.offerCustomInput.addEventListener("input", updateOfferButton);
 
-  function updateSetterOfferButton() {
-    els.setterOfferNextBtn.disabled =
+  function updateOfferButton() {
+    els.offerNextBtn.disabled =
       !selectedOffer ||
-      (selectedOffer === "Custom Offer" && !els.setterCustomInput.value.trim());
+      (selectedOffer === "Custom" && !els.offerCustomInput.value.trim());
   }
 
-  els.setterOfferNextBtn.addEventListener("click", () => {
-    els.setterOfferPanel.style.display = "none";
-    els.personalityPanel.style.display = "block";
+  els.offerNextBtn.addEventListener("click", () => {
+    els.offerPanel.style.display = "none";
+    // Closer drills a specific section; Setter always runs the full structure.
+    if (callMode === "closer") els.sectionPanel.style.display     = "block";
+    else                       els.personalityPanel.style.display = "block";
   });
 
-  els.backToModeFromOfferBtn.addEventListener("click", () => {
-    els.setterOfferPanel.style.display = "none";
-    els.modePanel.style.display = "block";
-  });
-
-  // --- Step 1: Scenario selection (Closer only) ---------------------------
-
-  els.scenarioGrid.addEventListener("click", (e) => {
-    const btn = e.target.closest(".scenario-btn");
-    if (!btn) return;
-    [...els.scenarioGrid.children].forEach((b) => b.classList.remove("selected"));
-    btn.classList.add("selected");
-    selectedScenario = btn.dataset.scenario;
-    els.customInput.style.display = selectedScenario === "Custom Scenario" ? "block" : "none";
-    updateStartButton();
-  });
-
-  els.customInput.addEventListener("input", updateStartButton);
-
-  function updateStartButton() {
-    els.startBtn.disabled =
-      !selectedScenario ||
-      (selectedScenario === "Custom Scenario" && !els.customInput.value.trim());
-  }
-
-  els.startBtn.addEventListener("click", () => {
-    els.scenarioPanel.style.display = "none";
-    els.sectionPanel.style.display  = "block";
+  els.backToModeBtn.addEventListener("click", () => {
+    els.offerPanel.style.display = "none";
+    els.modePanel.style.display  = "block";
   });
 
   // --- Step 2: Section selection ------------------------------------------
@@ -190,9 +177,9 @@
     els.confirmSectionBtn.disabled = false;
   });
 
-  els.backToScenarioBtn.addEventListener("click", () => {
-    els.sectionPanel.style.display  = "none";
-    els.scenarioPanel.style.display = "block";
+  els.backToOfferBtn.addEventListener("click", () => {
+    els.sectionPanel.style.display = "none";
+    els.offerPanel.style.display   = "block";
   });
 
   els.confirmSectionBtn.addEventListener("click", () => {
@@ -211,7 +198,7 @@
     const personaCards = PERSONAS.map((p) => `
       <button class="scenario-btn personality-btn" data-key="${p.key}">
         ${p.label}
-        <small>${p.primaryPain} ${p.objectionStyle}</small>
+        <small>${p.blurb || p.primaryPain}</small>
       </button>
     `).join("");
     els.personalityGrid.innerHTML = randomCard + personaCards;
@@ -235,7 +222,7 @@
   els.backToSectionBtn.addEventListener("click", () => {
     els.personalityPanel.style.display = "none";
     if (callMode === "setter") {
-      els.setterOfferPanel.style.display = "block";
+      els.offerPanel.style.display = "block";
     } else {
       els.sectionPanel.style.display = "block";
     }
@@ -260,9 +247,9 @@
     els.confirmPersonalityBtn.textContent = "Connecting...";
 
     const isSetter = callMode === "setter";
-    const offerText = isSetter
-      ? (selectedOffer === "Custom Offer" ? els.setterCustomInput.value.trim() : selectedOffer)
-      : (selectedScenario === "Custom Scenario" ? els.customInput.value.trim() : selectedScenario);
+    const isCustom = selectedOffer === "Custom";
+    const customText = els.offerCustomInput.value.trim();
+    const offerText = currentOfferText();
     const prospectName = nextProspectName();
 
     // Resolve "Randomize" into a concrete persona now, so the rest of the call
@@ -277,13 +264,13 @@
       const body = isSetter
         ? {
             offer:             selectedOffer,
-            customDescription: selectedOffer === "Custom Offer" ? offerText : "",
+            customDescription: isCustom ? customText : "",
             personality:       persona,
             prospectName,
           }
         : {
-            scenario:          selectedScenario,
-            customDescription: selectedScenario === "Custom Scenario" ? offerText : "",
+            scenario:          offerText,
+            customDescription: "",
             section:           selectedSection,
             personality:       persona,
             prospectName,
@@ -338,10 +325,16 @@
       els.chatInput.disabled         = false;
       els.sendBtn.disabled           = false;
       els.callStatus.textContent     = "";
+      els.callStatus.classList.remove("call-status-warn", "call-status-success");
 
       els.chatWindow.innerHTML = "";
+      // Stand the pixel prospect up beside the chat; they open the call talking.
+      if (typeof SCG_MASCOT !== "undefined") {
+        SCG_MASCOT.mount(els.mascotRail, { name: prospectName });
+      }
       addBubble("prospect", prospect.openingMessage);
       history.push({ role: "assistant", content: prospect.openingMessage });
+      mascotTalk(prospect.openingMessage);
 
       updateProgress();
       els.personalityPanel.style.display = "none";
@@ -389,6 +382,7 @@
 
   async function sendMessage() {
     if (analyzed) return;
+    let autoSuccess = false;   // set when the reply confirms a booking/close
     const text = els.chatInput.value.trim();
     if (!text || busy) return;
 
@@ -409,16 +403,17 @@
     els.chatInput.disabled = true;
     els.sendBtn.disabled   = true;
     els.callStatus.textContent = isSetter ? "Lead is responding..." : "Prospect is responding...";
+    mascotState("thinking");   // the prospect is weighing your line
 
     try {
       const endpoint = isSetter ? "/api/setter/message" : "/api/call/message";
       const body = isSetter
         ? {
             offer:             selectedOffer,
-            customDescription: selectedOffer === "Custom Offer" ? els.setterCustomInput.value.trim() : "",
+            customDescription: selectedOffer === "Custom" ? els.offerCustomInput.value.trim() : "",
             prospect, history, userMessage: text, personality: activePersona,
           }
-        : { scenario: selectedScenario, prospect, history, userMessage: text, section: selectedSection, personality: activePersona };
+        : { scenario: currentOfferText(), prospect, history, userMessage: text, section: selectedSection, personality: activePersona };
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -434,29 +429,57 @@
         history.pop();
         userMessageCount -= 1;
         updateProgress();
+        mascotState("listening");
         flagNotSerious(data.reason || "That wasn't a serious message. Try again.");
         return;
       }
 
       addBubble("prospect", data.reply);
       history.push({ role: "assistant", content: data.reply });
+      mascotTalk(data.reply);   // the prospect speaks, then settles to idle
 
       // Setter: escalate the live booking indicator, never downgrade.
       if (isSetter && data.booking && BOOKING_RANK[data.booking] > BOOKING_RANK[liveBooking]) {
         liveBooking = data.booking;
         setBookingIndicator(liveBooking);
       }
+
+      // Success trigger: a confirmed booking (setter) or a firm close (closer)
+      // ends the call the way real life does — stop the back-and-forth and roll
+      // straight into the debrief.
+      if (isSetter ? data.booking === "confirmed" : data.closed === true) {
+        autoSuccess = true;
+      }
+
       els.callStatus.textContent = userMessageCount >= TARGET_MESSAGES
         ? "You've hit the suggested call length - wrap it up and analyze when ready."
         : "";
     } catch {
       els.callStatus.textContent = "Something went wrong reaching the prospect.";
+      mascotState("idle");
     } finally {
       els.chatInput.disabled = false;
       els.sendBtn.disabled   = false;
       els.chatInput.focus();
       busy = false;
     }
+
+    // Only auto-close once the call is long enough for endCall to accept it,
+    // so a fluke early "yes" can't disable the input with no way to analyze.
+    if (autoSuccess && !analyzed && userMessageCount >= 2) autoCloseCall(callMode === "setter");
+  }
+
+  // Show a brief win beat, then auto-run the debrief. A small delay lets the
+  // prospect's closing line land before the analysis overlay takes over.
+  function autoCloseCall(isSetter) {
+    els.callStatus.classList.remove("call-status-warn");
+    els.callStatus.classList.add("call-status-success");
+    els.callStatus.textContent = isSetter
+      ? "Call booked — wrapping up and analyzing..."
+      : "Deal closed — wrapping up and analyzing...";
+    els.chatInput.disabled = true;
+    els.sendBtn.disabled   = true;
+    setTimeout(() => endCall(), 1300);
   }
 
   els.sendBtn.addEventListener("click", sendMessage);
@@ -465,6 +488,10 @@
       e.preventDefault();
       sendMessage();
     }
+  });
+  // The prospect "listens" while you compose your next line.
+  els.chatInput.addEventListener("input", () => {
+    if (!busy && !analyzed && els.chatInput.value.trim()) mascotState("listening");
   });
 
   // --- Analyze call: highlights in chat + summary under it -----------------
@@ -484,6 +511,7 @@
     els.sendBtn.disabled       = true;
     els.callStatus.classList.remove("call-status-warn");
     els.callStatus.textContent = "Reading back through the call...";
+    mascotState("thinking");   // reviewing the call
 
     try {
       const isSetter = callMode === "setter";
@@ -491,18 +519,26 @@
       const body = isSetter
         ? {
             offer:             selectedOffer,
-            customDescription: selectedOffer === "Custom Offer" ? els.setterCustomInput.value.trim() : "",
+            customDescription: selectedOffer === "Custom" ? els.offerCustomInput.value.trim() : "",
             prospect, history, personality: activePersona, liveBooking,
           }
-        : { scenario: selectedScenario, prospect, history, section: selectedSection, personality: activePersona };
+        : { scenario: currentOfferText(), prospect, history, section: selectedSection, personality: activePersona };
+      // Send the auth token so the server can persist the review: lessons, call
+      // history and skill unlocks all key off req.userId (optionalAuth). Without
+      // this header they were silently dropped for signed-in users.
+      const token = localStorage.getItem("scg_auth_token");
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("request failed");
       const data = await res.json();
       analyzed = true;
+      mascotState("idle");
       applyHighlights(data.highlights || []);
       if (isSetter) renderSetterSummary(data);
       else renderSummary(data);
@@ -544,10 +580,10 @@
       const body = isSetter
         ? {
             offer:             selectedOffer,
-            customDescription: selectedOffer === "Custom Offer" ? els.setterCustomInput.value.trim() : "",
+            customDescription: selectedOffer === "Custom" ? els.offerCustomInput.value.trim() : "",
             prospect, history, personality: activePersona,
           }
-        : { scenario: selectedScenario, prospect, history, section: selectedSection, personality: activePersona };
+        : { scenario: currentOfferText(), prospect, history, section: selectedSection, personality: activePersona };
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) },
@@ -604,9 +640,16 @@
     els.chatWindow.scrollTop = 0;
   }
 
+  // A small "+N points" pill for the debrief. Hidden when nothing was earned.
+  function pointsBadge(points) {
+    if (!points || points <= 0) return "";
+    return `<div class="points-badge">+${points} point${points === 1 ? "" : "s"}</div>`;
+  }
+
   function renderSummary(data) {
-    // Record the session for the billing/limit meter (points are not shown).
-    SCG.addScore(0, "sales-call");
+    // Award points (scaled server-side by callScore) and meter the session.
+    const points = Number.isFinite(data.pointsAwarded) ? data.pointsAwarded : 0;
+    SCG.addScore(points, "sales-call");
 
     els.summaryPanel.innerHTML = `
       <div class="panel summary-card">
@@ -618,6 +661,7 @@
           </div>
           <div class="summary-headline">
             <p>${esc(data.headline || "")}</p>
+            ${pointsBadge(points)}
           </div>
         </div>
 
@@ -653,8 +697,9 @@
   }
 
   function renderSetterSummary(data) {
-    // Record the session for the billing/limit meter (points are not shown).
-    SCG.addScore(0, "setter");
+    // Award points (scaled server-side, floored high for an earned booking).
+    const points = Number.isFinite(data.pointsAwarded) ? data.pointsAwarded : 0;
+    SCG.addScore(points, "setter");
 
     const qualified = data.outcome === "Qualified";
     const outcomeClass = qualified ? "outcome-qualified" : "outcome-notqualified";
@@ -696,6 +741,8 @@
         </div>
 
         <div class="setter-booking-line ${bookingClass}">${bookingLine}</div>
+
+        ${pointsBadge(points)}
 
         ${data.headline ? `<p class="summary-headline-p">${esc(data.headline)}</p>` : ""}
 
@@ -759,31 +806,31 @@
     els.summaryPanel.style.display  = "none";
     els.summaryPanel.innerHTML      = "";
     // Back to the very first step: the mode choice.
-    els.scenarioPanel.style.display    = "none";
+    els.offerPanel.style.display       = "none";
     els.sectionPanel.style.display     = "none";
     els.personalityPanel.style.display = "none";
     els.modePanel.style.display        = "block";
 
     els.callStatus.textContent        = "";
-    els.callStatus.classList.remove("call-status-warn");
-    els.startBtn.textContent          = "Next: pick a section";
+    els.callStatus.classList.remove("call-status-warn", "call-status-success");
+    els.offerNextBtn.textContent      = "Next";
     els.confirmSectionBtn.disabled    = true;
     els.confirmSectionBtn.textContent = "Next: pick a prospect";
     els.confirmPersonalityBtn.textContent = "Start call";
 
-    [...els.scenarioGrid.children].forEach((b) => b.classList.remove("selected"));
+    [...els.offerGrid.children].forEach((b)   => b.classList.remove("selected"));
     [...els.sectionGrid.children].forEach((b)  => b.classList.remove("selected"));
     [...els.personalityGrid.children].forEach((b, i) => b.classList.toggle("selected", i === 0));
-    els.customInput.style.display = "none";
-    els.customInput.value         = "";
+    els.offerCustomInput.style.display = "none";
+    els.offerCustomInput.value         = "";
     callMode            = null;
-    selectedScenario    = null;
+    selectedOffer       = null;
     selectedSection     = null;
     selectedPersonality = "random";   // back to the Randomize default
     activePersona       = null;
     liveBooking         = "none";
     els.confirmPersonalityBtn.disabled = false;
-    updateStartButton();
+    els.offerNextBtn.disabled          = true;
   }
 
   checkHealth();

@@ -1,17 +1,19 @@
 /* ==========================================================================
-   score.js — Sales Camp Games silent session meter
-   The user-facing points system has been removed. This module now only
-   records one row per completed session (delta 0) so the server-side
-   monthly session limit keeps counting. No UI is rendered.
+   score.js — Sales Camp Games points + session meter
+   Each completed session/round posts ONE row to /api/scores. The row doubles
+   as the monthly session-limit meter (the server counts rows, not the delta),
+   so there must be exactly one insert per result — never insert server-side too.
+   `delta` now carries the real points earned (calls scale by callScore, the
+   mini-games award their small per-round score).
    ========================================================================== */
 
 const SCG = (() => {
-  // Records one completed session as a billing/limit meter row. The numeric
-  // score is intentionally discarded (delta 0) — points are no longer shown.
-  async function addScore(_delta, mode) {
+  // Post one completed session/round as a scores row carrying the points earned.
+  async function addScore(delta, mode) {
     if (typeof SCG_AUTH === "undefined") return;
     const token = SCG_AUTH.getToken();
     if (!token) return;
+    const points = Number.isFinite(delta) ? Math.round(delta) : 0;
     try {
       await fetch("/api/scores", {
         method: "POST",
@@ -19,7 +21,7 @@ const SCG = (() => {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`,
         },
-        body: JSON.stringify({ delta: 0, mode: mode || "unknown" }),
+        body: JSON.stringify({ delta: points, mode: mode || "unknown" }),
       });
     } catch { /* fire-and-forget, silent fail */ }
   }

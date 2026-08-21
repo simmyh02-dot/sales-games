@@ -60,23 +60,27 @@
         </div>
       </div>
 
-      <!-- Scenario selection (Closer only) -->
-      <div class="panel" id="scenario-panel" style="display:none;">
-
-        <div class="panel-label">// Choose a scenario</div>
-        <div class="scenario-grid" id="scenario-grid">
-          <button class="scenario-btn" data-scenario="Fitness Coach">Fitness Coach</button>
-          <button class="scenario-btn" data-scenario="Business Coach">Business Coach</button>
-          <button class="scenario-btn" data-scenario="Agency Offer">Agency Offer</button>
-          <button class="scenario-btn" data-scenario="E-commerce Offer">E-commerce Offer</button>
-          <button class="scenario-btn" data-scenario="SaaS">SaaS</button>
-          <button class="scenario-btn" data-scenario="Custom Scenario">Custom Scenario</button>
+      <!-- Offer selection (shared by both modes) -->
+      <div class="panel" id="offer-panel" style="display:none;">
+        <div class="panel-label">// Choose an offer</div>
+        <div class="scenario-grid" id="offer-grid">
+          <button class="scenario-btn" data-offer="Fitness Coach">Fitness Coach</button>
+          <button class="scenario-btn" data-offer="Business Coach">Business Coach</button>
+          <button class="scenario-btn" data-offer="Agency Offer">Agency Offer</button>
+          <button class="scenario-btn" data-offer="E-commerce Offer">E-commerce Offer</button>
+          <button class="scenario-btn" data-offer="SaaS">SaaS</button>
+          <button class="scenario-btn" data-offer="High Ticket Sales">High Ticket Sales</button>
+          <button class="scenario-btn" data-offer="Affiliate Marketing">Affiliate Marketing</button>
+          <button class="scenario-btn" data-offer="Dropshipping">Dropshipping</button>
+          <button class="scenario-btn" data-offer="Coaching Certification">Coaching Certification</button>
+          <button class="scenario-btn" data-offer="Custom">Custom</button>
         </div>
-        <input type="text" class="custom-input" id="custom-input" placeholder="Describe your custom scenario (e.g. high-ticket nutrition coaching for busy parents)" style="display:none;" />
+        <input type="text" class="custom-input" id="offer-custom-input" placeholder="Describe your custom offer (e.g. high-ticket nutrition coaching for busy parents)" style="display:none;" />
 
         <div class="actions-row">
-          <span class="objection-context" id="scenario-status"></span>
-          <button class="btn btn-primary" id="start-call-btn" disabled>Next: pick a section</button>
+          <button class="btn btn-secondary" id="back-to-mode-btn">Back</button>
+          <span class="objection-context" id="offer-status"></span>
+          <button class="btn btn-primary" id="offer-next-btn" disabled>Next</button>
         </div>
       </div>
 
@@ -94,27 +98,8 @@
           <button class="scenario-btn" data-section="Close">Close<br><small>Asking for the sale</small></button>
         </div>
         <div class="actions-row">
-          <button class="btn btn-secondary" id="back-to-scenario-btn">Back</button>
+          <button class="btn btn-secondary" id="back-to-offer-btn">Back</button>
           <button class="btn btn-primary" id="confirm-section-btn" disabled>Next: pick a prospect</button>
-        </div>
-      </div>
-
-      <!-- Offer selection (Setter only) -->
-      <div class="panel" id="setter-offer-panel" style="display:none;">
-        <div class="panel-label">// What opportunity did this lead watch a video about?</div>
-        <div class="scenario-grid" id="setter-offer-grid">
-          <button class="scenario-btn" data-offer="Remote Setter">Remote Setter<br><small>Work-from-anywhere appointment setting</small></button>
-          <button class="scenario-btn" data-offer="Remote Closer">Remote Closer<br><small>Work-from-anywhere sales closing</small></button>
-          <button class="scenario-btn" data-offer="Affiliate Marketing">Affiliate Marketing<br><small>Earning commissions promoting products online</small></button>
-          <button class="scenario-btn" data-offer="Dropshipping">Dropshipping<br><small>Running an online store without holding inventory</small></button>
-          <button class="scenario-btn" data-offer="Coaching Certification">Coaching Certification<br><small>Getting certified to coach in a niche</small></button>
-          <button class="scenario-btn" data-offer="Custom Offer">Custom Offer</button>
-        </div>
-        <input type="text" class="custom-input" id="setter-custom-input" placeholder="Describe the custom opportunity (e.g. becoming a virtual assistant)" style="display:none;" />
-        <div class="actions-row">
-          <button class="btn btn-secondary" id="back-to-mode-from-offer-btn">Back</button>
-          <span class="objection-context" id="setter-offer-status"></span>
-          <button class="btn btn-primary" id="setter-offer-next-btn" disabled>Next: pick a prospect</button>
         </div>
       </div>
 
@@ -145,7 +130,10 @@
           </div>
         </div>
 
-        <div class="chat-window" id="chat-window"></div>
+        <div class="chat-stage">
+          <div class="mascot-rail" id="mascot-rail"></div>
+          <div class="chat-window" id="chat-window"></div>
+        </div>
 
         <div class="chat-input-row" id="chat-input-row">
           <input type="text" id="chat-input" placeholder="Type what you'd say next on this call..." />
@@ -168,6 +156,7 @@
   <script src="/js/auth.js"></script>
   <script src="/js/pricing.js"></script>
   <script src="/js/personas.js"></script>
+  <script src="/js/mascot.js"></script>
   <script src="/js/sales-call.js"></script>
 </body>
 </html>

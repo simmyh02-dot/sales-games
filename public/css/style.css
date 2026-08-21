@@ -1399,6 +1399,7 @@ input.custom-input:focus {
 /* ---------------------------------------------------------------------- */
 
 .call-status-warn { color: var(--warn) !important; }
+.call-status-success { color: var(--good) !important; font-weight: 600; }
 
 .input-shake { animation: shake 0.4s; border-color: var(--warn) !important; }
 
@@ -1483,11 +1484,18 @@ input.custom-input:focus {
   color: var(--text-0);
 }
 
-.summary-delta {
+.points-badge {
+  display: inline-block;
+  margin: 4px 0 2px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--good);
-  letter-spacing: 0.04em;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
 }
 
 .remember-block {
@@ -2741,3 +2749,118 @@ input.custom-input:focus {
   color: var(--text-2);
 }
 .btn-ghost:hover { color: var(--text-0); border-color: var(--panel-border-2); }
+
+/* ---------------------------------------------------------------------- */
+/* Sales Call — pixel-art prospect mascot beside the chat                   */
+/* ---------------------------------------------------------------------- */
+
+.chat-stage {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+}
+.chat-stage .chat-window { flex: 1 1 auto; min-width: 0; }
+
+.mascot-rail {
+  flex: 0 0 132px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 8px 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  align-self: flex-start;
+}
+
+.mascot-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.mascot-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  animation: mascotDot 1.4s ease-in-out infinite;
+}
+@keyframes mascotDot { 0%,100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+.mascot-stage { position: relative; width: 96px; height: 176px; }
+
+.mascot-figure {
+  position: absolute;
+  left: 0; top: 0;
+  transform-origin: 50% 100%;
+}
+.mascot-cell { position: absolute; }
+
+.mascot-mouth { position: absolute; opacity: 0; }
+
+.mascot-shadow {
+  position: absolute;
+  left: 13px; bottom: -2px;
+  width: 70px; height: 8px;
+  background: #000;
+  opacity: 0.3;
+  border-radius: 50%;
+  filter: blur(2px);
+  animation: mascotShadow 2.6s ease-in-out infinite;
+}
+@keyframes mascotShadow {
+  0%,100% { transform: scaleX(1);    opacity: 0.4; }
+  50%     { transform: scaleX(0.85); opacity: 0.25; }
+}
+
+.mascot-name {
+  font-family: "Fredoka", var(--font-sans, sans-serif);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-0);
+  text-align: center;
+}
+
+/* --- Whole-figure state animations --- */
+.state-idle      { animation: mascotIdle      3.2s ease-in-out infinite alternate; }
+.state-listening { animation: mascotListening 2s   ease-in-out infinite alternate; }
+.state-thinking  { animation: mascotThinking  2.2s ease-in-out infinite alternate; }
+.state-talking   { animation: mascotTalking   0.7s ease-in-out infinite; }
+
+@keyframes mascotIdle {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-4px); }
+}
+@keyframes mascotListening {
+  from { transform: translateY(0)    rotate(0deg); }
+  to   { transform: translateY(-1px) rotate(-3deg); }
+}
+@keyframes mascotThinking {
+  from { transform: translateY(0)    rotate(0deg); }
+  to   { transform: translateY(-2px) rotate(4deg); }
+}
+@keyframes mascotTalking {
+  0%   { transform: translateY(0)    rotate(0deg); }
+  25%  { transform: translateY(-2px) rotate(1deg); }
+  50%  { transform: translateY(-4px) rotate(-1deg); }
+  75%  { transform: translateY(-1px) rotate(1deg); }
+  100% { transform: translateY(0)    rotate(0deg); }
+}
+
+/* Mouth flaps only while talking (snap, no fade, to stay pixel-crisp). */
+.state-talking .mascot-mouth { animation: mascotMouth 0.35s steps(1) infinite; }
+@keyframes mascotMouth {
+  0%   { opacity: 0; }
+  25%  { opacity: 1; }
+  50%  { opacity: 0; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (max-width: 720px) {
+  .mascot-rail { display: none; }
+}

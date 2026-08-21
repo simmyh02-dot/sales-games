@@ -221,8 +221,12 @@
   }
 
   function renderFeedbackInCard(card, data) {
-    // Record the round for the billing/limit meter (score is not shown).
-    SCG.addScore(0, "objection-battle");
+    // Award the round's small points (0-10 from the grader) and meter the session.
+    const points = Math.max(0, Number.isFinite(data.score) ? data.score : 0);
+    SCG.addScore(points, "objection-battle");
+    const pointsPill = points > 0
+      ? `<div class="points-badge">+${points} point${points === 1 ? "" : "s"}</div>`
+      : "";
 
     const wellItems   = (data.whatYouDidWell || []).map(b => `<li>${escapeHtml(b)}</li>`).join("") || "<li>Nothing notable.</li>";
     const missedItems = (data.whatYouMissed  || []).map(b => `<li>${escapeHtml(b)}</li>`).join("") || "<li>Nothing notable.</li>";
@@ -234,6 +238,7 @@
 
     const feedbackEl = card.querySelector(".feedback-inline");
     feedbackEl.innerHTML = `
+      ${pointsPill}
       <div class="feedback-block good">
         <h4><span class="tag"></span>What you did well</h4>
         <ul>${wellItems}</ul>

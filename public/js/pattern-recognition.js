@@ -162,12 +162,16 @@
   }
 
   function renderFeedbackInCard(card, data) {
-    // Record the round for the billing/limit meter (score is not shown).
-    SCG.addScore(0, "pattern-recognition");
+    // Award the round's small points (floored at 0) and meter the session.
+    const points = Math.max(0, Number.isFinite(data.score) ? data.score : 0);
+    SCG.addScore(points, "pattern-recognition");
 
     const isCorrect   = data.correct;
     const verdictClass = isCorrect ? "positive" : "negative";
     const verdictLabel = isCorrect ? "Correct" : "Incorrect";
+    const pointsPill = points > 0
+      ? `<div class="points-badge">+${points} point${points === 1 ? "" : "s"}</div>`
+      : "";
 
     // howToHandleIt is now an array of steps
     const handleItems = Array.isArray(data.howToHandleIt)
@@ -183,6 +187,7 @@
     feedbackEl.innerHTML = `
       <div class="score-result">
         <div class="score-result-value ${verdictClass}">${verdictLabel}</div>
+        ${pointsPill}
       </div>
       ${twoCorrectNote}
       <div class="feedback-block ${resultClass}">

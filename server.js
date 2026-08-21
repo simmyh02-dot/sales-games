@@ -166,6 +166,14 @@ async function autoUnlock(userId, discoveredSkills) {
   }
 }
 
+// Points for a completed sales call: a base award (60 closer / 15 setter)
+// scaled linearly by the 0-100 callScore, so a great call pays out near the
+// base and a poor one pays out little.
+function pointsForCall(base, callScore) {
+  const s = Math.max(0, Math.min(100, Number(callScore) || 0));
+  return Math.round(base * s / 100);
+}
+
 // Persist a call's key takeaway as a Lesson (Sales Call modes only).
 // Reuses the /end analysis output that used to be shown once and discarded.
 async function saveLesson(userId, { content, headline, source, persona, callScore }) {
@@ -981,6 +989,59 @@ function personaDetail(p) {
   return p.behavior ? `- ${p.behavior}` : "";
 }
 
+// ---------------------------------------------------------------------
+// COMMUNICATION STYLE — a random, persona-INDEPENDENT axis for HOW a
+// prospect talks (verbosity, how much they volunteer), so roleplays stop
+// defaulting to an eager info-dump. Weighted toward short/guarded so terse
+// is the norm and the talkative oversharer is the exception. Picked once at
+// /start, attached to the prospect object, and it rides along on every
+// /message call because the client round-trips the whole prospect.
+// ---------------------------------------------------------------------
+const COMM_STYLES = [
+  { key: "guarded",    label: "Guarded and short",    weight: 4,
+    talk: "Terse and a little suspicious. Mostly one line, sometimes just a few words. You do NOT volunteer detail, you make them ask. A bit of 'who is this again?' energy early on." },
+  { key: "distracted", label: "Distracted and busy",  weight: 4,
+    talk: "Half-paying-attention and a bit surprised they called. Short, slightly vague answers, sometimes a question back ('what's this about?'). They have to earn your focus before you give real answers." },
+  { key: "tired",      label: "Tired and low-energy", weight: 3,
+    talk: "Flat and low-energy, can't-really-be-bothered. Minimal answers, little enthusiasm. You open up only if they actually strike a nerve. Never gush." },
+  { key: "blunt",      label: "Blunt and skeptical",  weight: 3,
+    talk: "Clipped and direct, mildly impatient. 'Get to the point.' You push back and don't hand over anything you weren't asked for." },
+  { key: "reserved",   label: "Warm but reserved",    weight: 3,
+    talk: "Polite and friendly in tone but still reserved. Short answers, you don't overshare, they have to draw the real stuff out of you." },
+  { key: "talkative",  label: "Talkative and open",   weight: 2,
+    talk: "More open and chatty than most. You volunteer some context and think out loud a little. Still a real person on a surprise phone call, not a brochure, no monologuing for paragraphs." },
+];
+
+const COMM_STYLES_BY_KEY = COMM_STYLES.reduce((a, c) => { a[c.key] = c; return a; }, {});
+
+// Weighted random pick, biased toward the short/guarded styles.
+function pickCommStyle() {
+  const total = COMM_STYLES.reduce((s, c) => s + c.weight, 0);
+  let r = Math.random() * total;
+  for (const c of COMM_STYLES) {
+    r -= c.weight;
+    if (r < 0) return c;
+  }
+  return COMM_STYLES[0];
+}
+
+// One-line description for the profile-generation prompt so the OPENING line
+// already reflects the rolled style (that "bit surprised you called" feel).
+function commStyleSeed(style) {
+  return `This prospect's communication style on this call: ${style.label}. ${style.talk} Let their openingMessage already reflect this style (e.g. short/guarded/distracted if that's who they are).`;
+}
+
+// STYLE block for the message prompt, from the prospect's rolled style. Replaces
+// the old fixed "1-3 sentences" line. Delivery only, never changes beliefs.
+function commStyleBlock(style) {
+  const s = style && style.key ? (COMM_STYLES_BY_KEY[style.key] || style) : null;
+  const talk = s ? s.talk : "Straightforward and concise. 1-3 sentences, no filler, no monologuing.";
+  return `STYLE — this is HOW you talk on this call, NOT what you believe (your persona, pain and objections above are unchanged):
+- ${talk}
+- Vary your length like a real person; most replies are short. Only run longer when something genuinely lands or provokes you.
+- Never mention you are an AI. Never use em-dashes. Use plain punctuation.`;
+}
+
 app.post("/api/call/start", optionalAuth, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
   const { scenario, customDescription, section, personality, prospectName } = req.body;
@@ -999,12 +1060,15 @@ Shape their goal, current situation, problem, limiting beliefs, opening line and
     ? `Use exactly "${prospectName}" as the prospect's name.`
     : `Give the prospect a realistic first name.`;
 
+  const commStyle = pickCommStyle();
+
   try {
     const data = await askClaude(
       `Generate a prospect profile for a sales call roleplay simulation.
 Scenario: ${scenario}${customDescription ? ` — ${customDescription}` : ""}
 ${sectionContext}
 ${personalityContext}
+${commStyleSeed(commStyle)}
 ${nameInstruction}
 
 The "limitingBeliefs" array is a small BANK of 3-5 distinct objections / limiting beliefs this specific
@@ -1028,6 +1092,8 @@ Return JSON:
       SONNET
     );
     if (prospectName) data.name = prospectName;
+    // Ride the rolled style along on the prospect so /message stays consistent.
+    data.communicationStyle = { key: commStyle.key, label: commStyle.label };
     res.json(data);
   } catch (err) {
     console.error("call/start error:", err.stack || err.message);
@@ -1090,27 +1156,36 @@ MEMORY AND PROGRESSION (act like a conscious, real human, not a loop):
 - If they have handled most of your beliefs well, soften and move toward a decision like a real person would.
 - If they handle something poorly or dodge it, stay on it - don't let them off the hook.
 
-STYLE:
-- Be straightforward and concise. Say what a real busy human would say, no filler, no monologuing,
-  no repeating yourself. 1-3 sentences unless your personality is explicitly talkative.
-- React realistically based on how well they apply Authority, Tonality, Identity, Certainty,
-  Objection Handling and Closing principles.
-- Stay completely in character. Never mention you are an AI. Never use em-dashes (-). Use plain punctuation.`,
+REACT realistically based on how well they apply Authority, Tonality, Identity, Certainty, Objection Handling and Closing principles. Stay completely in character.
+
+${commStyleBlock(prospect.communicationStyle)}
+
+CLOSE FLAG (be strict and honest):
+- "closed" is true ONLY when you have firmly and explicitly agreed to buy / sign up / start / pay for the offer right now (a clear yes to the purchase). Vague interest, "let me think about it", or "sounds good" is NOT closed.
+- Otherwise "closed" is false.
+
+Return ONLY valid JSON:
+{ "reply": "your spoken reply, in character", "closed": true | false }`,
       messages: [
         {
           role: "user",
-          content: `Conversation so far:\n${historyText}\n\nSalesperson: ${userMessage}\n\nRespond only as ${prospect.name}, in character. Output just the spoken reply, nothing else.`,
+          content: `Conversation so far:\n${historyText}\n\nSalesperson: ${userMessage}\n\nRespond only as ${prospect.name}. Return the JSON described.`,
         },
       ],
     });
 
-    const reply = msg.content
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("")
-      .trim();
-
-    res.json({ reply });
+    const raw = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    let reply = raw, closed = false;
+    try {
+      const parsed = extractJSON(raw);
+      reply = (parsed.reply || "").trim() || raw;
+      closed = parsed.closed === true;
+    } catch {
+      // Model didn't return clean JSON — treat the whole text as the reply.
+      reply = raw;
+      closed = false;
+    }
+    res.json({ reply, closed });
   } catch (err) {
     console.error("call/message error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to get prospect reply." });
@@ -1186,7 +1261,6 @@ Return JSON:
   "thinkAboutNextTime": ["forward-looking bullet, a concrete thing to do differently next call", "..."],
   "whatYouDidWell": ["short bullet under 15 words", "..."],
   "principle": { "name": "principle name from notes", "note": "one sentence on how it applied here" },
-  "scoreDelta": <integer between -15 and 15, roughly (callScore-50)/4 rounded>,
   "discovered_skills": ["skill_id1", "skill_id2", "skill_id3"]
 }`,
       1600,
@@ -1208,6 +1282,9 @@ Return JSON:
         note: h.note || "",
         quote: userLines[h.index].content,
       }));
+
+    // Closer close is worth ~60, scaled by how the call actually went.
+    const pointsAwarded = pointsForCall(60, summary.callScore);
 
     if (req.userId && summary.discovered_skills) {
       autoUnlock(req.userId, summary.discovered_skills);
@@ -1233,7 +1310,7 @@ Return JSON:
         reviewed: true,
       });
     }
-    res.json({ ...summary, highlights });
+    res.json({ ...summary, highlights, pointsAwarded });
   } catch (err) {
     console.error("call/end error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate feedback report." });
@@ -1250,20 +1327,25 @@ Return JSON:
 // challenging persona and resists, exactly like Closer mode.
 // ---------------------------------------------------------------------
 
-// Selectable remote-income opportunities the lead watched a video about.
-// Keyed by the client's `data-offer` value; "Custom Offer" falls through to
-// the trainee's free-text customDescription instead of a canned description.
+// The offer list is now shared with Closer mode. In Setter mode each label is
+// framed as the income OPPORTUNITY the lead watched a video about. Keyed by the
+// client's `data-offer` value; "Custom" falls through to the trainee's free-text
+// customDescription instead of a canned description.
 const SETTER_OFFERS = {
-  "Remote Setter":           "becoming a remote appointment setter — a work-from-anywhere income path booking sales calls for other businesses",
-  "Remote Closer":           "becoming a remote sales closer — a work-from-anywhere income path closing sales calls for other businesses",
+  "Fitness Coach":           "becoming an online fitness coach — building a work-from-anywhere coaching business",
+  "Business Coach":          "becoming a business coach or consultant and building a coaching business",
+  "Agency Offer":            "starting a marketing agency (SMMA) — getting clients paying monthly retainers",
+  "E-commerce Offer":        "building an e-commerce brand — running an online store",
+  "SaaS":                    "breaking into software / SaaS — building or selling a software product",
+  "High Ticket Sales":       "getting into high-ticket sales — remote setting and closing sales calls for other businesses, a work-from-anywhere income path",
   "Affiliate Marketing":     "affiliate marketing — earning commissions promoting other companies' products online",
   "Dropshipping":            "starting a dropshipping e-commerce business — running an online store without holding inventory",
   "Coaching Certification":  "getting certified as a coach in a niche and building a coaching business",
 };
 
 function setterOfferText(offer, customDescription) {
-  if (offer === "Custom Offer") return customDescription || "a remote income opportunity";
-  return SETTER_OFFERS[offer] || SETTER_OFFERS["Remote Setter"];
+  if (offer === "Custom") return customDescription || "a remote income opportunity";
+  return SETTER_OFFERS[offer] || SETTER_OFFERS["High Ticket Sales"];
 }
 
 // The ideal call STRUCTURE (order matters). Used only for grading — never fed
@@ -1303,12 +1385,15 @@ app.post("/api/setter/start", optionalAuth, checkSessionLimit, async (req, res) 
     ? `Use exactly "${prospectName}" as the lead's name.`
     : `Give the lead a realistic first name.`;
 
+  const commStyle = pickCommStyle();
+
   try {
     const data = await askClaude(
       `Generate a prospect profile for a REMOTE-INCOME RECRUITMENT call roleplay.
 The offer: ${offerText}
 The trainee is a SETTER phoning this warm lead. The lead has NOT been sold anything yet — they only watched a video and are curious/skeptical.
 ${personaContext}
+${commStyleSeed(commStyle)}
 ${nameInstruction}
 
 The "limitingBeliefs" array is a BANK of 3-5 distinct objections/hesitations this lead holds about pursuing remote setting and about committing to a next step (surface excuses AND deeper fears), ordered most-likely-first. Keep each to one short sentence in the lead's own voice.
@@ -1329,6 +1414,8 @@ Return JSON:
       SONNET
     );
     if (prospectName) data.name = prospectName;
+    // Ride the rolled style along on the lead so /message stays consistent.
+    data.communicationStyle = { key: commStyle.key, label: commStyle.label };
     res.json(data);
   } catch (err) {
     console.error("setter/start error:", err.stack || err.message);
@@ -1388,8 +1475,7 @@ BOOKING FLAG (be strict and honest):
 - "soft"      = you're interested / open to hearing more, but you have NOT committed to a specific time ("sounds good, tell me more" is soft, not confirmed).
 - "confirmed" = you have firmly accepted a SPECIFIC time slot for the call with the closer (e.g. "yeah, tomorrow at 3 works"). Never mark confirmed for vague interest.
 
-STYLE:
-- Straightforward and concise, 1-3 sentences unless your persona is talkative. No filler, no monologuing. Stay completely in character. Never mention you are an AI. Never use em-dashes. Use plain punctuation.
+${commStyleBlock(prospect.communicationStyle)}
 
 Return ONLY valid JSON:
 { "reply": "your spoken reply, in character", "booking": "none" | "soft" | "confirmed" }`,
@@ -1518,6 +1604,11 @@ The "structure" array MUST include one entry for every stage key: ${SETTER_STAGE
       ? summary.structure.map((s) => ({ ...s, label: stageLabels[s.key] || s.key }))
       : [];
 
+    // Setter close is worth ~15, scaled by the call; an earned booking floors it
+    // high so landing the appointment always feels rewarded.
+    let pointsAwarded = pointsForCall(15, summary.callScore);
+    if (summary.booked && !summary.unearned) pointsAwarded = Math.max(pointsAwarded, 12);
+
     if (req.userId && summary.discovered_skills) {
       autoUnlock(req.userId, summary.discovered_skills);
     }
@@ -1542,7 +1633,7 @@ The "structure" array MUST include one entry for every stage key: ${SETTER_STAGE
         reviewed: true,
       });
     }
-    res.json({ ...summary, structure, highlights });
+    res.json({ ...summary, structure, highlights, pointsAwarded });
   } catch (err) {
     console.error("setter/end error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate feedback report." });
