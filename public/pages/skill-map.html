@@ -104,9 +104,8 @@
       clip-path: polygon(0 0, 100% 0, 100% 100%, 5px 100%, 0 calc(100% - 5px));
       flex-shrink: 0;
     }
-    .legend-node.acquired { background: var(--accent); box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent); }
-    .legend-node.next     { background: color-mix(in srgb, var(--accent-2) 20%, var(--panel)); border: 1.5px solid var(--accent-2); }
-    .legend-node.locked   { background: var(--panel-2); border: 1.5px dashed var(--panel-border-2); }
+    .legend-node.discovered   { background: var(--accent); box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent); }
+    .legend-node.undiscovered { background: var(--panel-2); border: 1.5px solid var(--panel-border-2); }
 
     /* --- Remembered calls strip --- */
     .calls-strip {
@@ -210,35 +209,27 @@
       fill: var(--text-1);
     }
 
-    /* Locked */
-    .state-locked  .node-shape { fill: var(--panel-2); stroke: var(--panel-border-2); stroke-width: 1.5; stroke-dasharray: 3 4; }
-    .state-locked  .node-glyph { fill: var(--text-2); }
-    .state-locked  .node-label { fill: var(--text-2); }
+    /* Not yet discovered — calm, solid outline (no dash: nothing is locked) */
+    .state-undiscovered .node-shape { fill: var(--panel-2); stroke: var(--panel-border-2); stroke-width: 1.5; }
+    .state-undiscovered .node-glyph { fill: var(--text-2); }
+    .state-undiscovered .node-label { fill: var(--text-2); }
 
-    /* Next (unlockable frontier) — amber */
-    .state-next .node-shape { fill: color-mix(in srgb, var(--accent-2) 16%, var(--panel)); stroke: var(--accent-2); stroke-width: 2; }
-    .state-next .node-glyph { fill: var(--accent-2); }
-    .state-next .node-label { fill: var(--text-0); }
-    .state-next.tier-1 .node-shape,
-    .state-next.tier-2 .node-shape { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent-2) 55%, transparent)); }
-
-    /* Acquired — accent */
-    .state-acquired .node-shape { fill: color-mix(in srgb, var(--accent) 20%, var(--panel)); stroke: var(--accent); stroke-width: 2; }
-    .state-acquired .node-glyph { fill: var(--accent); }
-    .state-acquired .node-label { fill: var(--text-0); }
-    .state-acquired.tier-1 .node-shape { fill: var(--accent); }
-    .state-acquired.tier-1 .node-glyph { fill: var(--on-accent); }
-    .state-acquired.tier-1 .node-shape,
-    .state-acquired.tier-2 .node-shape { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 60%, transparent)); }
+    /* Discovered — accent */
+    .state-discovered .node-shape { fill: color-mix(in srgb, var(--accent) 20%, var(--panel)); stroke: var(--accent); stroke-width: 2; }
+    .state-discovered .node-glyph { fill: var(--accent); }
+    .state-discovered .node-label { fill: var(--text-0); }
+    .state-discovered.tier-1 .node-shape { fill: var(--accent); }
+    .state-discovered.tier-1 .node-glyph { fill: var(--on-accent); }
+    .state-discovered.tier-1 .node-shape,
+    .state-discovered.tier-2 .node-shape { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 60%, transparent)); }
 
     /* Highlighted (from a remembered call) */
     .node-group.call-hit .node-shape { stroke: var(--accent-2); stroke-width: 3; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent-2) 70%, transparent)); }
 
     /* Links */
     .edge { transition: opacity 200ms, stroke 200ms; }
-    .branch-edge.to-acquired { stroke: var(--accent);   stroke-width: 2;   stroke-opacity: 0.75; }
-    .branch-edge.to-next     { stroke: var(--accent-2); stroke-width: 2;   stroke-opacity: 0.6;  }
-    .branch-edge.to-locked   { stroke: var(--panel-border-2); stroke-width: 1.5; stroke-opacity: 0.5; stroke-dasharray: 3 5; }
+    .branch-edge.to-discovered   { stroke: var(--accent);   stroke-width: 2;   stroke-opacity: 0.75; }
+    .branch-edge.to-undiscovered { stroke: var(--panel-border-2); stroke-width: 1.5; stroke-opacity: 0.5; }
     .cross-edge { stroke: var(--panel-border-2); stroke-width: 0.9; stroke-opacity: 0.28; stroke-dasharray: 4 4; }
 
     /* Tooltip */
@@ -279,9 +270,8 @@
       display: inline-block; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
       padding: 3px 9px; margin: 0 0 14px 8px;
     }
-    .side-state-badge.state-acquired { background: var(--accent); color: var(--on-accent); }
-    .side-state-badge.state-next     { border: 1px solid var(--accent-2); color: var(--accent-2); }
-    .side-state-badge.state-locked   { border: 1px dashed var(--panel-border-2); color: var(--text-2); }
+    .side-state-badge.state-discovered   { background: var(--accent); color: var(--on-accent); }
+    .side-state-badge.state-undiscovered { border: 1px solid var(--panel-border-2); color: var(--text-2); }
     .side-desc { font-size: 14px; color: var(--text-1); line-height: 1.65; margin-bottom: 18px; }
     .side-scripts-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-2); margin-bottom: 10px; }
     .side-scripts ul { margin: 0; padding-left: 18px; color: var(--text-1); font-size: 13.5px; line-height: 1.75; }
@@ -325,9 +315,8 @@
     </div>
 
     <div class="map-legend">
-      <div class="legend-item"><span class="legend-node acquired"></span> Acquired</div>
-      <div class="legend-item"><span class="legend-node next"></span> Next up</div>
-      <div class="legend-item"><span class="legend-node locked"></span> Locked</div>
+      <div class="legend-item"><span class="legend-node discovered"></span> Discovered</div>
+      <div class="legend-item"><span class="legend-node undiscovered"></span> Not yet discovered</div>
       <div class="legend-item" style="margin-left:auto;color:var(--text-2)">Scroll to zoom · drag to pan</div>
     </div>
 

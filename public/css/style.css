@@ -2798,7 +2798,7 @@ input.custom-input:focus {
 }
 @keyframes mascotDot { 0%,100% { opacity: 0.35; } 50% { opacity: 1; } }
 
-.mascot-stage { position: relative; width: 96px; height: 176px; }
+.mascot-stage { position: relative; width: 96px; height: 120px; }
 
 .mascot-figure {
   position: absolute;

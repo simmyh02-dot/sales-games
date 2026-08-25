@@ -1,6 +1,6 @@
 /* ==========================================================================
    mascot.js — pixel-art prospect mascot for Sales Call Mode
-   A small 16x28 pixel figure that stands beside the chat and reacts to the
+   A small 16x20 pixel bust (torso and up, no legs) that sits beside the chat and reacts to the
    call: idle (waiting) / listening (you're typing) / thinking (AI is working)
    / talking (AI reply, with a mouth flap). Four variants: man/woman x
    brown/blonde. Drawn as flat positioned divs (no box-shadow seams).
@@ -12,7 +12,7 @@
 
 const SCG_MASCOT = (() => {
   const PX = 6;                 // cell size in CSS px
-  const COLS = 16, ROWS = 28;   // sprite grid
+  const COLS = 16, ROWS = 20;   // sprite grid (bust: cropped at the waist)
 
   // Rectangles of cells: [x, y, w, h, colorKey], top-left inclusive.
   const GRID_MAN = [
@@ -22,8 +22,6 @@ const SCG_MASCOT = (() => {
     [4,12,8,8,'shirt'],[10,12,2,8,'shirtShade'],
     [2,13,2,2,'shirt'],[12,13,2,2,'shirt'],
     [2,15,2,5,'skin'],[12,15,2,2,'skin'],[12,17,3,2,'skin'],
-    [4,20,3,6,'pants'],[9,20,3,6,'pantsShade'],
-    [3,26,4,2,'shoe'],[9,26,4,2,'shoeShade'],
   ];
   const GRID_WOMAN = [
     [4,1,8,3,'hair'],[3,3,10,1,'hairShade'],
@@ -35,16 +33,11 @@ const SCG_MASCOT = (() => {
     [4,19,8,1,'trim'],
     [2,13,2,2,'shirt'],[12,13,2,2,'shirt'],
     [2,15,2,5,'skin'],[12,15,2,2,'skin'],[12,17,3,2,'skin'],
-    [3,20,10,1,'skirt'],[2,21,12,1,'skirt'],
-    [2,22,12,1,'skirtShade'],[1,23,14,1,'skirtShade'],
-    [5,24,2,2,'skin'],[9,24,2,2,'skin'],
-    [3,26,4,2,'shoe'],[9,26,4,2,'shoeShade'],
   ];
 
   // Fixed colors, independent of hair/accent.
   const FIXED = {
     skin: '#e8b784', dark: '#2a2018', lips: '#b5636e', bow: '#d97a95',
-    pants: '#8fbf5a', pantsShade: '#6f9a44', shoe: '#6b4226', shoeShade: '#4a2c18',
   };
   // Hair-dependent palettes (man uses cap/capShade, woman uses hair/hairShade).
   const HAIR = {

@@ -2,7 +2,7 @@
   /* ------------------------------------------------------------------ */
   /* Disciplines — one discipline = one skill tree. (Tonality removed.)   */
   /* Colour is no longer per-category: nodes are coloured by STATE        */
-  /* (acquired / next / locked) so the whole tree rides the hue flow.     */
+  /* (discovered / undiscovered) so the whole tree rides the hue flow.    */
   /* ------------------------------------------------------------------ */
   const CATS = {
     A: { label: "Call Flow" },
@@ -19,7 +19,8 @@
   // Node half-extent + type sizes per tier.
   const TIER_S = { 1: 24, 2: 16, 3: 10.5 };
 
-  // Discipline roots start acquired so there's always a visible frontier.
+  // Discipline roots start pre-discovered so the map isn't blank on day one.
+  // (Open question: should a fresh map show nothing until the user earns it?)
   const PRE_UNLOCKED = new Set([
     "spine", "discovery", "limitingbeliefs", "objections",
     "identity", "straightline", "fundamentals", "remote",
@@ -157,13 +158,13 @@
   /* ------------------------------------------------------------------ */
   /* State model: acquired / next (frontier) / locked                     */
   /* ------------------------------------------------------------------ */
+  // Nothing is gated: a skill is either something you've shown in a call
+  // (discovered) or something you simply haven't shown yet. No prerequisites,
+  // no locks -- you can read and train any skill at any time.
   function stateOf(d) {
-    if (unlockedSet.has(d.id)) return "acquired";
-    if (d.parent == null) return "next";            // an un-owned root is the entry point
-    if (unlockedSet.has(d.parent)) return "next";   // parent owned -> this is unlockable next
-    return "locked";
+    return unlockedSet.has(d.id) ? "discovered" : "undiscovered";
   }
-  const STATE_LABEL = { acquired: "Acquired", next: "Next up", locked: "Locked" };
+  const STATE_LABEL = { discovered: "Discovered", undiscovered: "Not yet discovered" };
 
   /* ------------------------------------------------------------------ */
   /* Layout — one top-down tree per discipline, packed into a grid        */
@@ -339,7 +340,7 @@
     .attr("class", "node-shape")
     .attr("d", d => nodePath(TIER_S[d.tier]));
 
-  // State glyph (✓ / 🔒), added per node in applyStates().
+  // State glyph (✓ on discovered nodes), added per node in applyStates().
   nodeSel.append("text").attr("class", "node-glyph");
 
   nodeSel.each(function (d) {
@@ -360,9 +361,7 @@
   /* Apply states — classes drive colour (via CSS vars = hue flow)        */
   /* ------------------------------------------------------------------ */
   function glyphFor(d, state) {
-    if (state === "acquired") return "✓";
-    if (state === "locked" && d.tier !== 3) return "🔒";
-    return "";
+    return state === "discovered" ? "✓" : "";
   }
   function glyphSize(d) {
     return d.tier === 1 ? 15 : d.tier === 2 ? 11 : 8;
@@ -389,8 +388,8 @@
       const state = stateOf(d);
       ttLabel.textContent = d.label;
       ttState.textContent = STATE_LABEL[state];
-      ttState.style.color = state === "acquired" ? "var(--accent)" : state === "next" ? "var(--accent-2)" : "var(--text-2)";
-      ttDesc.textContent  = state === "locked" ? "Train the skills before it to unlock this one." : d.desc;
+      ttState.style.color = state === "discovered" ? "var(--accent)" : "var(--text-2)";
+      ttDesc.textContent  = d.desc;
       tooltip.style.display = "block";
       moveTooltip(event);
     })
