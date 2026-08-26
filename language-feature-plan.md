@@ -65,10 +65,10 @@ Show a small flag on each lesson card so you can eye-scan the list:
 
 ## Phase 2 — Translate the UI chrome
 
-**Scaffolding + app chrome + all three mode pages DONE (2026-08-26).** See below.
-Remaining: **skill-map**, the **landing** marketing copy, the **persona labels/blurbs** in
-`personas.js`, the **9 untranslated locales**, and persisting the chosen language to the
-user record so it follows across devices.
+**All UI surfaces DONE (2026-08-26).** App chrome, the three mode pages, skill-map chrome
+and the landing page are converted. Remaining: the **skill-tree node content** and
+**persona labels/blurbs** (both open decisions, see below), the **9 untranslated locales**,
+and persisting the chosen language to the user record so it follows across devices.
 
 ---
 
@@ -152,6 +152,27 @@ user record so it follows across devices.
 - **Verified locally:** all three pages render fully in Swedish, including JS-built round /
   exercise cards and the AI-error path, and `data-i18n-html` keeps the `<code>` tags in the
   "AI not connected" notice.
+
+## Phase 2 part 3 — skill-map + landing (2026-08-26)
+- **Skill Tree chrome** converted: page header, the 8 discipline filter buttons, search
+  placeholder, legend, zoom hint, remembered-calls strip and its chips, side panel state
+  badges and "Example lines" heading, and the SVG tree titles/subtitles.
+- **Landing page** fully converted (hero, live demo card, the three feature blocks, the
+  whole pricing table, sign-in overlay) and now loads `lang.js` + `i18n.js`.
+- **Line drawn on content vs chrome:** discipline *names* are treated as navigation and are
+  translated; the ~150 skill-tree **node** labels/descriptions/example lines are NOT — they
+  are the methodology itself, same status as the server-side study notes. Persona
+  labels/blurbs in `personas.js` are likewise still English. Both are open decisions.
+
+### Bug found by verification (worth remembering)
+Adding a `t()` i18n helper to `skill-map.js` **shadowed** the `t` parameter that the file
+already uses for tree objects (`trees.forEach(t => ...)`, `linkPath(s, t)`). Calling
+`t("map.skillTreeSub")` threw `t is not a function` and aborted the render **after one
+tree** — the page looked broken but the JS still parsed, so `node --check` passed and only
+the browser check caught it. Fixed by renaming the helper to `i18n()` in that file.
+**Lesson:** don't name the i18n helper `t` in files that already use `t` as a local.
+(Also: `read_console_messages` keeps a per-tab buffer across reloads and server restarts —
+a fixed error keeps reappearing. Confirm with a fresh in-page error trap, not the buffer.)
 
 ## Already done (session 2026-08-25)
 - Mascot figure cropped to a **bust** (torso and up, no legs) — `public/js/mascot.js`,
