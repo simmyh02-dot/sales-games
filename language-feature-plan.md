@@ -65,10 +65,10 @@ Show a small flag on each lesson card so you can eye-scan the list:
 
 ## Phase 2 — Translate the UI chrome
 
-**Scaffolding + first surfaces DONE (2026-08-26).** See "Phase 2 shipped" below.
-Remaining: the mode pages (sales-call, objection-battle, pattern-recognition, skill-map),
-the landing marketing copy, the 9 untranslated locales, and persisting the chosen language
-to the user record so it follows them across devices.
+**Scaffolding + app chrome + all three mode pages DONE (2026-08-26).** See below.
+Remaining: **skill-map**, the **landing** marketing copy, the **persona labels/blurbs** in
+`personas.js`, the **9 untranslated locales**, and persisting the chosen language to the
+user record so it follows across devices.
 
 ---
 
@@ -133,6 +133,25 @@ to the user record so it follows them across devices.
   switching to SV flips static labels, JS-rendered strings, interpolated values and the
   rebuilt app-bar with no reload; language persists across navigation; an empty locale (de)
   falls back to English; round-trip back to EN works.
+
+## Phase 2 part 2 — the three mode pages (2026-08-26)
+- **Objection Battle, Pattern Recognition, Sales Call** fully converted: page headers,
+  pre-start setup screens, difficulty/timer/level pickers, live-call bar, chat placeholders,
+  all JS-built cards, debriefs (both Closer and Setter), and every error/status line.
+- **Shared keys** pulled into `common.*` (difficulty, timer, on/off, principle, loading,
+  back/next, AI-not-connected, points pill, limit-reached, AI-unreachable, nothing-notable)
+  so the three pages don't each carry their own copy.
+- **Identifier vs label split — important:** offer and call-section names are English
+  identifiers that get sent to the AI. They stay on the `data-offer` / `data-section`
+  attributes, and only the *display* text is translated (`offerLabel()` / `sectionLabel()`
+  in `sales-call.js`). Verified in the browser that the wire values are still English while
+  the UI reads Swedish. Same pattern for the server's English enums (`Qualified`,
+  `hit/partial/missed`, booking levels) — translated at render time only.
+- Industry terms that stay English in Swedish sales usage (SaaS, Dropshipping) are
+  deliberately left untranslated in the Swedish dict.
+- **Verified locally:** all three pages render fully in Swedish, including JS-built round /
+  exercise cards and the AI-error path, and `data-i18n-html` keeps the `<code>` tags in the
+  "AI not connected" notice.
 
 ## Already done (session 2026-08-25)
 - Mascot figure cropped to a **bust** (torso and up, no legs) — `public/js/mascot.js`,

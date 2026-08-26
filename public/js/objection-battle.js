@@ -1,10 +1,13 @@
 (() => {
   const CIRC = 2 * Math.PI * 28;
 
+  function t(key, vars) { return (typeof SCG_I18N !== "undefined") ? SCG_I18N.t(key, vars) : key; }
+
+  // Labels are i18n keys, resolved when the badge is written.
   const DIFFICULTY_CONFIG = {
-    1: { label: "Easy",   seconds: 30,  color: "1" },
-    2: { label: "Medium", seconds: 60,  color: "2" },
-    3: { label: "Hard",   seconds: 90,  color: "3" },
+    1: { label: "ob.easy",   seconds: 30,  color: "1" },
+    2: { label: "ob.medium", seconds: 60,  color: "2" },
+    3: { label: "ob.hard",   seconds: 90,  color: "3" },
   };
 
   let roundCount = 0;
@@ -48,13 +51,13 @@
   function buildCardHTML(n) {
     return `
       <div class="round-card-meta">
-        <span class="round-number">Round ${n}</span>
-        <span class="difficulty-badge">Loading...</span>
+        <span class="round-number">${escapeHtml(t("ob.round", { n }))}</span>
+        <span class="difficulty-badge">${escapeHtml(t("common.loading"))}</span>
       </div>
       <div class="objection-card-header">
         <div class="objection-card-text">
-          <div class="panel-label">// Incoming objection</div>
-          <div class="objection-context card-context">Loading scenario...</div>
+          <div class="panel-label">${escapeHtml(t("ob.incoming"))}</div>
+          <div class="objection-context card-context">${escapeHtml(t("ob.loadingScenario"))}</div>
           <div class="objection-quote card-quote">&nbsp;</div>
         </div>
         <div class="timer-ring">
@@ -66,10 +69,10 @@
           <div class="timer-value">--</div>
         </div>
       </div>
-      <textarea class="response-input" placeholder="Type how you'd respond, live, as if you're on the call right now..."></textarea>
+      <textarea class="response-input" placeholder="${escapeHtml(t("ob.placeholder"))}"></textarea>
       <div class="actions-row">
         <span class="objection-context status-line"></span>
-        <button class="btn btn-primary submit-btn">Send response</button>
+        <button class="btn btn-primary submit-btn">${escapeHtml(t("ob.send"))}</button>
       </div>
       <div class="feedback-inline" style="display:none;"></div>
     `;
@@ -153,8 +156,8 @@
         const d = await res.json().catch(() => ({}));
         if (d.error === "limit_reached" && typeof SCG_PRICING !== "undefined") SCG_PRICING.showModal();
         card.classList.remove("loading");
-        card.querySelector(".card-context").textContent = "Monthly session limit reached.";
-        card.querySelector(".card-quote").textContent   = "Upgrade to keep training.";
+        card.querySelector(".card-context").textContent = t("common.limitReached");
+        card.querySelector(".card-quote").textContent   = t("common.limitUpgrade");
         return;
       }
       if (!res.ok) throw new Error("request failed");
@@ -167,15 +170,17 @@
 
       const cfg = DIFFICULTY_CONFIG[data.difficulty] || DIFFICULTY_CONFIG[2];
       const badge = card.querySelector(".difficulty-badge");
-      badge.textContent = timerEnabled ? `${cfg.label} · ${cfg.seconds}s` : `${cfg.label} · no timer`;
+      badge.textContent = timerEnabled
+        ? `${t(cfg.label)} · ${cfg.seconds}s`
+        : `${t(cfg.label)} · ${t("ob.noTimer")}`;
       badge.dataset.difficulty = cfg.color;
 
       roundStartTime = Date.now();
       startTimer(card, cfg.seconds);
     } catch {
       card.classList.remove("loading");
-      card.querySelector(".card-context").textContent = "Couldn't reach the AI.";
-      card.querySelector(".card-quote").textContent = "Try again in a moment.";
+      card.querySelector(".card-context").textContent = t("common.aiUnreachable");
+      card.querySelector(".card-quote").textContent = t("common.tryAgainMoment");
     }
   }
 
@@ -190,9 +195,9 @@
     const submitBtn  = card.querySelector(".submit-btn");
     const statusLine = card.querySelector(".status-line");
     submitBtn.disabled = true;
-    submitBtn.textContent = "Analyzing...";
+    submitBtn.textContent = t("ob.analyzing");
     card.querySelector(".response-input").disabled = true;
-    statusLine.textContent = "AI is reviewing your response...";
+    statusLine.textContent = t("ob.reviewing");
 
     try {
       const res = await fetch("/api/objection/feedback", {
@@ -213,9 +218,9 @@
       nextBar.style.display = "flex";
       nextBar.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } catch {
-      statusLine.textContent = "Something went wrong. Try again.";
+      statusLine.textContent = t("common.somethingWrong");
       submitBtn.disabled = false;
-      submitBtn.textContent = "Send response";
+      submitBtn.textContent = t("ob.send");
       card.querySelector(".response-input").disabled = false;
       submitted = false;
     }
@@ -226,11 +231,12 @@
     const points = Math.max(0, Number.isFinite(data.pointsAwarded) ? data.pointsAwarded
       : (Number.isFinite(data.score) ? data.score : 0));
     SCG.addScore(points, "objection-battle");
-    const pointsPill = `<div class="points-badge">+${points} point${points === 1 ? "" : "s"}</div>`
+    const pointsPill = `<div class="points-badge">${escapeHtml(t(points === 1 ? "common.pointPill" : "common.pointsPill", { n: points }))}</div>`
       + (data.pointsBreakdown ? `<div class="points-why">${escapeHtml(data.pointsBreakdown)}</div>` : "");
 
-    const wellItems   = (data.whatYouDidWell || []).map(b => `<li>${escapeHtml(b)}</li>`).join("") || "<li>Nothing notable.</li>";
-    const missedItems = (data.whatYouMissed  || []).map(b => `<li>${escapeHtml(b)}</li>`).join("") || "<li>Nothing notable.</li>";
+    const nothing     = `<li>${escapeHtml(t("common.nothingNotable"))}</li>`;
+    const wellItems   = (data.whatYouDidWell || []).map(b => `<li>${escapeHtml(b)}</li>`).join("") || nothing;
+    const missedItems = (data.whatYouMissed  || []).map(b => `<li>${escapeHtml(b)}</li>`).join("") || nothing;
 
     // betterAlternative is now an array of lines
     const altItems = Array.isArray(data.betterAlternative)
@@ -241,23 +247,23 @@
     feedbackEl.innerHTML = `
       ${pointsPill}
       <div class="feedback-block good">
-        <h4><span class="tag"></span>What you did well</h4>
+        <h4><span class="tag"></span>${escapeHtml(t("ob.didWell"))}</h4>
         <ul>${wellItems}</ul>
       </div>
       <div class="feedback-block bad">
-        <h4><span class="tag"></span>What you missed</h4>
+        <h4><span class="tag"></span>${escapeHtml(t("ob.missed"))}</h4>
         <ul>${missedItems}</ul>
       </div>
       <div class="feedback-block info">
-        <h4><span class="tag"></span>What's really going on</h4>
+        <h4><span class="tag"></span>${escapeHtml(t("ob.reallyGoingOn"))}</h4>
         <p>${escapeHtml(data.whatIsReallyGoingOn)}</p>
       </div>
       <div class="feedback-block info">
-        <h4><span class="tag"></span>Better alternative</h4>
+        <h4><span class="tag"></span>${escapeHtml(t("ob.betterAlt"))}</h4>
         <ul class="alt-lines">${altItems}</ul>
       </div>
       <div class="feedback-block info">
-        <h4><span class="tag"></span>Principle</h4>
+        <h4><span class="tag"></span>${escapeHtml(t("common.principle"))}</h4>
         <p>${escapeHtml(data.principle)}</p>
       </div>
     `;

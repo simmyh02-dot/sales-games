@@ -16,9 +16,9 @@
 
   <div class="shell">
     <div class="page-header">
-      <div class="mode-tag">Mode 02 — Read The Room</div>
-      <h1>Pattern Recognition</h1>
-      <p>
+      <div class="mode-tag" data-i18n="pr.tag">Mode 02 — Read The Room</div>
+      <h1 data-i18n="pr.title">Pattern Recognition</h1>
+      <p data-i18n="pr.intro">
         A prospect makes a statement. Before you can ever respond well, you
         need to see what's actually happening underneath it — a limiting
         belief, an emotion, an identity issue, a hidden objection.
@@ -26,8 +26,8 @@
     </div>
 
     <div id="api-notice" class="notice" style="display:none;">
-      <h4>AI not connected</h4>
-      <p>
+      <h4 data-i18n="common.aiNotConnected">AI not connected</h4>
+      <p data-i18n-html="common.aiNotConnectedBody">
         Add your Claude API key to the <code>.env</code> file as
         <code>ANTHROPIC_API_KEY</code> and restart the server to enable this mode.
       </p>
@@ -35,24 +35,24 @@
 
     <!-- Pre-start setup: pick a level before the first exercise -->
     <div id="pr-start" class="prestart-panel panel-accent" style="display:none;">
-      <div class="panel-label">// Choose your level</div>
+      <div class="panel-label" data-i18n="pr.chooseLevel">// Choose your level</div>
       <div class="prestart-group">
-        <div class="prestart-label">Difficulty</div>
+        <div class="prestart-label" data-i18n="common.difficulty">Difficulty</div>
         <div class="prestart-options" id="pr-levels">
-          <button type="button" class="prestart-btn active" data-level="1"><span class="pb-title">Level 1</span><span class="pb-sub">Clear reads · +3 pts</span></button>
-          <button type="button" class="prestart-btn" data-level="2"><span class="pb-title">Level 2</span><span class="pb-sub">Subtler tells · +5 pts</span></button>
-          <button type="button" class="prestart-btn" data-level="3"><span class="pb-title">Level 3</span><span class="pb-sub">Ambiguous · +7 pts</span></button>
+          <button type="button" class="prestart-btn active" data-level="1"><span class="pb-title" data-i18n="pr.level1">Level 1</span><span class="pb-sub" data-i18n="pr.level1Sub">Clear reads · +3 pts</span></button>
+          <button type="button" class="prestart-btn" data-level="2"><span class="pb-title" data-i18n="pr.level2">Level 2</span><span class="pb-sub" data-i18n="pr.level2Sub">Subtler tells · +5 pts</span></button>
+          <button type="button" class="prestart-btn" data-level="3"><span class="pb-title" data-i18n="pr.level3">Level 3</span><span class="pb-sub" data-i18n="pr.level3Sub">Ambiguous · +7 pts</span></button>
         </div>
       </div>
-      <button class="btn btn-primary btn-lg" id="pr-start-btn">Start reading</button>
+      <button class="btn btn-primary btn-lg" id="pr-start-btn" data-i18n="pr.startBtn">Start reading</button>
     </div>
 
     <div class="diff-bar" id="pr-diffbar" style="display:none;">
-      <span class="diff-bar-label">Difficulty</span>
+      <span class="diff-bar-label" data-i18n="common.difficulty">Difficulty</span>
       <div class="diff-toggle">
-        <button class="diff-btn active" data-level="1">Level 1</button>
-        <button class="diff-btn" data-level="2">Level 2</button>
-        <button class="diff-btn" data-level="3">Level 3</button>
+        <button class="diff-btn active" data-level="1" data-i18n="pr.level1">Level 1</button>
+        <button class="diff-btn" data-level="2" data-i18n="pr.level2">Level 2</button>
+        <button class="diff-btn" data-level="3" data-i18n="pr.level3">Level 3</button>
       </div>
     </div>
 
@@ -60,7 +60,7 @@
       <div id="exercises-feed"></div>
 
       <div id="next-bar" style="display:none;">
-        <button class="btn btn-primary" id="next-btn">Next exercise</button>
+        <button class="btn btn-primary" id="next-btn" data-i18n="pr.nextBtn">Next exercise</button>
       </div>
     </div>
   </div>
