@@ -6,8 +6,6 @@
   <title>Skill Tree — Sales Camp Games</title>
   <link rel="stylesheet" href="/css/style.css" />
   <script src="/js/theme.js"></script>
-  <script src="/js/lang.js"></script>
-  <script src="/js/i18n.js"></script>
   <script src="/js/auth-guard.js"></script>
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -296,35 +294,35 @@
 
   <div class="shell" style="padding-bottom: 0;">
     <div class="page-header" style="margin-bottom:0;">
-      <div class="mode-tag" data-i18n="map.tag">Reference · Skill Tree</div>
-      <h1 data-i18n="map.title">Skill Tree</h1>
-      <p data-i18n="map.intro">Every concept from your notes, grown into branching skill trees. Skills light up as your calls touch them — the more you train, the more of the tree you own.</p>
+      <div class="mode-tag">Reference · Skill Tree</div>
+      <h1>Skill Tree</h1>
+      <p>Every concept from your notes, grown into branching skill trees. Skills light up as your calls touch them — the more you train, the more of the tree you own.</p>
     </div>
   </div>
 
   <div class="skill-map-wrap" style="padding: 0 24px;">
     <div class="map-controls">
-      <button class="filter-btn active" data-cat="ALL" data-i18n="map.filterAll">All</button>
-      <button class="filter-btn" data-cat="A" data-i18n="cat.A">Call Flow</button>
-      <button class="filter-btn" data-cat="B" data-i18n="cat.B">Discovery</button>
-      <button class="filter-btn" data-cat="C" data-i18n="cat.C">Beliefs</button>
-      <button class="filter-btn" data-cat="D" data-i18n="cat.D">Objections</button>
-      <button class="filter-btn" data-cat="E" data-i18n="cat.E">Identity</button>
-      <button class="filter-btn" data-cat="F" data-i18n="cat.F">Language</button>
-      <button class="filter-btn" data-cat="H" data-i18n="cat.H">Fundamentals</button>
-      <button class="filter-btn" data-cat="I" data-i18n="cat.I">Remote</button>
-      <input class="map-search" id="map-search" type="text" data-i18n-attr="placeholder:map.searchPlaceholder" placeholder="Search nodes..." />
+      <button class="filter-btn active" data-cat="ALL">All</button>
+      <button class="filter-btn" data-cat="A">Call Flow</button>
+      <button class="filter-btn" data-cat="B">Discovery</button>
+      <button class="filter-btn" data-cat="C">Beliefs</button>
+      <button class="filter-btn" data-cat="D">Objections</button>
+      <button class="filter-btn" data-cat="E">Identity</button>
+      <button class="filter-btn" data-cat="F">Language</button>
+      <button class="filter-btn" data-cat="H">Fundamentals</button>
+      <button class="filter-btn" data-cat="I">Remote</button>
+      <input class="map-search" id="map-search" type="text" placeholder="Search nodes..." />
     </div>
 
     <div class="map-legend">
-      <div class="legend-item"><span class="legend-node discovered"></span> <span data-i18n="map.discovered">Discovered</span></div>
-      <div class="legend-item"><span class="legend-node undiscovered"></span> <span data-i18n="map.undiscovered">Not yet discovered</span></div>
-      <div class="legend-item" style="margin-left:auto;color:var(--text-2)" data-i18n="map.zoomHint">Scroll to zoom · drag to pan</div>
+      <div class="legend-item"><span class="legend-node discovered"></span> Discovered</div>
+      <div class="legend-item"><span class="legend-node undiscovered"></span> Not yet discovered</div>
+      <div class="legend-item" style="margin-left:auto;color:var(--text-2)">Scroll to zoom · drag to pan</div>
     </div>
 
     <div class="calls-strip" id="calls-strip">
-      <span class="calls-strip-label" data-i18n-html="map.rememberedCalls">Remembered<br>calls</span>
-      <div class="calls-strip-empty" id="calls-empty" data-i18n="map.callsEmpty">Your calls appear here after you run them — each one lights up the skills it touched, even if you skip the review.</div>
+      <span class="calls-strip-label">Remembered<br>calls</span>
+      <div class="calls-strip-empty" id="calls-empty">Your calls appear here after you run them — each one lights up the skills it touched, even if you skip the review.</div>
     </div>
 
     <div class="map-body">
@@ -339,7 +337,7 @@
 
       <div id="side-panel">
         <div class="side-panel-inner" id="side-content">
-          <button class="side-close" id="side-close-btn" data-i18n-attr="title:map.close" title="Close">✕</button>
+          <button class="side-close" id="side-close-btn" title="Close">✕</button>
           <h2 id="sp-title"></h2>
           <div>
             <span class="side-cat-badge" id="sp-badge"></span>

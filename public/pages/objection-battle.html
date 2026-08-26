@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="/css/style.css" />
   <script src="/js/theme.js"></script>
   <script src="/js/lang.js"></script>
-  <script src="/js/i18n.js"></script>
   <script src="/js/auth-guard.js"></script>
   <script src="https://accounts.google.com/gsi/client" async></script>
 </head>
@@ -16,9 +15,9 @@
 
   <div class="shell">
     <div class="page-header">
-      <div class="mode-tag" data-i18n="ob.tag">Mode 01 — Speed Drill</div>
-      <h1 data-i18n="ob.title">Objection Battle</h1>
-      <p data-i18n="ob.intro">
+      <div class="mode-tag">Mode 01 — Speed Drill</div>
+      <h1>Objection Battle</h1>
+      <p>
         A prospect drops an objection. You get 30, 60, or 90 seconds depending
         on difficulty. Respond as if you're live on the call, then get a quick
         breakdown of what you got right, what you missed, and why.
@@ -26,8 +25,8 @@
     </div>
 
     <div id="api-notice" class="notice" style="display:none;">
-      <h4 data-i18n="common.aiNotConnected">AI not connected</h4>
-      <p data-i18n-html="common.aiNotConnectedBody">
+      <h4>AI not connected</h4>
+      <p>
         Add your Claude API key to the <code>.env</code> file as
         <code>ANTHROPIC_API_KEY</code> and restart the server to enable this mode.
       </p>
@@ -35,23 +34,23 @@
 
     <!-- Pre-start setup: pick difficulty + timer before the first objection -->
     <div id="ob-start" class="prestart-panel panel-accent" style="display:none;">
-      <div class="panel-label" data-i18n="ob.setupLabel">// Set up your drill</div>
+      <div class="panel-label">// Set up your drill</div>
       <div class="prestart-group">
-        <div class="prestart-label" data-i18n="common.difficulty">Difficulty</div>
+        <div class="prestart-label">Difficulty</div>
         <div class="prestart-options" id="ob-difficulty">
-          <button type="button" class="prestart-btn" data-level="1"><span class="pb-title" data-i18n="ob.easy">Easy</span><span class="pb-sub" data-i18n="ob.easySub">30s · forgiving grade</span></button>
-          <button type="button" class="prestart-btn active" data-level="2"><span class="pb-title" data-i18n="ob.medium">Medium</span><span class="pb-sub" data-i18n="ob.mediumSub">60s · realistic</span></button>
-          <button type="button" class="prestart-btn" data-level="3"><span class="pb-title" data-i18n="ob.hard">Hard</span><span class="pb-sub" data-i18n="ob.hardSub">90s · graded ruthlessly</span></button>
+          <button type="button" class="prestart-btn" data-level="1"><span class="pb-title">Easy</span><span class="pb-sub">30s · forgiving grade</span></button>
+          <button type="button" class="prestart-btn active" data-level="2"><span class="pb-title">Medium</span><span class="pb-sub">60s · realistic</span></button>
+          <button type="button" class="prestart-btn" data-level="3"><span class="pb-title">Hard</span><span class="pb-sub">90s · graded ruthlessly</span></button>
         </div>
       </div>
       <div class="prestart-group">
-        <div class="prestart-label" data-i18n="common.timer">Timer</div>
+        <div class="prestart-label">Timer</div>
         <div class="prestart-options" id="ob-timer">
-          <button type="button" class="prestart-btn" data-timer="on"><span class="pb-title" data-i18n="common.on">On</span><span class="pb-sub" data-i18n="ob.onSub">Countdown pressure</span></button>
-          <button type="button" class="prestart-btn" data-timer="off"><span class="pb-title" data-i18n="common.off">Off</span><span class="pb-sub" data-i18n="ob.offSub">Take your time</span></button>
+          <button type="button" class="prestart-btn" data-timer="on"><span class="pb-title">On</span><span class="pb-sub">Countdown pressure</span></button>
+          <button type="button" class="prestart-btn" data-timer="off"><span class="pb-title">Off</span><span class="pb-sub">Take your time</span></button>
         </div>
       </div>
-      <button class="btn btn-primary btn-lg" id="ob-start-btn" data-i18n="ob.startBtn">Start drill</button>
+      <button class="btn btn-primary btn-lg" id="ob-start-btn">Start drill</button>
     </div>
 
     <div id="game-area" style="display:none;">
@@ -59,13 +58,13 @@
 
       <div id="next-bar" style="display:none;">
         <div class="timer-toggle-wrap">
-          <span class="diff-bar-label" data-i18n="common.timer">Timer</span>
+          <span class="diff-bar-label">Timer</span>
           <div class="diff-toggle">
-            <button class="diff-btn" id="timer-on-btn" data-timer="on" data-i18n="common.on">On</button>
-            <button class="diff-btn" id="timer-off-btn" data-timer="off" data-i18n="common.off">Off</button>
+            <button class="diff-btn" id="timer-on-btn" data-timer="on">On</button>
+            <button class="diff-btn" id="timer-off-btn" data-timer="off">Off</button>
           </div>
         </div>
-        <button class="btn btn-primary" id="next-btn" data-i18n="ob.nextBtn">Next objection</button>
+        <button class="btn btn-primary" id="next-btn">Next objection</button>
       </div>
     </div>
   </div>

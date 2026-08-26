@@ -9,13 +9,12 @@
   function $(id) { return document.getElementById(id); }
   function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
   function levelOf(total) { return Math.floor(Math.max(0, total) / 100) + 1; }
-  function t(key, vars) { return (typeof SCG_I18N !== "undefined") ? SCG_I18N.t(key, vars) : key; }
 
   function token() { return (typeof SCG_AUTH !== "undefined") ? SCG_AUTH.getToken() : null; }
   async function authFetch(url, opts = {}) {
-    const tok = token();
-    if (!tok) return null;
-    return fetch(url, { ...opts, headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tok}`, ...(opts.headers || {}) } });
+    const t = token();
+    if (!t) return null;
+    return fetch(url, { ...opts, headers: { "Content-Type": "application/json", "Authorization": `Bearer ${t}`, ...(opts.headers || {}) } });
   }
 
   /* ---- Profile ---- */
@@ -27,19 +26,16 @@
       avatar.className = "profile-avatar profile-avatar-initials";
       avatar.textContent = ((user && (user.name || user.email)) || "?").charAt(0).toUpperCase();
     }
-    $("profile-name").textContent  = (user && user.name)  || t("shell.you");
+    $("profile-name").textContent  = (user && user.name)  || "You";
     $("profile-email").textContent = (user && user.email) || (status && status.email) || "";
 
     const tier = (status && status.tier) || "free";
-    // Same wording as the pricing table, so the badge and the cards agree.
-    $("profile-plan-badge").textContent =
-      { free: t("pricing.free"), pro: t("pricing.pro"), power: t("pricing.power") }[tier]
-      || (tier.charAt(0).toUpperCase() + tier.slice(1));
+    $("profile-plan-badge").textContent = tier.charAt(0).toUpperCase() + tier.slice(1);
     $("profile-plan-badge").dataset.tier = tier;
 
     if (status && typeof status.sessionsUsed === "number") {
       const limit = status.sessionsLimit == null ? "∞" : status.sessionsLimit;
-      $("profile-sessions").textContent = t("settings.sessionsThisMonth", { used: status.sessionsUsed, limit });
+      $("profile-sessions").textContent = `${status.sessionsUsed} / ${limit} sessions this month`;
     }
   }
 
@@ -53,7 +49,7 @@
     $("stat-level").textContent  = level;
     $("stat-rounds").textContent = rounds.toLocaleString();
     $("level-fill").style.width  = intoLevel + "%";
-    $("level-note").textContent  = t("settings.toNextLevel", { n: 100 - intoLevel, level: level + 1 });
+    $("level-note").textContent  = `${100 - intoLevel} pts to Level ${level + 1}`;
   }
 
   /* ---- Friends / leaderboard ---- */
@@ -66,17 +62,17 @@
   function renderLeaderboard(entries) {
     const lb = $("leaderboard");
     if (!entries || !entries.length) {
-      lb.innerHTML = `<div class="leaderboard-empty">${esc(t("settings.lbEmpty"))}</div>`;
+      lb.innerHTML = `<div class="leaderboard-empty">No competitors yet — invite a friend above.</div>`;
       return;
     }
     lb.innerHTML = entries.map((e, i) => {
       const right = e.pending
-        ? `<span class="lb-pending">${esc(t("settings.lbPending"))}</span>`
-        : `<span class="lb-points">${Number(e.total).toLocaleString()} ${esc(t("settings.lbPts"))}</span><span class="lb-level">${esc(t("shell.level", { n: levelOf(e.total) }))}</span>`;
-      const remove = e.you ? "" : `<button class="lb-remove" title="${esc(t("settings.lbRemove"))}" data-email="${esc(e.email)}">✕</button>`;
+        ? `<span class="lb-pending">Hasn't joined yet</span>`
+        : `<span class="lb-points">${Number(e.total).toLocaleString()} pts</span><span class="lb-level">Lv ${levelOf(e.total)}</span>`;
+      const remove = e.you ? "" : `<button class="lb-remove" title="Remove" data-email="${esc(e.email)}">✕</button>`;
       return `<div class="lb-row${e.you ? " you" : ""}">
           <span class="lb-rank">${i + 1}</span>
-          <span class="lb-name">${esc(e.name)}${e.you ? ` <span class="lb-you">${esc(t("settings.lbYou"))}</span>` : ""}</span>
+          <span class="lb-name">${esc(e.name)}${e.you ? ' <span class="lb-you">you</span>' : ""}</span>
           <span class="lb-stats">${right}</span>${remove}
         </div>`;
     }).join("");
@@ -87,15 +83,15 @@
     friendsLoading = true;
     try {
       const res = await authFetch("/api/rivals");
-      if (!res || !res.ok) { $("leaderboard").innerHTML = `<div class="leaderboard-empty">${esc(t("settings.lbSignIn"))}</div>`; friendsLoading = false; return; }
+      if (!res || !res.ok) { $("leaderboard").innerHTML = `<div class="leaderboard-empty">Sign in to compete.</div>`; friendsLoading = false; return; }
       const data = await res.json();
       if (data.dbDisabled) {
-        $("leaderboard").innerHTML = `<div class="leaderboard-empty">${esc(t("settings.lbNeedDb"))}</div>`;
+        $("leaderboard").innerHTML = `<div class="leaderboard-empty">Competing needs the database — available on the live site.</div>`;
         $("add-friend-form").style.display = "none";
         friendsLoading = false; return;
       }
       renderLeaderboard(data.leaderboard || []);
-    } catch { $("leaderboard").innerHTML = `<div class="leaderboard-empty">${esc(t("settings.lbError"))}</div>`; }
+    } catch { $("leaderboard").innerHTML = `<div class="leaderboard-empty">Couldn't load the leaderboard.</div>`; }
     friendsLoading = false;
   }
   async function addFriend(email) {
@@ -103,9 +99,9 @@
     const res = await authFetch("/api/rivals", { method: "POST", body: JSON.stringify({ email }) });
     if (!res) return;
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) { setFriendsMsg(data.error || t("settings.addFriendError"), true); return; }
+    if (!res.ok) { setFriendsMsg(data.error || "Couldn't add that person.", true); return; }
     $("friend-email").value = "";
-    setFriendsMsg(t("settings.invited", { email }));
+    setFriendsMsg(`Invited ${email}.`);
     renderLeaderboard(data.leaderboard || []);
   }
   async function removeFriend(email) {
@@ -118,7 +114,7 @@
   /* ---- Plan ---- */
   function renderPlan(status) {
     const tier = (status && status.tier) || "free";
-    const label = { free: t("settings.planFree"), pro: t("settings.planPro"), power: t("settings.planPower") }[tier] || "";
+    const label = { free: "You're on the Free plan.", pro: "You're on Pro.", power: "You're on Power — unlimited sessions." }[tier] || "";
     $("plan-current").textContent = label;
     if (tier === "power") { $("plan-pro-btn").style.display = "none"; $("plan-power-btn").style.display = "none"; }
     else if (tier === "pro") { $("plan-pro-btn").style.display = "none"; }
@@ -153,15 +149,6 @@
     renderProgress(summary);
     renderPlan(status);
     loadFriends();
-
-    // The JS-rendered sections hold their strings in generated HTML, so
-    // re-run them (from the data we already have) on a language switch.
-    document.addEventListener("scg:languagechange", () => {
-      renderProfile(user, status);
-      renderProgress(summary);
-      renderPlan(status);
-      loadFriends();
-    });
   }
 
   document.addEventListener("DOMContentLoaded", init);

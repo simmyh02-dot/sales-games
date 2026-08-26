@@ -62,24 +62,11 @@
   let analyzed           = false;
   let userBubbles        = []; // chat bubbles for the salesperson's own lines, in order
 
-  function t(key, vars) { return (typeof SCG_I18N !== "undefined") ? SCG_I18N.t(key, vars) : key; }
-
-  // Resolve the shared offer choice to prompt text (Custom → free text). This
-  // value goes to the AI, so it stays in English; see offerLabel() for display.
+  // Resolve the shared offer choice to prompt/display text (Custom → free text).
   function currentOfferText() {
     return selectedOffer === "Custom"
       ? els.offerCustomInput.value.trim()
       : selectedOffer;
-  }
-
-  // Display-only versions of the English identifiers shown in the live call bar.
-  function offerLabel() {
-    return selectedOffer === "Custom"
-      ? els.offerCustomInput.value.trim()
-      : t("offer." + selectedOffer);
-  }
-  function sectionLabel(section) {
-    return section ? t("section." + section) : section;
   }
 
   // Thin wrappers so the mascot is optional — no-op if the module didn't load.
@@ -141,9 +128,9 @@
     els.offerPanel.style.display = "block";
     // The offer step feeds both modes; Closer then picks a section, Setter
     // jumps straight to the prospect.
-    els.offerNextBtn.textContent = t(callMode === "closer"
-      ? "sc.nextPickSection"
-      : "sc.nextPickProspect");
+    els.offerNextBtn.textContent = callMode === "closer"
+      ? "Next: pick a section"
+      : "Next: pick a prospect";
     updateOfferButton();
   });
 
@@ -205,8 +192,8 @@
   function renderPersonalities() {
     const randomCard = `
       <button class="scenario-btn personality-btn selected" data-key="random">
-        ${esc(t("sc.randomize"))}
-        <small>${esc(t("sc.randomizeSub"))}</small>
+        🎲 Randomize
+        <small>Draw a random prospect each call so you don't only train against your favourite. Recommended.</small>
       </button>`;
     const personaCards = PERSONAS.map((p) => `
       <button class="scenario-btn personality-btn" data-key="${p.key}">
@@ -217,21 +204,19 @@
     els.personalityGrid.innerHTML = randomCard + personaCards;
   }
   renderPersonalities();
+
+  // Subtle reminder of the conversation language, shown on the last screen
+  // before the call starts. The setting itself lives in Settings > Language.
+  function renderCallLangNote() {
+    const el = document.getElementById("call-lang-note");
+    if (!el || typeof SCG_LANG === "undefined") return;
+    const name = SCG_LANG.name(SCG_LANG.get()) || "English";
+    el.textContent = `This call will be in ${name}.`;
+  }
+  renderCallLangNote();
   // Randomize is selected by default, so the call can start immediately.
   selectedPersonality = "random";
   els.confirmPersonalityBtn.disabled = false;
-
-  // The picker lives in Settings, so this only fires between calls in practice.
-  // Rebuild the persona cards (built as HTML) but never disturb a live call.
-  document.addEventListener("scg:languagechange", () => {
-    if (prospect) return;
-    renderPersonalities();
-    const keep = els.personalityGrid.querySelector(`[data-key="${selectedPersonality === "random" ? "random" : (selectedPersonality && selectedPersonality.key)}"]`);
-    if (keep) {
-      [...els.personalityGrid.children].forEach((b) => b.classList.remove("selected"));
-      keep.classList.add("selected");
-    }
-  });
 
   els.personalityGrid.addEventListener("click", (e) => {
     const btn = e.target.closest(".personality-btn");
@@ -269,7 +254,7 @@
 
   async function startCall() {
     els.confirmPersonalityBtn.disabled    = true;
-    els.confirmPersonalityBtn.textContent = t("sc.connecting");
+    els.confirmPersonalityBtn.textContent = "Connecting...";
 
     const isSetter = callMode === "setter";
     const isCustom = selectedOffer === "Custom";
@@ -312,7 +297,7 @@
         const d = await res.json().catch(() => ({}));
         if (d.error === "limit_reached" && typeof SCG_PRICING !== "undefined") SCG_PRICING.showModal();
         els.confirmPersonalityBtn.disabled    = false;
-        els.confirmPersonalityBtn.textContent = t("sc.startCall");
+        els.confirmPersonalityBtn.textContent = "Start call";
         return;
       }
       if (!res.ok) throw new Error("request failed");
@@ -326,7 +311,7 @@
 
       // Populate the live call header.
       els.clProspect.textContent    = prospectName;
-      els.clOffer.textContent       = offerLabel();
+      els.clOffer.textContent       = offerText;
       els.clPersonality.textContent = persona ? persona.label : "—";
       // Keep the resolved persona around for the message route and the debrief.
       activePersona = persona;
@@ -334,18 +319,18 @@
       els.clmSituation.style.display = isSetter ? "none" : "";
       els.clmBooking.style.display   = isSetter ? "" : "none";
       if (isSetter) setBookingIndicator("none");
-      else els.clSituation.textContent = sectionLabel(selectedSection);
+      else els.clSituation.textContent = selectedSection;
 
       els.summaryPanel.style.display = "none";
       els.summaryPanel.innerHTML     = "";
       els.chatInputRow.style.display = "flex";
       els.endCallBtn.style.display   = "inline-flex";
       els.endCallBtn.disabled        = false;
-      els.endCallBtn.textContent     = t("sc.analyzeCall");
+      els.endCallBtn.textContent     = "Analyze call";
       if (els.quitCallBtn) {
         els.quitCallBtn.style.display = "inline-flex";
         els.quitCallBtn.disabled      = false;
-        els.quitCallBtn.textContent   = t("sc.endNoReview");
+        els.quitCallBtn.textContent   = "End — no review";
       }
       els.chatInput.disabled         = false;
       els.sendBtn.disabled           = false;
@@ -367,7 +352,7 @@
       els.chatInput.focus();
     } catch {
       els.confirmPersonalityBtn.disabled    = false;
-      els.confirmPersonalityBtn.textContent = t("sc.startCall");
+      els.confirmPersonalityBtn.textContent = "Start call";
       // Stay on the persona panel so they can retry.
       els.personalityPanel.style.display    = "block";
     }
@@ -375,10 +360,10 @@
 
   // Setter booking indicator: none -> soft -> confirmed (never downgrades live).
   const BOOKING_RANK = { none: 0, soft: 1, confirmed: 2 };
-  const BOOKING_KEY = { none: "sc.notBooked", soft: "sc.warmingUp", confirmed: "sc.bookedLive" };
+  const BOOKING_TEXT = { none: "Not booked", soft: "Warming up", confirmed: "Booked (live)" };
   function setBookingIndicator(level) {
-    const lvl = BOOKING_KEY[level] ? level : "none";
-    els.clBooking.textContent = t(BOOKING_KEY[lvl]);
+    const lvl = BOOKING_TEXT[level] ? level : "none";
+    els.clBooking.textContent = BOOKING_TEXT[lvl];
     els.clBooking.className = `clm-val booking-${lvl}`;
   }
 
@@ -395,7 +380,7 @@
   }
 
   function updateProgress() {
-    els.callProgress.textContent = t("sc.msgProgress", { n: userMessageCount, max: TARGET_MESSAGES });
+    els.callProgress.textContent = `MSG ${userMessageCount} / ${TARGET_MESSAGES}`;
   }
 
   function flagNotSerious(message) {
@@ -427,7 +412,7 @@
     els.chatInput.value    = "";
     els.chatInput.disabled = true;
     els.sendBtn.disabled   = true;
-    els.callStatus.textContent = t(isSetter ? "sc.leadResponding" : "sc.prospectResponding");
+    els.callStatus.textContent = isSetter ? "Lead is responding..." : "Prospect is responding...";
     mascotState("thinking");   // the prospect is weighing your line
 
     try {
@@ -480,7 +465,7 @@
         ? "You've hit the suggested call length - wrap it up and analyze when ready."
         : "";
     } catch {
-      els.callStatus.textContent = t("sc.reachError");
+      els.callStatus.textContent = "Something went wrong reaching the prospect.";
       mascotState("idle");
     } finally {
       els.chatInput.disabled = false;
@@ -531,11 +516,11 @@
     }
     busy = true;
     els.endCallBtn.disabled    = true;
-    els.endCallBtn.textContent = t("sc.analyzing");
+    els.endCallBtn.textContent = "Analyzing...";
     els.chatInput.disabled     = true;
     els.sendBtn.disabled       = true;
     els.callStatus.classList.remove("call-status-warn");
-    els.callStatus.textContent = t("sc.readingBack");
+    els.callStatus.textContent = "Reading back through the call...";
     mascotState("thinking");   // reviewing the call
 
     try {
@@ -571,9 +556,9 @@
       els.endCallBtn.style.display   = "none";
       els.callStatus.textContent     = "";
     } catch {
-      els.callStatus.textContent = t("sc.analyzeError");
+      els.callStatus.textContent = "Couldn't analyze the call. Try again.";
       els.endCallBtn.disabled    = false;
-      els.endCallBtn.textContent = t("sc.analyzeCall");
+      els.endCallBtn.textContent = "Analyze call";
       els.chatInput.disabled     = false;
       els.sendBtn.disabled       = false;
     } finally {
@@ -591,11 +576,11 @@
     analyzed = true;                       // lock the call from further input
     els.quitCallBtn.disabled   = true;
     els.endCallBtn.disabled    = true;
-    els.quitCallBtn.textContent = t("sc.ending");
+    els.quitCallBtn.textContent = "Ending...";
     els.chatInput.disabled     = true;
     els.sendBtn.disabled       = true;
     els.callStatus.classList.remove("call-status-warn");
-    els.callStatus.textContent = t("sc.wrappingUp");
+    els.callStatus.textContent = "Wrapping up (no review)...";
 
     let touched = 0;
     try {
@@ -627,15 +612,15 @@
 
   function renderQuitCard(touched) {
     const skillLine = touched
-      ? (touched === 1 ? t("sc.skillsSavedOne") : t("sc.skillsSavedMany", { n: touched }))
-      : t("sc.skillsSavedNone");
+      ? `The ${touched} skill${touched === 1 ? "" : "s"} you touched ${touched === 1 ? "was" : "were"} saved to your Skill Tree.`
+      : "It's saved to your Skill Tree.";
     els.summaryPanel.innerHTML = `
       <div class="panel summary-card panel-accent">
-        <div class="panel-label">${esc(t("sc.endedLabel"))}</div>
-        <p class="summary-headline-p">${esc(t("sc.endedBody", { skills: skillLine }))}</p>
+        <div class="panel-label">// Call ended - no review</div>
+        <p class="summary-headline-p">You ended the call without a debrief. ${esc(skillLine)} No tokens spent on a review.</p>
         <div class="actions-row">
-          <a class="objection-context" href="/pages/skill-map.html" style="text-decoration:underline;color:var(--text-1);">${esc(t("sc.viewSkillTree"))}</a>
-          <button class="btn btn-primary" id="new-call-btn">${esc(t("sc.runAnother"))}</button>
+          <a class="objection-context" href="/pages/skill-map.html" style="text-decoration:underline;color:var(--text-1);">View your Skill Tree →</a>
+          <button class="btn btn-primary" id="new-call-btn">Run another call</button>
         </div>
       </div>`;
     els.summaryPanel.style.display = "block";
@@ -669,7 +654,7 @@
   // breakdown underneath so the number is always explainable.
   function pointsBadge(points, breakdown) {
     const n = Number.isFinite(points) ? points : 0;
-    const pill = `<div class="points-badge">${esc(t(n === 1 ? "common.pointPill" : "common.pointsPill", { n }))}</div>`;
+    const pill = `<div class="points-badge">+${n} point${n === 1 ? "" : "s"}</div>`;
     const why  = breakdown ? `<div class="points-why">${esc(breakdown)}</div>` : "";
     return pill + why;
   }
@@ -681,7 +666,7 @@
 
     els.summaryPanel.innerHTML = `
       <div class="panel summary-card">
-        <div class="panel-label">${esc(t("sc.debriefLabel"))}</div>
+        <div class="panel-label">// Debrief - what to take into your next call</div>
         <div class="summary-top">
           <div class="summary-score">
             <div class="summary-score-val">${data.callScore ?? "—"}</div>
@@ -695,17 +680,17 @@
 
         ${data.rememberThis ? `
         <div class="remember-block">
-          <div class="remember-label">${esc(t("sc.rememberThis"))}</div>
+          <div class="remember-label">Remember this</div>
           <div class="remember-text">${esc(data.rememberThis)}</div>
         </div>` : ""}
 
         <div class="feedback-block info">
-          <h4><span class="tag"></span>${esc(t("sc.thinkNextTime"))}</h4>
+          <h4><span class="tag"></span>Think about this next time</h4>
           <ul>${listItems(data.thinkAboutNextTime)}</ul>
         </div>
 
         <div class="feedback-block good">
-          <h4><span class="tag"></span>${esc(t("sc.didWell"))}</h4>
+          <h4><span class="tag"></span>What you did well</h4>
           <ul>${listItems(data.whatYouDidWell)}</ul>
         </div>
 
@@ -713,8 +698,8 @@
         <div class="quote-block"><strong>${esc(data.principle.name)}</strong>: ${esc(data.principle.note || "")}</div>` : ""}
 
         <div class="actions-row">
-          <span class="objection-context">${esc(t("sc.marksHint"))}</span>
-          <button class="btn btn-primary" id="new-call-btn">${esc(t("sc.runAnother"))}</button>
+          <span class="objection-context">Green, amber and red marks above show your strongest and weakest moves.</span>
+          <button class="btn btn-primary" id="new-call-btn">Run another call</button>
         </div>
       </div>`;
 
@@ -729,23 +714,22 @@
     const points = Number.isFinite(data.pointsAwarded) ? data.pointsAwarded : 0;
     SCG.addScore(points, "setter");
 
-    // outcome is an English enum from the server; translate it for display only.
     const qualified = data.outcome === "Qualified";
     const outcomeClass = qualified ? "outcome-qualified" : "outcome-notqualified";
-    const outcomeLabel = t(qualified ? "sc.qualified" : "sc.notQualified");
+    const outcomeLabel = data.outcome || (qualified ? "Qualified" : "Not Qualified");
 
-    // The rationale itself already comes back in the chosen language.
-    const bookingPrefix = data.booked
-      ? t(data.unearned ? "sc.bookedUnearned" : "sc.booked")
-      : t("sc.notBookedLine");
-    const bookingLine = `${esc(bookingPrefix)} ${esc(data.bookingRationale || "")}`;
+    const bookingLine = data.booked
+      ? (data.unearned
+          ? `Closer call booked — but unearned. ${esc(data.bookingRationale || "")}`
+          : `Closer call booked. ${esc(data.bookingRationale || "")}`)
+      : `No closer call booked. ${esc(data.bookingRationale || "")}`;
     const bookingClass = data.booked ? (data.unearned ? "booking-soft" : "booking-confirmed") : "booking-none";
 
     const obj = data.objectives || {};
     const objRow = (ok, label) =>
       `<div class="setter-obj ${ok ? "ok" : "miss"}"><span class="setter-obj-mark">${ok ? "✓" : "✗"}</span>${label}</div>`;
 
-    const STATUS_LABEL = { hit: t("sc.statusHit"), partial: t("sc.statusPartial"), missed: t("sc.statusMissed") };
+    const STATUS_LABEL = { hit: "Hit", partial: "Partial", missed: "Missed" };
     const structureRows = (data.structure || []).map((s) => {
       const st = ["hit", "partial", "missed"].includes(s.status) ? s.status : "partial";
       return `
@@ -760,7 +744,7 @@
 
     els.summaryPanel.innerHTML = `
       <div class="panel summary-card">
-        <div class="panel-label">${esc(t("sc.setterDebriefLabel"))}</div>
+        <div class="panel-label">// Setter debrief - did you qualify and book the lead?</div>
 
         <div class="setter-outcome ${outcomeClass}">
           <div class="setter-outcome-badge">${esc(outcomeLabel)}</div>
@@ -776,29 +760,29 @@
         ${data.headline ? `<p class="summary-headline-p">${esc(data.headline)}</p>` : ""}
 
         <div class="setter-objectives">
-          ${objRow(!!obj.understoodPain, esc(t("sc.understoodPain")))}
-          ${objRow(!!obj.positionedCloserCall, esc(t("sc.positionedCall")))}
+          ${objRow(!!obj.understoodPain, "Understood the pain")}
+          ${objRow(!!obj.positionedCloserCall, "Positioned the closer call")}
         </div>
 
         ${structureRows ? `
         <div class="feedback-block info">
-          <h4><span class="tag"></span>${esc(t("sc.followedStructure"))}</h4>
+          <h4><span class="tag"></span>How you followed the structure</h4>
           <div class="setter-stages">${structureRows}</div>
         </div>` : ""}
 
         ${data.rememberThis ? `
         <div class="remember-block">
-          <div class="remember-label">${esc(t("sc.rememberThis"))}</div>
+          <div class="remember-label">Remember this</div>
           <div class="remember-text">${esc(data.rememberThis)}</div>
         </div>` : ""}
 
         <div class="feedback-block info">
-          <h4><span class="tag"></span>${esc(t("sc.thinkNextTime"))}</h4>
+          <h4><span class="tag"></span>Think about this next time</h4>
           <ul>${listItems(data.thinkAboutNextTime)}</ul>
         </div>
 
         <div class="feedback-block good">
-          <h4><span class="tag"></span>${esc(t("sc.didWell"))}</h4>
+          <h4><span class="tag"></span>What you did well</h4>
           <ul>${listItems(data.whatYouDidWell)}</ul>
         </div>
 
@@ -806,8 +790,8 @@
         <div class="quote-block"><strong>${esc(data.principle.name)}</strong>: ${esc(data.principle.note || "")}</div>` : ""}
 
         <div class="actions-row">
-          <span class="objection-context">${esc(t("sc.marksHint"))}</span>
-          <button class="btn btn-primary" id="new-call-btn">${esc(t("sc.runAnother"))}</button>
+          <span class="objection-context">Green, amber and red marks above show your strongest and weakest moves.</span>
+          <button class="btn btn-primary" id="new-call-btn">Run another call</button>
         </div>
       </div>`;
 
@@ -818,7 +802,7 @@
   }
 
   function listItems(items) {
-    if (!items || !items.length) return `<li>${esc(t("common.nothingNotable"))}</li>`;
+    if (!items || !items.length) return "<li>Nothing notable.</li>";
     return items.map((x) => `<li>${esc(x)}</li>`).join("");
   }
 
@@ -842,10 +826,10 @@
 
     els.callStatus.textContent        = "";
     els.callStatus.classList.remove("call-status-warn", "call-status-success");
-    els.offerNextBtn.textContent      = t("common.next");
+    els.offerNextBtn.textContent      = "Next";
     els.confirmSectionBtn.disabled    = true;
-    els.confirmSectionBtn.textContent = t("sc.nextPickProspect");
-    els.confirmPersonalityBtn.textContent = t("sc.startCall");
+    els.confirmSectionBtn.textContent = "Next: pick a prospect";
+    els.confirmPersonalityBtn.textContent = "Start call";
 
     [...els.offerGrid.children].forEach((b)   => b.classList.remove("selected"));
     [...els.sectionGrid.children].forEach((b)  => b.classList.remove("selected"));

@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="/css/style.css" />
   <script src="/js/theme.js"></script>
   <script src="/js/lang.js"></script>
-  <script src="/js/i18n.js"></script>
   <script src="/js/auth-guard.js"></script>
   <script src="https://accounts.google.com/gsi/client" async></script>
 </head>
@@ -16,9 +15,9 @@
 
   <div class="shell">
     <div class="page-header">
-      <div class="mode-tag" data-i18n="sc.tag">Mode 03 — Full Simulation</div>
-      <h1 data-i18n="sc.title">Sales Call Mode</h1>
-      <p data-i18n="sc.intro">
+      <div class="mode-tag">Mode 03 — Full Simulation</div>
+      <h1>Sales Call Mode</h1>
+      <p>
         Pick a scenario and a prospect gets generated — with their own goals,
         problems, and a hidden belief they won't say out loud. Run the call,
         then get a full breakdown of what a top closer would have done
@@ -27,8 +26,8 @@
     </div>
 
     <div id="api-notice" class="notice" style="display:none;">
-      <h4 data-i18n="common.aiNotConnected">AI not connected</h4>
-      <p data-i18n-html="common.aiNotConnectedBody">
+      <h4>AI not connected</h4>
+      <p>
         Add your Claude API key to the <code>.env</code> file as
         <code>ANTHROPIC_API_KEY</code> and restart the server to enable this mode.
       </p>
@@ -37,70 +36,71 @@
     <div id="game-area">
       <!-- Mode choice: Setter vs Closer -->
       <div class="panel" id="mode-panel">
-        <div class="panel-label" data-i18n="sc.whatKind">// What kind of call do you want to run?</div>
+        <div class="panel-label">// What kind of call do you want to run?</div>
         <div class="scenario-grid mode-choice-grid" id="mode-grid">
           <button class="scenario-btn mode-choice-btn" data-mode="closer">
-            <span data-i18n="sc.closerCall">Closer Call</span>
-            <small data-i18n="sc.closerCallSub">The full one-call close. Pick a scenario and offer, then run a live call from rapport all the way to the close.</small>
+            Closer Call
+            <small>The full one-call close. Pick a scenario and offer, then run a live call from rapport all the way to the close.</small>
           </button>
           <button class="scenario-btn mode-choice-btn" data-mode="setter">
-            <span data-i18n="sc.setterCall">Setter Call</span>
-            <small data-i18n="sc.setterCallSub">Phone a warm lead who responded to a remote-setter video. Uncover their real pain and book them onto a call with a closer.</small>
+            Setter Call
+            <small>Phone a warm lead who responded to a remote-setter video. Uncover their real pain and book them onto a call with a closer.</small>
           </button>
         </div>
       </div>
 
       <!-- Offer selection (shared by both modes) -->
       <div class="panel" id="offer-panel" style="display:none;">
-        <div class="panel-label" data-i18n="sc.chooseOffer">// Choose an offer</div>
+        <div class="panel-label">// Choose an offer</div>
         <div class="scenario-grid" id="offer-grid">
-          <button class="scenario-btn" data-offer="Fitness Coach" data-i18n="offer.Fitness Coach">Fitness Coach</button>
-          <button class="scenario-btn" data-offer="Business Coach" data-i18n="offer.Business Coach">Business Coach</button>
-          <button class="scenario-btn" data-offer="Agency Offer" data-i18n="offer.Agency Offer">Agency Offer</button>
-          <button class="scenario-btn" data-offer="E-commerce Offer" data-i18n="offer.E-commerce Offer">E-commerce Offer</button>
-          <button class="scenario-btn" data-offer="SaaS" data-i18n="offer.SaaS">SaaS</button>
-          <button class="scenario-btn" data-offer="High Ticket Sales" data-i18n="offer.High Ticket Sales">High Ticket Sales</button>
-          <button class="scenario-btn" data-offer="Affiliate Marketing" data-i18n="offer.Affiliate Marketing">Affiliate Marketing</button>
-          <button class="scenario-btn" data-offer="Dropshipping" data-i18n="offer.Dropshipping">Dropshipping</button>
-          <button class="scenario-btn" data-offer="Coaching Certification" data-i18n="offer.Coaching Certification">Coaching Certification</button>
-          <button class="scenario-btn" data-offer="Custom" data-i18n="offer.Custom">Custom</button>
+          <button class="scenario-btn" data-offer="Fitness Coach">Fitness Coach</button>
+          <button class="scenario-btn" data-offer="Business Coach">Business Coach</button>
+          <button class="scenario-btn" data-offer="Agency Offer">Agency Offer</button>
+          <button class="scenario-btn" data-offer="E-commerce Offer">E-commerce Offer</button>
+          <button class="scenario-btn" data-offer="SaaS">SaaS</button>
+          <button class="scenario-btn" data-offer="High Ticket Sales">High Ticket Sales</button>
+          <button class="scenario-btn" data-offer="Affiliate Marketing">Affiliate Marketing</button>
+          <button class="scenario-btn" data-offer="Dropshipping">Dropshipping</button>
+          <button class="scenario-btn" data-offer="Coaching Certification">Coaching Certification</button>
+          <button class="scenario-btn" data-offer="Custom">Custom</button>
         </div>
-        <input type="text" class="custom-input" id="offer-custom-input" data-i18n-attr="placeholder:sc.offerCustomPlaceholder" placeholder="Describe your custom offer (e.g. high-ticket nutrition coaching for busy parents)" style="display:none;" />
+        <input type="text" class="custom-input" id="offer-custom-input" placeholder="Describe your custom offer (e.g. high-ticket nutrition coaching for busy parents)" style="display:none;" />
 
         <div class="actions-row">
-          <button class="btn btn-secondary" id="back-to-mode-btn" data-i18n="common.back">Back</button>
+          <button class="btn btn-secondary" id="back-to-mode-btn">Back</button>
           <span class="objection-context" id="offer-status"></span>
-          <button class="btn btn-primary" id="offer-next-btn" data-i18n="common.next" disabled>Next</button>
+          <button class="btn btn-primary" id="offer-next-btn" disabled>Next</button>
         </div>
       </div>
 
       <!-- Section selection -->
       <div class="panel" id="section-panel" style="display:none;">
-        <div class="panel-label" data-i18n="sc.whichPart">// Which part of the call do you want to practice?</div>
+        <div class="panel-label">// Which part of the call do you want to practice?</div>
         <div class="scenario-grid section-grid" id="section-grid">
-          <button class="scenario-btn" data-section="Opening"><span data-i18n="section.Opening">Opening</span><br><small data-i18n-html="section.OpeningSub">Rapport &amp; permission</small></button>
-          <button class="scenario-btn" data-section="Situation"><span data-i18n="section.Situation">Situation</span><br><small data-i18n="section.SituationSub">Discovery questions</small></button>
-          <button class="scenario-btn" data-section="Problem"><span data-i18n="section.Problem">Problem</span><br><small data-i18n="section.ProblemSub">Pain deepening</small></button>
-          <button class="scenario-btn" data-section="Consequences"><span data-i18n="section.Consequences">Consequences</span><br><small data-i18n="section.ConsequencesSub">Impact of not solving</small></button>
-          <button class="scenario-btn" data-section="Purchase Decisions"><span data-i18n="section.Purchase Decisions">Purchase Decisions</span><br><small data-i18n-html="section.PurchaseSub">How they buy &amp; who&apos;s involved</small></button>
-          <button class="scenario-btn" data-section="Presentation"><span data-i18n="section.Presentation">Presentation</span><br><small data-i18n="section.PresentationSub">Pitching the offer</small></button>
-          <button class="scenario-btn" data-section="Objection Handling"><span data-i18n="section.Objection Handling">Objection Handling</span><br><small data-i18n="section.ObjectionSub">After the pitch</small></button>
-          <button class="scenario-btn" data-section="Close"><span data-i18n="section.Close">Close</span><br><small data-i18n="section.CloseSub">Asking for the sale</small></button>
+          <button class="scenario-btn" data-section="Opening">Opening<br><small>Rapport &amp; permission</small></button>
+          <button class="scenario-btn" data-section="Situation">Situation<br><small>Discovery questions</small></button>
+          <button class="scenario-btn" data-section="Problem">Problem<br><small>Pain deepening</small></button>
+          <button class="scenario-btn" data-section="Consequences">Consequences<br><small>Impact of not solving</small></button>
+          <button class="scenario-btn" data-section="Purchase Decisions">Purchase Decisions<br><small>How they buy &amp; who&apos;s involved</small></button>
+          <button class="scenario-btn" data-section="Presentation">Presentation<br><small>Pitching the offer</small></button>
+          <button class="scenario-btn" data-section="Objection Handling">Objection Handling<br><small>After the pitch</small></button>
+          <button class="scenario-btn" data-section="Close">Close<br><small>Asking for the sale</small></button>
         </div>
         <div class="actions-row">
-          <button class="btn btn-secondary" id="back-to-offer-btn" data-i18n="common.back">Back</button>
-          <button class="btn btn-primary" id="confirm-section-btn" data-i18n="sc.nextPickProspect" disabled>Next: pick a prospect</button>
+          <button class="btn btn-secondary" id="back-to-offer-btn">Back</button>
+          <button class="btn btn-primary" id="confirm-section-btn" disabled>Next: pick a prospect</button>
         </div>
       </div>
 
       <!-- Persona selection (both modes) -->
       <div class="panel" id="personality-panel" style="display:none;">
-        <div class="panel-label" data-i18n="sc.whoAgainst">// Who are you up against?</div>
-        <p class="objection-context" style="margin-bottom:0;" data-i18n="sc.personaHint">Each persona brings a different kind of resistance. Randomize to keep yourself sharp, or pick one to drill a specific type.</p>
+        <div class="panel-label">// Who are you up against?</div>
+        <p class="objection-context" style="margin-bottom:0;">Each persona brings a different kind of resistance. Randomize to keep yourself sharp, or pick one to drill a specific type.</p>
         <div class="scenario-grid personality-grid" id="personality-grid"></div>
+        <div class="call-lang-note" id="call-lang-note"></div>
         <div class="actions-row">
-          <button class="btn btn-secondary" id="back-to-section-btn" data-i18n="common.back">Back</button>
-          <button class="btn btn-primary" id="confirm-personality-btn" data-i18n="sc.startCall" disabled>Start call</button>
+          <button class="btn btn-secondary" id="back-to-section-btn">Back</button>
+          <button class="btn btn-primary" id="confirm-personality-btn" disabled>Start call</button>
         </div>
       </div>
 
@@ -108,15 +108,15 @@
       <div id="call-panel" style="display:none;">
         <div class="call-live-bar">
           <div class="call-live-head">
-            <div class="call-live-status"><span class="live-dot"></span> <span data-i18n="sc.callLive">Call is live</span></div>
+            <div class="call-live-status"><span class="live-dot"></span> Call is live</div>
             <div class="call-progress" id="call-progress">MSG 0 / 30</div>
           </div>
           <div class="call-live-meta">
-            <div class="clm"><span class="clm-label" data-i18n="sc.prospect">Prospect</span><span class="clm-val" id="cl-prospect">—</span></div>
-            <div class="clm"><span class="clm-label" data-i18n="sc.offer">Offer</span><span class="clm-val" id="cl-offer">—</span></div>
-            <div class="clm"><span class="clm-label" data-i18n="sc.persona">Persona</span><span class="clm-val" id="cl-personality">—</span></div>
-            <div class="clm" id="clm-situation"><span class="clm-label" data-i18n="sc.situation">Situation</span><span class="clm-val" id="cl-situation">—</span></div>
-            <div class="clm" id="clm-booking" style="display:none;"><span class="clm-label" data-i18n="sc.booking">Booking</span><span class="clm-val booking-none" id="cl-booking" data-i18n="sc.notBooked">Not booked</span></div>
+            <div class="clm"><span class="clm-label">Prospect</span><span class="clm-val" id="cl-prospect">—</span></div>
+            <div class="clm"><span class="clm-label">Offer</span><span class="clm-val" id="cl-offer">—</span></div>
+            <div class="clm"><span class="clm-label">Persona</span><span class="clm-val" id="cl-personality">—</span></div>
+            <div class="clm" id="clm-situation"><span class="clm-label">Situation</span><span class="clm-val" id="cl-situation">—</span></div>
+            <div class="clm" id="clm-booking" style="display:none;"><span class="clm-label">Booking</span><span class="clm-val booking-none" id="cl-booking">Not booked</span></div>
           </div>
         </div>
 
@@ -126,14 +126,14 @@
         </div>
 
         <div class="chat-input-row" id="chat-input-row">
-          <input type="text" id="chat-input" data-i18n-attr="placeholder:sc.chatPlaceholder" placeholder="Type what you'd say next on this call..." />
-          <button class="btn btn-primary" id="send-btn" data-i18n="sc.send">Send</button>
+          <input type="text" id="chat-input" placeholder="Type what you'd say next on this call..." />
+          <button class="btn btn-primary" id="send-btn">Send</button>
         </div>
 
         <div class="call-controls">
           <span class="objection-context" id="call-status"></span>
-          <button class="btn btn-ghost" id="quit-call-btn" data-i18n="sc.endNoReview" data-i18n-attr="title:sc.endNoReviewTitle" title="Leave the call without a debrief. Skills still save to your tree.">End — no review</button>
-          <button class="btn btn-secondary" id="end-call-btn" data-i18n="sc.analyzeCall">Analyze call</button>
+          <button class="btn btn-ghost" id="quit-call-btn" title="Leave the call without a debrief. Skills still save to your tree.">End — no review</button>
+          <button class="btn btn-secondary" id="end-call-btn">Analyze call</button>
         </div>
 
         <!-- Interactive analysis summary (rendered under the chat) -->

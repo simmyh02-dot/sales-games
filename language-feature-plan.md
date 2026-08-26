@@ -63,6 +63,28 @@ Show a small flag on each lesson card so you can eye-scan the list:
 
 ---
 
+## DECISION REVERSED (2026-08-26, after seeing it live): UI stays English
+
+Phase 1 shipped and works on the deploy. Seeing the translated UI in production, the call
+was that a half-Swedish interface reads *less* clean than an English one. So:
+
+- **The product is English-only in its interface.** Only the **conversation** language is
+  selectable — roleplays, feedback, debriefs and saved lessons.
+- **Phase 2 (the `data-i18n` / `SCG_I18N` layer) has been fully reverted.**
+  `public/js/i18n.js` is deleted and every `data-i18n` attribute removed. Commits 385f65e, 1c33880 and bee4334 are
+  effectively undone; Phase 1 (75145bd) stands untouched.
+- **Do not rebuild the UI i18n layer** unless this decision is explicitly revisited.
+
+What replaced it:
+- Settings now has a dedicated **Language** section (was a cramped second row under
+  Appearance), labelled "Conversation language" and stating the interface stays English.
+- A subtle pre-call reminder — **"This call will be in {Language}."** — sits on the persona
+  screen, the last step before both Setter and Closer calls (`#call-lang-note`).
+- Kept from the reverted work: the lesson score bug fix (`/100` -> `/10`, since
+  `call_score` is 0-10 server-side).
+
+The sections below are kept as a record of what was built and why it was dropped.
+
 ## Phase 2 — Translate the UI chrome
 
 **All UI surfaces DONE (2026-08-26).** App chrome, the three mode pages, skill-map chrome

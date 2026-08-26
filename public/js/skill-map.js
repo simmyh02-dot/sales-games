@@ -4,20 +4,15 @@
   /* Colour is no longer per-category: nodes are coloured by STATE        */
   /* (discovered / undiscovered) so the whole tree rides the hue flow.    */
   /* ------------------------------------------------------------------ */
-  function i18n(key, vars) { return (typeof SCG_I18N !== "undefined") ? SCG_I18N.t(key, vars) : key; }
-
-  // Discipline names are resolved through i18n at draw time. The node data
-  // below (labels, descriptions, example lines) is the methodology itself and
-  // deliberately stays English, like the server-side study notes.
   const CATS = {
-    A: { get label() { return i18n("cat.A"); } },
-    B: { get label() { return i18n("cat.B"); } },
-    C: { get label() { return i18n("cat.C"); } },
-    D: { get label() { return i18n("cat.D"); } },
-    E: { get label() { return i18n("cat.E"); } },
-    F: { get label() { return i18n("cat.F"); } },
-    H: { get label() { return i18n("cat.H"); } },
-    I: { get label() { return i18n("cat.I.full"); } },
+    A: { label: "Call Flow" },
+    B: { label: "Discovery" },
+    C: { label: "Beliefs" },
+    D: { label: "Objections" },
+    E: { label: "Identity" },
+    F: { label: "Language" },
+    H: { label: "Fundamentals" },
+    I: { label: "Remote & High-Ticket" },
   };
   const TREE_ORDER = ["A", "B", "C", "D", "E", "F", "H", "I"];
 
@@ -169,8 +164,7 @@
   function stateOf(d) {
     return unlockedSet.has(d.id) ? "discovered" : "undiscovered";
   }
-  const STATE_KEY = { discovered: "map.discovered", undiscovered: "map.undiscovered" };
-  function stateLabel(state) { return i18n(STATE_KEY[state] || STATE_KEY.undiscovered); }
+  const STATE_LABEL = { discovered: "Discovered", undiscovered: "Not yet discovered" };
 
   /* ------------------------------------------------------------------ */
   /* Layout — one top-down tree per discipline, packed into a grid        */
@@ -293,7 +287,7 @@
       .text(CATS[t.cat].label);
     grp.append("text").attr("class", "tree-title-sub")
       .attr("x", t.headerX).attr("y", t.headerY + 17).attr("font-size", "9px")
-      .text(i18n("map.skillTreeSub"));
+      .text("SKILL TREE");
   });
 
   /* ------------------------------------------------------------------ */
@@ -393,7 +387,7 @@
       crossSel.attr("opacity", e => (e.source.id === d.id || e.target.id === d.id) ? 0.9 : 0.05);
       const state = stateOf(d);
       ttLabel.textContent = d.label;
-      ttState.textContent = stateLabel(state);
+      ttState.textContent = STATE_LABEL[state];
       ttState.style.color = state === "discovered" ? "var(--accent)" : "var(--text-2)";
       ttDesc.textContent  = d.desc;
       tooltip.style.display = "block";
@@ -427,11 +421,11 @@
     const state = stateOf(d);
     spTitle.textContent = d.label;
     spBadge.textContent = CATS[d.cat].label;
-    spState.textContent = stateLabel(state);
+    spState.textContent = STATE_LABEL[state];
     spState.className = `side-state-badge state-${state}`;
     spDesc.textContent = d.desc;
     if (d.scripts && d.scripts.length) {
-      spScripts.innerHTML = `<div class="side-scripts-label">${escHtml(i18n("map.exampleLines"))}</div><ul>${d.scripts.map(s => `<li>${escHtml(s)}</li>`).join("")}</ul>`;
+      spScripts.innerHTML = `<div class="side-scripts-label">// Example lines</div><ul>${d.scripts.map(s => `<li>${escHtml(s)}</li>`).join("")}</ul>`;
     } else {
       spScripts.innerHTML = "";
     }
@@ -499,7 +493,7 @@
   function fmtDate(ts) {
     if (!ts) return "";
     const d = new Date(Number(ts));
-    return d.toLocaleDateString((typeof SCG_I18N !== "undefined") ? SCG_I18N.locale() : undefined, { month: "short", day: "numeric" });
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
   function renderCalls(calls) {
     // Drop any previously rendered chips (keep the label + empty node).
@@ -513,12 +507,12 @@
       const skillCount = (c.skills || []).length;
       chip.innerHTML = `
         <div class="call-chip-top">
-          <span class="call-chip-mode">${escHtml(c.mode || i18n("map.chipCall"))}</span>
-          <span class="call-chip-outcome ${win ? "win" : ""}">${escHtml(c.outcome || i18n("map.chipEnded"))}</span>
+          <span class="call-chip-mode">${escHtml(c.mode || "Call")}</span>
+          <span class="call-chip-outcome ${win ? "win" : ""}">${escHtml(c.outcome || "ended")}</span>
         </div>
-        <div class="call-chip-title">${escHtml(c.label || i18n("map.chipSalesCall"))}</div>
+        <div class="call-chip-title">${escHtml(c.label || "Sales call")}</div>
         <div class="call-chip-meta">${escHtml([c.persona, c.section].filter(Boolean).join(" · "))}${c.created_at ? " · " + fmtDate(c.created_at) : ""}</div>
-        <div class="call-chip-skills">${escHtml(skillCount ? i18n(skillCount === 1 ? "map.chipSkillOne" : "map.chipSkillMany", { n: skillCount }) : i18n("map.chipNoSkills"))}</div>`;
+        <div class="call-chip-skills">${skillCount ? "◈ " + skillCount + " skill" + (skillCount === 1 ? "" : "s") + " touched" : "no skills tagged"}</div>`;
       chip.addEventListener("click", () => {
         if (activeCallId === c.id) { activeCallId = null; chip.classList.remove("active"); highlightCallSkills([]); return; }
         activeCallId = c.id;

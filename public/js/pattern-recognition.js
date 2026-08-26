@@ -16,8 +16,6 @@
     });
   });
 
-  function t(key, vars) { return (typeof SCG_I18N !== "undefined") ? SCG_I18N.t(key, vars) : key; }
-
   function escapeHtml(str) {
     const div = document.createElement("div");
     div.textContent = str || "";
@@ -52,11 +50,11 @@
     const n = exerciseCount;
     card.innerHTML = `
       <div class="round-card-meta">
-        <span class="round-number">${escapeHtml(t("pr.exercise", { n }))}</span>
-        <span class="difficulty-badge" data-difficulty="${currentDifficulty}">${escapeHtml(t("pr.level", { n: currentDifficulty }))}</span>
+        <span class="round-number">Exercise ${n}</span>
+        <span class="difficulty-badge" data-difficulty="${currentDifficulty}">Level ${currentDifficulty}</span>
       </div>
-      <div class="panel-label">${escapeHtml(t("pr.prospectSays"))}</div>
-      <div class="objection-quote card-statement">${escapeHtml(t("common.loading"))}</div>
+      <div class="panel-label">// Prospect says</div>
+      <div class="objection-quote card-statement">Loading...</div>
       <div class="objection-context card-question" style="margin-top:22px;"></div>
       <div class="option-grid card-options"></div>
       <div class="feedback-inline" style="display:none;"></div>
@@ -79,8 +77,8 @@
         const d = await res.json().catch(() => ({}));
         if (d.error === "limit_reached" && typeof SCG_PRICING !== "undefined") SCG_PRICING.showModal();
         card.classList.remove("loading");
-        card.querySelector(".card-statement").textContent = t("common.limitReached");
-        card.querySelector(".card-question").textContent  = t("common.limitUpgrade");
+        card.querySelector(".card-statement").textContent = "Monthly session limit reached.";
+        card.querySelector(".card-question").textContent  = "Upgrade to keep training.";
         return;
       }
       if (!res.ok) throw new Error("request failed");
@@ -94,8 +92,8 @@
       currentExercise = data;
     } catch {
       card.classList.remove("loading");
-      card.querySelector(".card-statement").textContent = t("common.aiUnreachable");
-      card.querySelector(".card-question").textContent  = t("common.tryAgainMoment");
+      card.querySelector(".card-statement").textContent = "Couldn't reach the AI.";
+      card.querySelector(".card-question").textContent  = "Try again in a moment.";
     }
   }
 
@@ -170,8 +168,8 @@
 
     const isCorrect   = data.correct;
     const verdictClass = isCorrect ? "positive" : "negative";
-    const verdictLabel = escapeHtml(t(isCorrect ? "pr.correct" : "pr.incorrect"));
-    const pointsPill = `<div class="points-badge">${escapeHtml(t(points === 1 ? "common.pointPill" : "common.pointsPill", { n: points }))}</div>`
+    const verdictLabel = isCorrect ? "Correct" : "Incorrect";
+    const pointsPill = `<div class="points-badge">+${points} point${points === 1 ? "" : "s"}</div>`
       + (data.pointsBreakdown ? `<div class="points-why">${escapeHtml(data.pointsBreakdown)}</div>` : "");
 
     // howToHandleIt is now an array of steps
@@ -192,19 +190,19 @@
       </div>
       ${twoCorrectNote}
       <div class="feedback-block ${resultClass}">
-        <h4><span class="tag"></span>${escapeHtml(t("pr.why"))}</h4>
+        <h4><span class="tag"></span>Why</h4>
         <p>${escapeHtml(data.explanation)}</p>
       </div>
       <div class="feedback-block ${resultClass}">
-        <h4><span class="tag"></span>${escapeHtml(t("pr.affectsBuying"))}</h4>
+        <h4><span class="tag"></span>How it affects buying</h4>
         <p>${escapeHtml(data.howItAffectsBuying)}</p>
       </div>
       <div class="feedback-block ${resultClass}">
-        <h4><span class="tag"></span>${escapeHtml(t("pr.howToHandle"))}</h4>
+        <h4><span class="tag"></span>How to handle it</h4>
         <ul>${handleItems}</ul>
       </div>
       <div class="feedback-block ${resultClass}">
-        <h4><span class="tag"></span>${escapeHtml(t("common.principle"))}</h4>
+        <h4><span class="tag"></span>Principle</h4>
         <p>${escapeHtml(data.principle)}</p>
       </div>
     `;

@@ -3241,3 +3241,11 @@ input.custom-input:focus {
   border: 1px solid var(--panel-border);
   border-radius: 2px;
 }
+
+/* Pre-call reminder of the conversation language (Settings > Language) ----- */
+.call-lang-note {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+  margin-top: 14px;
+}
