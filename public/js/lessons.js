@@ -19,11 +19,17 @@ const SCG_LESSONS = (() => {
     return d.innerHTML;
   }
 
+  function t(key, vars) {
+    return (typeof SCG_I18N !== "undefined") ? SCG_I18N.t(key, vars) : key;
+  }
+
   function fmtDate(ms) {
     const n = Number(ms);
     if (!n) return "";
     const d = new Date(n);
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    // Format the date in the chosen language too, not just the labels.
+    const loc = (typeof SCG_I18N !== "undefined") ? SCG_I18N.locale() : undefined;
+    return d.toLocaleDateString(loc, { month: "short", day: "numeric" });
   }
 
   async function authFetch(url, opts = {}) {
@@ -63,7 +69,7 @@ const SCG_LESSONS = (() => {
         els.controls.style.display = "none";
         els.list.innerHTML = "";
         els.empty.style.display = "block";
-        els.empty.textContent = "Lessons need the database to be configured.";
+        els.empty.textContent = t("lessons.needDb");
         loading = false;
         return;
       }
@@ -72,7 +78,7 @@ const SCG_LESSONS = (() => {
       render();
     } catch {
       els.empty.style.display = "block";
-      els.empty.textContent = "Couldn't load your lessons.";
+      els.empty.textContent = t("lessons.loadError");
     }
     loading = false;
   }
@@ -81,7 +87,7 @@ const SCG_LESSONS = (() => {
     const personas = [...new Set(all.map((l) => l.persona).filter(Boolean))].sort();
     const current = els.personaFilter.value;
     els.personaFilter.innerHTML =
-      `<option value="all">All personas</option>` +
+      `<option value="all">${esc(t("lessons.allPersonas"))}</option>` +
       personas.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
     // keep selection if still valid
     if (personas.includes(current)) els.personaFilter.value = current;
@@ -107,7 +113,7 @@ const SCG_LESSONS = (() => {
     if (!all.length) {
       els.list.innerHTML = "";
       els.empty.style.display = "block";
-      els.empty.textContent = "No lessons yet. Run a Sales Call and your key takeaway will be saved here.";
+      els.empty.textContent = t("lessons.emptyNone");
       return;
     }
 
@@ -115,7 +121,7 @@ const SCG_LESSONS = (() => {
     if (!items.length) {
       els.list.innerHTML = "";
       els.empty.style.display = "block";
-      els.empty.textContent = "No lessons match this filter.";
+      els.empty.textContent = t("lessons.emptyFilter");
       return;
     }
     els.empty.style.display = "none";
@@ -129,17 +135,17 @@ const SCG_LESSONS = (() => {
           <div class="lesson-card-top">
             <div class="lesson-badges">
               ${typeof SCG_LANG !== "undefined"
-                ? `<span class="lesson-flag" title="${SCG_LANG.name(l.language) || "Language not recorded"}">${SCG_LANG.flagSvg(l.language)}</span>`
+                ? `<span class="lesson-flag" title="${esc(SCG_LANG.name(l.language) || t("lessons.langUnknown"))}">${SCG_LANG.flagSvg(l.language)}</span>`
                 : ""}
-              <span class="lesson-badge source-${src || "closer"}">${esc(l.source || "Call")}</span>
+              <span class="lesson-badge source-${src || "closer"}">${esc(l.source || t("lessons.call"))}</span>
               ${l.persona ? `<span class="lesson-badge persona">${esc(l.persona)}</span>` : ""}
-              ${typeof l.call_score === "number" ? `<span class="lesson-score">${l.call_score}/100</span>` : ""}
+              ${typeof l.call_score === "number" ? `<span class="lesson-score">${l.call_score}/10</span>` : ""}
               <span class="lesson-date">${fmtDate(l.created_at)}</span>
             </div>
             <div class="lesson-actions">
-              <button class="lesson-act lesson-pin${pinned ? " on" : ""}" data-act="pin" title="${pinned ? "Unpin" : "Pin"}">${pinned ? "★" : "☆"}</button>
-              <button class="lesson-act lesson-review${reviewed ? " on" : ""}" data-act="review" title="${reviewed ? "Mark unread" : "Mark reviewed"}">✓</button>
-              <button class="lesson-act lesson-del" data-act="delete" title="Delete">✕</button>
+              <button class="lesson-act lesson-pin${pinned ? " on" : ""}" data-act="pin" title="${esc(t(pinned ? "lessons.unpin" : "lessons.pin"))}">${pinned ? "★" : "☆"}</button>
+              <button class="lesson-act lesson-review${reviewed ? " on" : ""}" data-act="review" title="${esc(t(reviewed ? "lessons.markUnread" : "lessons.markReviewed"))}">✓</button>
+              <button class="lesson-act lesson-del" data-act="delete" title="${esc(t("lessons.delete"))}">✕</button>
             </div>
           </div>
           <div class="lesson-content">${esc(l.content)}</div>
@@ -202,6 +208,13 @@ const SCG_LESSONS = (() => {
   }
 
   document.addEventListener("DOMContentLoaded", init);
+
+  // Cards are built as HTML strings, so re-render them on a language switch.
+  document.addEventListener("scg:languagechange", () => {
+    if (!els.list) return;
+    populatePersonaFilter();
+    render();
+  });
 
   // Called by auth.js when the signed-in user changes.
   return { refresh: load };

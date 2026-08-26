@@ -6,6 +6,8 @@
   <title>Sales Camp Games</title>
   <link rel="stylesheet" href="/css/style.css" />
   <script src="/js/theme.js"></script>
+  <script src="/js/lang.js"></script>
+  <script src="/js/i18n.js"></script>
   <script src="/js/auth-guard.js"></script>
   <script src="https://accounts.google.com/gsi/client" async></script>
 </head>
@@ -15,14 +17,14 @@
   <div class="shell">
     <!-- Welcome + intent -->
     <section class="home-hero">
-      <div class="home-hero-eyebrow">// Welcome back</div>
-      <h1 class="home-hero-title">Where do you want to train?</h1>
-      <p class="home-hero-sub">Run live reps to sharpen the reflex — then step back and see what you're building.</p>
+      <div class="home-hero-eyebrow" data-i18n="home.eyebrow">// Welcome back</div>
+      <h1 class="home-hero-title" data-i18n="home.title">Where do you want to train?</h1>
+      <p class="home-hero-sub" data-i18n="home.sub">Run live reps to sharpen the reflex — then step back and see what you're building.</p>
     </section>
 
     <!-- TRAIN — live, timed, graded reps -->
     <section class="mode-section train-modes">
-      <h2 class="section-title">// Train</h2>
+      <h2 class="section-title" data-i18n="home.sectionTrain">// Train</h2>
 
       <div class="mode-stack">
         <!-- Flagship -->
@@ -33,15 +35,15 @@
                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.97.36 1.92.68 2.83a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.86.55 2.83.68A2 2 0 0 1 22 16.92z"></path>
               </svg>
             </div>
-            <div class="mode-tag">Flagship · Full Simulation</div>
-            <h3>Sales Call Mode</h3>
-            <p>
+            <div class="mode-tag" data-i18n="home.callTag">Flagship · Full Simulation</div>
+            <h3 data-i18n="home.callTitle">Sales Call Mode</h3>
+            <p data-i18n="home.callDesc">
               The main event. Pick a scenario, an offer and a prospect persona, then run a
               full live call from rapport to close. After it, your call gets marked up line by line -
               what landed, what to sharpen - plus the one thing to remember next time.
             </p>
             <span class="mode-cta">
-              Take the call
+              <span data-i18n="home.callCta">Take the call</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M5 12h14M13 6l6 6-6 6"></path>
               </svg>
@@ -57,11 +59,11 @@
                 <path d="M9.5 12.5l1.8 1.8 3.2-3.6"></path>
               </svg>
             </div>
-            <div class="mode-tag">Mode 01 · Speed Drill</div>
-            <h3>Objection Battle</h3>
-            <p>A prospect throws an objection. You get seconds to find the real belief behind the words.</p>
+            <div class="mode-tag" data-i18n="home.objTag">Mode 01 · Speed Drill</div>
+            <h3 data-i18n="home.objTitle">Objection Battle</h3>
+            <p data-i18n="home.objDesc">A prospect throws an objection. You get seconds to find the real belief behind the words.</p>
             <span class="mode-cta">
-              Enter the arena
+              <span data-i18n="home.objCta">Enter the arena</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
             </span>
           </a>
@@ -73,11 +75,11 @@
                 <circle cx="12" cy="12" r="3"></circle>
               </svg>
             </div>
-            <div class="mode-tag">Mode 02 · Read The Room</div>
-            <h3>Pattern Recognition</h3>
-            <p>A prospect makes a statement. Spot the limiting belief, identity issue or hidden objection underneath.</p>
+            <div class="mode-tag" data-i18n="home.patTag">Mode 02 · Read The Room</div>
+            <h3 data-i18n="home.patTitle">Pattern Recognition</h3>
+            <p data-i18n="home.patDesc">A prospect makes a statement. Spot the limiting belief, identity issue or hidden objection underneath.</p>
             <span class="mode-cta">
-              Start spotting
+              <span data-i18n="home.patCta">Start spotting</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
             </span>
           </a>
@@ -87,7 +89,7 @@
 
     <!-- YOUR PROGRESS — reflect, review, unlock -->
     <section class="mode-section progress-modes">
-      <h2 class="section-title">// Your progress</h2>
+      <h2 class="section-title" data-i18n="home.sectionProgress">// Your progress</h2>
 
       <div class="mode-grid-small two boxed">
           <a href="/pages/skill-map.html" class="mode-card accent-purple">
@@ -96,11 +98,11 @@
                 <path d="M12 3v4M12 7l-5 4M12 7l5 4M7 11v3M17 11v3M7 14l-3 4M7 14l3 4M17 14l-3 4M17 14l3 4"></path>
               </svg>
             </div>
-            <div class="mode-tag">Reference · Skill Trees</div>
-            <h3>Skill Tree</h3>
-            <p>The whole methodology as branching skill trees. Skills unlock as you train across the modes.</p>
+            <div class="mode-tag" data-i18n="home.treeTag">Reference · Skill Trees</div>
+            <h3 data-i18n="home.treeTitle">Skill Tree</h3>
+            <p data-i18n="home.treeDesc">The whole methodology as branching skill trees. Skills unlock as you train across the modes.</p>
             <span class="mode-cta">
-              Explore the trees
+              <span data-i18n="home.treeCta">Explore the trees</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
             </span>
           </a>
@@ -112,11 +114,11 @@
                 <path d="M20 6v14l-3-1.5"></path>
               </svg>
             </div>
-            <div class="mode-tag">Reference · Your Playbook</div>
-            <h3>Lessons</h3>
-            <p>The one thing to remember from every Sales Call, saved so you can review and pin what matters.</p>
+            <div class="mode-tag" data-i18n="home.lessonsTag">Reference · Your Playbook</div>
+            <h3 data-i18n="home.lessonsTitle">Lessons</h3>
+            <p data-i18n="home.lessonsDesc">The one thing to remember from every Sales Call, saved so you can review and pin what matters.</p>
             <span class="mode-cta">
-              Open your lessons
+              <span data-i18n="home.lessonsCta">Open your lessons</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
             </span>
           </a>
@@ -127,31 +129,31 @@
   <div id="pricing-modal" class="pricing-modal-overlay" style="display:none;">
     <div class="pricing-modal">
       <div class="pricing-modal-header">
-        <h3>You've hit your session limit</h3>
-        <p>Upgrade to keep training. No interruptions.</p>
+        <h3 data-i18n="pricing.limitTitle">You've hit your session limit</h3>
+        <p data-i18n="pricing.limitSub">Upgrade to keep training. No interruptions.</p>
       </div>
       <div class="pricing-cards">
         <div class="pricing-card">
-          <div class="pricing-tier">Free</div>
+          <div class="pricing-tier" data-i18n="pricing.free">Free</div>
           <div class="pricing-amount">$0</div>
-          <div class="pricing-sessions">5 sessions / month</div>
-          <div class="pricing-note">Your current plan</div>
+          <div class="pricing-sessions" data-i18n="pricing.freeSessions">5 sessions / month</div>
+          <div class="pricing-note" data-i18n="pricing.currentPlan">Your current plan</div>
         </div>
         <div class="pricing-card featured">
-          <div class="pricing-badge">Most popular</div>
-          <div class="pricing-tier">Pro</div>
+          <div class="pricing-badge" data-i18n="pricing.mostPopular">Most popular</div>
+          <div class="pricing-tier" data-i18n="pricing.pro">Pro</div>
           <div class="pricing-amount">$15<span>/mo</span></div>
-          <div class="pricing-sessions">60 sessions / month</div>
-          <button class="btn btn-primary" onclick="SCG_PRICING.checkout('pro')">Upgrade to Pro</button>
+          <div class="pricing-sessions" data-i18n="pricing.proSessions">60 sessions / month</div>
+          <button class="btn btn-primary" onclick="SCG_PRICING.checkout('pro')" data-i18n="pricing.upgradePro">Upgrade to Pro</button>
         </div>
         <div class="pricing-card">
-          <div class="pricing-tier">Power</div>
+          <div class="pricing-tier" data-i18n="pricing.power">Power</div>
           <div class="pricing-amount">$29<span>/mo</span></div>
-          <div class="pricing-sessions">Unlimited sessions</div>
-          <button class="btn btn-secondary" onclick="SCG_PRICING.checkout('power')">Go Power</button>
+          <div class="pricing-sessions" data-i18n="pricing.powerSessions">Unlimited sessions</div>
+          <button class="btn btn-secondary" onclick="SCG_PRICING.checkout('power')" data-i18n="pricing.goPower">Go Power</button>
         </div>
       </div>
-      <button class="pricing-close" onclick="SCG_PRICING.hideModal()">Maybe later</button>
+      <button class="pricing-close" onclick="SCG_PRICING.hideModal()" data-i18n="pricing.maybeLater">Maybe later</button>
     </div>
   </div>
 

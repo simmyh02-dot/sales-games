@@ -112,7 +112,11 @@ const SCG_LANG = (() => {
     sel.innerHTML = LANGS.map(
       (l) => `<option value="${l.code}"${l.code === cur ? " selected" : ""}>${l.native} — ${l.name}</option>`
     ).join("");
-    sel.addEventListener("change", () => set(sel.value));
+    sel.addEventListener("change", () => {
+      set(sel.value);
+      // Re-translate the chrome in place so the choice is visible immediately.
+      if (typeof SCG_I18N !== "undefined") SCG_I18N.refresh();
+    });
     return sel;
   }
   function mountSelect(host) {

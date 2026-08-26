@@ -14,20 +14,28 @@
    ========================================================================== */
 
 const SCG_SHELL = (() => {
+  // Labels are i18n keys, resolved at render time so a language change can
+  // just rebuild the menu (see the scg:languagechange listener below).
   const NAV = {
     train: [
-      { href: "/pages/sales-call.html",         label: "Sales Call",         tag: "Full simulation" },
-      { href: "/pages/objection-battle.html",    label: "Objection Battle",   tag: "Speed drill" },
-      { href: "/pages/pattern-recognition.html", label: "Pattern Recognition",tag: "Read the room" },
+      { href: "/pages/sales-call.html",          label: "nav.salesCall", tag: "nav.salesCallTag" },
+      { href: "/pages/objection-battle.html",    label: "nav.objection", tag: "nav.objectionTag" },
+      { href: "/pages/pattern-recognition.html", label: "nav.pattern",   tag: "nav.patternTag" },
     ],
     progress: [
-      { href: "/pages/skill-map.html", label: "Skill Tree", tag: "The methodology" },
-      { href: "/pages/lessons.html",   label: "Lessons",    tag: "Your playbook" },
+      { href: "/pages/skill-map.html", label: "nav.skillTree", tag: "nav.skillTreeTag" },
+      { href: "/pages/lessons.html",   label: "nav.lessons",   tag: "nav.lessonsTag" },
     ],
   };
 
+  // Falls back to the raw key if i18n hasn't loaded (landing has no shell).
+  function t(key, vars) {
+    return (typeof SCG_I18N !== "undefined") ? SCG_I18N.t(key, vars) : key;
+  }
+
   let built = false;
   let menuOpen = false;
+  let lastUser = null;   // remembered so a language rebuild can restore the menu
 
   function esc(str) {
     const d = document.createElement("div");
@@ -43,11 +51,11 @@ const SCG_SHELL = (() => {
       const active = here === it.href ? " active" : "";
       return `
         <a class="um-item${active}" href="${it.href}">
-          <span class="um-item-label">${esc(it.label)}</span>
-          <span class="um-item-tag">${esc(it.tag)}</span>
+          <span class="um-item-label">${esc(t(it.label))}</span>
+          <span class="um-item-tag">${esc(t(it.tag))}</span>
         </a>`;
     }).join("");
-    return `<div class="um-group"><div class="um-group-label">${esc(title)}</div>${rows}</div>`;
+    return `<div class="um-group"><div class="um-group-label">${esc(t(title))}</div>${rows}</div>`;
   }
 
   function build() {
@@ -58,7 +66,7 @@ const SCG_SHELL = (() => {
     const bar = document.createElement("header");
     bar.className = "app-bar";
     bar.innerHTML = `
-      <a class="app-brand" href="/home" aria-label="Sales Camp Games home">
+      <a class="app-brand" href="/home" aria-label="${esc(t("shell.brandHome"))}">
         <span class="app-brand-mark">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="9"></circle>
@@ -70,22 +78,22 @@ const SCG_SHELL = (() => {
       </a>
 
       <div class="app-bar-right">
-        <a class="points-chip" id="points-chip" href="/settings#progress" title="Your total points" style="display:none;">
-          <span class="pc-total">0</span><span class="pc-sep">·</span><span class="pc-level">Lv 1</span>
+        <a class="points-chip" id="points-chip" href="/settings#progress" title="${esc(t("shell.pointsTitle"))}" style="display:none;">
+          <span class="pc-total">0</span><span class="pc-sep">·</span><span class="pc-level">${esc(t("shell.level", { n: 1 }))}</span>
         </a>
 
         <div class="user-menu" id="user-menu">
           <button class="user-menu-trigger" id="user-menu-trigger" aria-haspopup="true" aria-expanded="false" style="display:none;"></button>
           <div id="auth-widget"></div>
           <div class="user-menu-dropdown" id="user-menu-dropdown" role="menu" hidden>
-            ${navGroup("Train", NAV.train)}
-            ${navGroup("Progress", NAV.progress)}
+            ${navGroup("nav.train", NAV.train)}
+            ${navGroup("nav.progress", NAV.progress)}
             <div class="um-group">
-              <div class="um-group-label">Account</div>
-              <a class="um-item um-link" href="/settings#profile"><span class="um-item-label">Profile</span></a>
-              <a class="um-item um-link" href="/settings"><span class="um-item-label">Settings</span></a>
-              <a class="um-item um-link" href="/settings#friends"><span class="um-item-label">Invite friends</span></a>
-              <button class="um-item um-link um-signout" id="um-signout"><span class="um-item-label">Sign out</span></button>
+              <div class="um-group-label">${esc(t("common.account"))}</div>
+              <a class="um-item um-link" href="/settings#profile"><span class="um-item-label">${esc(t("common.profile"))}</span></a>
+              <a class="um-item um-link" href="/settings"><span class="um-item-label">${esc(t("common.settings"))}</span></a>
+              <a class="um-item um-link" href="/settings#friends"><span class="um-item-label">${esc(t("common.inviteFriends"))}</span></a>
+              <button class="um-item um-link um-signout" id="um-signout"><span class="um-item-label">${esc(t("common.signOut"))}</span></button>
             </div>
           </div>
         </div>
@@ -130,6 +138,7 @@ const SCG_SHELL = (() => {
 
   // Called by auth.js when the signed-in user is known (or null on sign-out).
   function setUser(user) {
+    lastUser = user;
     if (!built) build();
     const trigger = document.getElementById("user-menu-trigger");
     const widget  = document.getElementById("auth-widget");
@@ -140,7 +149,7 @@ const SCG_SHELL = (() => {
       const avatar = user.picture
         ? `<img class="um-avatar" src="${esc(user.picture)}" alt="" referrerpolicy="no-referrer" />`
         : `<span class="um-avatar um-avatar-initials">${esc(initial)}</span>`;
-      trigger.innerHTML = `${avatar}<span class="um-trigger-name">${esc(user.name || "You")}</span>
+      trigger.innerHTML = `${avatar}<span class="um-trigger-name">${esc(user.name || t("shell.you"))}</span>
         <svg class="um-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>`;
       trigger.style.display = "inline-flex";
       if (widget) widget.style.display = "none";
@@ -166,9 +175,21 @@ const SCG_SHELL = (() => {
       const data = await res.json();
       const total = Number(data.total) || 0;
       chip.querySelector(".pc-total").textContent = total.toLocaleString();
-      chip.querySelector(".pc-level").textContent = "Lv " + levelOf(total);
+      chip.querySelector(".pc-level").textContent = t("shell.level", { n: levelOf(total) });
       chip.style.display = "inline-flex";
     } catch { chip.style.display = "none"; }
+  }
+
+  // The bar's labels are baked into innerHTML at build time, so a language
+  // switch throws the old bar away and builds a fresh one in its place.
+  function rebuild() {
+    const bar = document.querySelector(".app-bar");
+    if (!bar) return;
+    bar.remove();
+    built = false;
+    menuOpen = false;
+    build();
+    setUser(lastUser);
   }
 
   if (document.readyState === "loading") {
@@ -177,5 +198,7 @@ const SCG_SHELL = (() => {
     build();
   }
 
-  return { build, setUser, refreshPoints, closeMenu };
+  document.addEventListener("scg:languagechange", rebuild);
+
+  return { build, rebuild, setUser, refreshPoints, closeMenu };
 })();

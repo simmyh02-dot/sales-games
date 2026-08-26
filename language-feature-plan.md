@@ -63,14 +63,12 @@ Show a small flag on each lesson card so you can eye-scan the list:
 
 ---
 
-## Phase 2 — Translate the UI chrome (tedious, not hard)
+## Phase 2 — Translate the UI chrome
 
-- Build a tiny i18n helper: `t(key)` + per-locale dicts (`en.js`, `sv.js`, …), driven by
-  `data-i18n` attributes or JS lookups. ~half a day of scaffolding.
-- Extract every hardcoded string across the HTML + JS into the dicts (a few hundred
-  strings). Ongoing per language.
-- Cover: nav/app-shell, Settings, Lessons library shell, home, landing marketing copy.
-- Persist chosen language to the user record so it follows them across devices.
+**Scaffolding + first surfaces DONE (2026-08-26).** See "Phase 2 shipped" below.
+Remaining: the mode pages (sales-call, objection-battle, pattern-recognition, skill-map),
+the landing marketing copy, the 9 untranslated locales, and persisting the chosen language
+to the user record so it follows them across devices.
 
 ---
 
@@ -112,6 +110,29 @@ Show a small flag on each lesson card so you can eye-scan the list:
   fetch wrapper injects the stored language, preserves other fields, and respects an explicit
   one — proven via a temporary echo route (since removed). AI *output* language needs the
   Vercel deploy to confirm.
+
+## Phase 2 shipped — scaffolding + core chrome (2026-08-26)
+- **`public/js/i18n.js`** (new) — `SCG_I18N`: `t(key, vars)` with `{placeholder}`
+  interpolation, plus a DOM driver for `data-i18n` (text), `data-i18n-html` (strings with
+  inline markup, from our dicts only), and `data-i18n-attr="placeholder:key;title:key"`.
+  Applies on load and sets `<html lang>`.
+- **Fallback chain:** active locale -> English -> the key itself. A partial dict degrades
+  to English instead of rendering blanks; a truly missing key shows the key (obvious in dev).
+- **Live switching:** changing the Settings picker calls `SCG_I18N.refresh()`, which
+  re-applies the DOM and fires a `scg:languagechange` event. `app-shell.js` rebuilds the
+  app-bar (its labels are baked into innerHTML), and `lessons.js` / `settings.js` re-render
+  their generated sections. No reload needed.
+- **Surfaces converted:** app-bar + full user menu, home (hero, all 5 mode cards), Settings
+  (every section incl. leaderboard/plan strings), Lessons (shell, filters, empty states,
+  card badges + action tooltips), and the shared pricing modal.
+- **Dicts:** English (source of truth) + Swedish, ~110 keys each. The other 9 locales are
+  empty objects that fall back to English — filling one in is the only step to add a language.
+- **Also fixed in passing:** lesson cards rendered the call score as `/100`, but `call_score`
+  is 0-10 server-side — now `/10`. Lesson dates now format in the chosen locale.
+- **Verified locally** on the real pages (minted a dev JWT to pass auth-guard): EN renders,
+  switching to SV flips static labels, JS-rendered strings, interpolated values and the
+  rebuilt app-bar with no reload; language persists across navigation; an empty locale (de)
+  falls back to English; round-trip back to EN works.
 
 ## Already done (session 2026-08-25)
 - Mascot figure cropped to a **bust** (torso and up, no legs) — `public/js/mascot.js`,
