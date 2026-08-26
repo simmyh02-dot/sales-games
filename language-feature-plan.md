@@ -74,12 +74,15 @@ Show a small flag on each lesson card so you can eye-scan the list:
 
 ---
 
-## Open decisions for tomorrow
-1. Launch languages (English + Swedish first?).
-2. Flag style: SVG vs text pill.
-3. Concept-name translation policy (translate vs keep English terms).
-4. Skill map: should a fresh map show nothing until earned? (Today we removed locks; roots
-   are still pre-discovered via `PRE_UNLOCKED` in `skill-map.js` — decide if that stays.)
+## Decisions made (2026-08-26)
+1. **Launch languages** — DONE: English + Swedish + Spanish, German, French, Norwegian,
+   Danish, Finnish, Italian, Dutch, Portuguese (11). Adding more is one row in the `LANGS`
+   array in `public/js/lang.js` + `AI_LANGUAGES` in `server.js`. UI chrome stays English.
+2. **Flag style** — DONE: inline SVG (hand-rolled, geometric) so they render identically on
+   Windows. `SCG_LANG.flagSvg(code)`; neutral "?" flag for lessons with no stored language.
+3. **Concept-name policy** — DECIDED: translate. `langRule()` tells the AI to translate the
+   principle names naturally into the target language.
+4. **Skill map** — still open, out of scope for this build (roots stay pre-discovered).
 
 ## Caveats to remember
 - Shared pattern/objection cache is language-blind (see Phase 1.3).
@@ -88,7 +91,29 @@ Show a small flag on each lesson card so you can eye-scan the list:
   content comes out in the target language, but the notes themselves stay English.
 - This deliberately reverses the previous "English-only product" stance.
 
-## Already done (this session, 2026-08-25)
+## Phase 1 shipped (2026-08-26)
+- **`public/js/lang.js`** (new) — `SCG_LANG` module: stores `scg_lang` in localStorage,
+  builds the Settings `<select>`, renders per-lesson SVG flags, and wraps `fetch` to inject
+  `language` into every `/api` POST body (so no call site opts in; respects an explicit
+  `language` already in the body). Loaded in `<head>` on the 3 AI pages + settings + lessons.
+- **Settings selector** — `settings.html` Appearance section + `settings.js` mount, mirroring
+  the theme toggle. Styled via `.settings-select` in `style.css`.
+- **Server prompt injection** — `langRule(language)` + `AI_LANGUAGES` map in `server.js`;
+  `askClaude()` takes a 4th `language` arg and appends the rule to the system prompt. Threaded
+  through all AI endpoints (objection/pattern new+feedback, call & setter start/message/end).
+  The two inline `messages.create` calls (call/setter message) append `langRule` directly.
+  Skill-ID-only helper (`discoverSkillsFromTranscript`) intentionally left English.
+- **Cache fix (Phase 1.3)** — objection & pattern shared caches are English-only now:
+  non-English requests bypass both the read and the write, so no English item is ever served.
+- **Lesson flags** — `lessons.language` column (+ `ALTER … ADD COLUMN IF NOT EXISTS`),
+  threaded through `saveLesson` and both `/end` callers; GET returns it; `lessons.js` renders
+  the flag as the first badge. Pre-existing lessons show the neutral "?" flag.
+- **Verified locally** (AI/DB off): selector renders 11 langs + persists; all 12 flags render;
+  fetch wrapper injects the stored language, preserves other fields, and respects an explicit
+  one — proven via a temporary echo route (since removed). AI *output* language needs the
+  Vercel deploy to confirm.
+
+## Already done (session 2026-08-25)
 - Mascot figure cropped to a **bust** (torso and up, no legs) — `public/js/mascot.js`,
   `public/css/style.css` (`.mascot-stage` height).
 - Skill tree **locks removed**: two-state model (discovered / not yet discovered), no lock

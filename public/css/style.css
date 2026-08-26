@@ -3218,3 +3218,26 @@ input.custom-input:focus {
 .prestart-btn.active .pb-sub { color: var(--accent); }
 .prestart-panel .btn-lg { margin-top: 4px; }
 
+
+/* Language selector (Settings) + lesson language flags (i18n) --------------- */
+.settings-select {
+  background: var(--bg-1);
+  border: 1px solid var(--panel-border);
+  color: var(--text-0);
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 10px 14px;
+  min-width: 210px;
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+.settings-select:focus { outline: none; border-color: var(--accent); }
+
+.lesson-flag { display: inline-flex; align-items: center; line-height: 0; }
+.lesson-flag .flag {
+  width: 20px;
+  height: 13px;
+  display: block;
+  border: 1px solid var(--panel-border);
+  border-radius: 2px;
+}

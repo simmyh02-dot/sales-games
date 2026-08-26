@@ -122,8 +122,9 @@
 
   /* ---- Boot ---- */
   async function init() {
-    // Appearance toggle
+    // Appearance toggle + language selector
     if (typeof SCG_THEME !== "undefined") SCG_THEME.mountToggle($("theme-toggle-host"));
+    if (typeof SCG_LANG !== "undefined") SCG_LANG.mountSelect($("lang-select-host"));
 
     // Friends form
     $("add-friend-form").addEventListener("submit", (e) => {

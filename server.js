@@ -75,6 +75,7 @@ if (process.env.DATABASE_URL) {
       source TEXT,
       persona TEXT,
       call_score INTEGER,
+      language TEXT,
       reviewed BOOLEAN DEFAULT FALSE,
       pinned BOOLEAN DEFAULT FALSE,
       created_at BIGINT
@@ -97,6 +98,7 @@ if (process.env.DATABASE_URL) {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'free';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
+    ALTER TABLE lessons ADD COLUMN IF NOT EXISTS language TEXT;
   `).catch(() => {});
 }
 
@@ -178,13 +180,13 @@ function clampRating(v) { return Math.max(0, Math.min(10, Math.round(Number(v) |
 
 // Persist a call's key takeaway as a Lesson (Sales Call modes only).
 // Reuses the /end analysis output that used to be shown once and discarded.
-async function saveLesson(userId, { content, headline, source, persona, callScore }) {
+async function saveLesson(userId, { content, headline, source, persona, callScore, language }) {
   if (!db || !userId || !content) return;
   await db.query(
-    `INSERT INTO lessons (user_id, content, headline, source, persona, call_score, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    `INSERT INTO lessons (user_id, content, headline, source, persona, call_score, language, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [userId, content, headline || null, source || null, persona || null,
-     Number.isFinite(callScore) ? callScore : null, Date.now()]
+     Number.isFinite(callScore) ? callScore : null, language || null, Date.now()]
   ).catch(e => console.error("saveLesson error:", e.message));
 }
 
@@ -376,6 +378,30 @@ RESPONSE STYLE (follow strictly):
 - Name the exact mistake or the exact thing they did right.
 - Never use em-dashes (—). Use hyphens (-), colons (:), or restructure the sentence.`;
 
+// Codes the client can request (mirror of LANGS in public/js/lang.js).
+// The value is the English name of the language, used in the prompt.
+const AI_LANGUAGES = {
+  en: "English", sv: "Swedish", es: "Spanish", de: "German", fr: "French",
+  no: "Norwegian", da: "Danish", fi: "Finnish", it: "Italian",
+  nl: "Dutch", pt: "Portuguese",
+};
+
+// One instruction that flips ALL user-facing output into the chosen language.
+// The study notes stay English (the model translates concepts fine); only the
+// visible text the trainee reads/hears changes. JSON keys and skill_id values
+// MUST stay English or the client can't parse them. Empty for English.
+function langRule(language) {
+  const name = AI_LANGUAGES[language];
+  if (!name || language === "en") return "";
+  return `
+
+LANGUAGE (overrides the English style rule above): Write EVERY user-facing text
+value in ${name} — all feedback, explanations, headlines, bullets, principle
+notes, and the prospect's/lead's spoken lines. Translate the sales principle
+names naturally into ${name}. Keep all JSON keys, enum values, and skill_id
+strings exactly as specified (in English). Do not mix languages in the prose.`;
+}
+
 const BASE_SYSTEM = `You are the AI engine behind "Sales Camp Games", a sales training app.
 Every piece of coaching, feedback, generated objection, scenario, and explanation you produce
 MUST be grounded in the sales study notes below. Reference the underlying principles by name
@@ -391,11 +417,11 @@ Never use em-dashes (—) in any text field. Use hyphens (-) or colons (:) inste
 ${SALES_NOTES}
 === END OF NOTES ===`;
 
-async function askClaude(userPrompt, maxTokens = 1500, model = SONNET) {
+async function askClaude(userPrompt, maxTokens = 1500, model = SONNET, language = "en") {
   const msg = await anthropic.messages.create({
     model,
     max_tokens: maxTokens,
-    system: BASE_SYSTEM,
+    system: BASE_SYSTEM + langRule(language),
     messages: [{ role: "user", content: userPrompt }],
   });
   const text = msg.content
@@ -757,7 +783,12 @@ app.post("/api/objection/new", optionalAuth, checkSessionLimit, async (req, res)
   const requestedDiff = parseInt(req.body && req.body.difficulty, 10);
   const difficulty = [1, 2, 3].includes(requestedDiff) ? requestedDiff : Math.ceil(Math.random() * 3);
 
-  if (objectionCache.length >= 20 && Math.random() < 0.70) {
+  // The shared cache holds English items only; non-English users always
+  // generate fresh so they never get served an English line (Phase 1.3).
+  const language = req.body && req.body.language;
+  const isEn = !language || language === "en";
+
+  if (isEn && objectionCache.length >= 20 && Math.random() < 0.70) {
     const cached = pickFromCache(objectionCache, recentlyServedObjections, "objection");
     if (cached) {
       trackRecent(recentlyServedObjections, cached.objection);
@@ -781,12 +812,15 @@ Respond with ONLY valid JSON:
   "context": "one sentence describing the situation this came up in"
 }`,
       300,
-      HAIKU
+      HAIKU,
+      language
     );
 
     const result = { ...data, difficulty };
-    objectionCache.push(result);
-    saveCache("objection", result, OBJ_CACHE_FILE, objectionCache);
+    if (isEn) {
+      objectionCache.push(result);
+      saveCache("objection", result, OBJ_CACHE_FILE, objectionCache);
+    }
     trackRecent(recentlyServedObjections, data.objection);
     res.json(result);
   } catch (err) {
@@ -797,7 +831,7 @@ Respond with ONLY valid JSON:
 
 app.post("/api/objection/feedback", optionalAuth, async (req, res) => {
   if (!requireAI(res)) return;
-  const { objection, context, userResponse, timeTakenSeconds, difficulty } = req.body;
+  const { objection, context, userResponse, timeTakenSeconds, difficulty, language } = req.body;
 
   const timeAllowed = difficulty === 1 ? 30 : difficulty === 2 ? 60 : 90;
   const difficultyLabel = difficulty === 1 ? "easy" : difficulty === 2 ? "medium" : "hard";
@@ -835,7 +869,8 @@ Return ONLY valid JSON:
   "discovered_skills": ["skill_id1", "skill_id2"]
 }`,
       800,
-      HAIKU
+      HAIKU,
+      language
     );
     if (req.userId && data.discovered_skills) {
       autoUnlock(req.userId, data.discovered_skills);
@@ -874,8 +909,12 @@ app.post("/api/pattern/new", optionalAuth, checkSessionLimit, async (req, res) =
   if (!requireAI(res)) return;
   const difficulty = parseInt(req.body.difficulty) || 2;
 
+  // Cache holds English items only; non-English users generate fresh (Phase 1.3).
+  const language = req.body.language;
+  const isEn = !language || language === "en";
+
   // Only use cache for level 2 (default difficulty)
-  if (difficulty === 2 && patternCache.length >= 20 && Math.random() < 0.70) {
+  if (isEn && difficulty === 2 && patternCache.length >= 20 && Math.random() < 0.70) {
     const cached = pickFromCache(patternCache, recentlyServedPatterns, "statement");
     if (cached) {
       trackRecent(recentlyServedPatterns, cached.statement);
@@ -918,10 +957,11 @@ Return ONLY valid JSON. "correctAnswer" MUST be "${correctSlot}":
   "twoCorrect": false
 }`,
       450,
-      HAIKU
+      HAIKU,
+      language
     );
 
-    if (difficulty === 2) {
+    if (isEn && difficulty === 2) {
       patternCache.push(data);
       saveCache("pattern", data, PAT_CACHE_FILE, patternCache);
     }
@@ -935,7 +975,7 @@ Return ONLY valid JSON. "correctAnswer" MUST be "${correctSlot}":
 
 app.post("/api/pattern/feedback", optionalAuth, async (req, res) => {
   if (!requireAI(res)) return;
-  const { statement, question, options, correctAnswer, userAnswer, twoCorrect, secondCorrect, difficulty } = req.body;
+  const { statement, question, options, correctAnswer, userAnswer, twoCorrect, secondCorrect, difficulty, language } = req.body;
   const pickedBest   = userAnswer === correctAnswer;
   const pickedSecond = twoCorrect && secondCorrect && userAnswer === secondCorrect;
   const isCorrect    = pickedBest || pickedSecond;
@@ -972,7 +1012,8 @@ Return ONLY valid JSON:
   "discovered_skills": ["skill_id1"]
 }`,
       600,
-      HAIKU
+      HAIKU,
+      language
     );
     if (req.userId && data.discovered_skills) {
       autoUnlock(req.userId, data.discovered_skills);
@@ -1057,7 +1098,7 @@ function commStyleBlock(style) {
 
 app.post("/api/call/start", optionalAuth, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
-  const { scenario, customDescription, section, personality, prospectName } = req.body;
+  const { scenario, customDescription, section, personality, prospectName, language } = req.body;
 
   const sectionContext = section
     ? `The roleplay focuses on the "${section}" phase of the One Call Close. If the section is not "Opening", the prospect's opening message should reflect that the call is already mid-flow (rapport has been built, earlier phases are done).`
@@ -1102,7 +1143,8 @@ Return JSON:
   "openingMessage": "the prospect's opening line — if practicing a mid-call section, they should respond as if earlier phases already happened"
 }`,
       700,
-      SONNET
+      SONNET,
+      language
     );
     if (prospectName) data.name = prospectName;
     // Ride the rolled style along on the prospect so /message stays consistent.
@@ -1116,7 +1158,7 @@ Return JSON:
 
 app.post("/api/call/message", async (req, res) => {
   if (!requireAI(res)) return;
-  const { scenario, prospect, history, userMessage, section, personality } = req.body;
+  const { scenario, prospect, history, userMessage, section, personality, language } = req.body;
 
   // Token-free guard: never spend tokens on trolling / keyboard-mashing.
   if (isLowEffortMessage(userMessage)) {
@@ -1178,7 +1220,7 @@ CLOSE FLAG (be strict and honest):
 - Otherwise "closed" is false.
 
 Return ONLY valid JSON:
-{ "reply": "your spoken reply, in character", "closed": true | false }`,
+{ "reply": "your spoken reply, in character", "closed": true | false }` + langRule(language),
       messages: [
         {
           role: "user",
@@ -1207,7 +1249,7 @@ Return ONLY valid JSON:
 
 app.post("/api/call/end", optionalAuth, async (req, res) => {
   if (!requireAI(res)) return;
-  const { scenario, prospect, history, section, personality } = req.body;
+  const { scenario, prospect, history, section, personality, language } = req.body;
   try {
     const turns = history || [];
     const historyText = turns
@@ -1247,7 +1289,8 @@ Return ONLY valid JSON. Each note is the lesson for that exact line, under 14 wo
   ]
 }`,
       900,
-      HAIKU
+      HAIKU,
+      language
     );
 
     // 2) SONNET — the deeper learning summary that lives under the chat.
@@ -1278,7 +1321,8 @@ Return JSON:
   "discovered_skills": ["skill_id1", "skill_id2", "skill_id3"]
 }`,
       1600,
-      SONNET
+      SONNET,
+      language
     );
 
     const [highlightsData, summary] = await Promise.all([
@@ -1316,6 +1360,7 @@ Return JSON:
         source: "Closer",
         persona: personality && personality.label ? personality.label : null,
         callScore: summary.callScore,
+        language,
       });
     }
     if (req.userId) {
@@ -1394,7 +1439,7 @@ function setterStagesForPrompt() {
 
 app.post("/api/setter/start", optionalAuth, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
-  const { offer, customDescription, personality, prospectName } = req.body;
+  const { offer, customDescription, personality, prospectName, language } = req.body;
   const offerText = setterOfferText(offer, customDescription);
 
   const personaContext = personality && personality.label
@@ -1431,7 +1476,8 @@ Return JSON:
   "openingMessage": "the lead answering the phone — brief, a little unsure/guarded, e.g. 'Hello?' or 'Yeah, this is <name>...' They do NOT launch into anything; the setter leads the call."
 }`,
       700,
-      SONNET
+      SONNET,
+      language
     );
     if (prospectName) data.name = prospectName;
     // Ride the rolled style along on the lead so /message stays consistent.
@@ -1445,7 +1491,7 @@ Return JSON:
 
 app.post("/api/setter/message", async (req, res) => {
   if (!requireAI(res)) return;
-  const { offer, customDescription, prospect, history, userMessage, personality } = req.body;
+  const { offer, customDescription, prospect, history, userMessage, personality, language } = req.body;
   const offerText = setterOfferText(offer, customDescription);
 
   if (isLowEffortMessage(userMessage)) {
@@ -1498,7 +1544,7 @@ BOOKING FLAG (be strict and honest):
 ${commStyleBlock(prospect.communicationStyle)}
 
 Return ONLY valid JSON:
-{ "reply": "your spoken reply, in character", "booking": "none" | "soft" | "confirmed" }`,
+{ "reply": "your spoken reply, in character", "booking": "none" | "soft" | "confirmed" }` + langRule(language),
       messages: [
         {
           role: "user",
@@ -1527,7 +1573,7 @@ Return ONLY valid JSON:
 
 app.post("/api/setter/end", optionalAuth, async (req, res) => {
   if (!requireAI(res)) return;
-  const { offer, customDescription, prospect, history, liveBooking, personality } = req.body;
+  const { offer, customDescription, prospect, history, liveBooking, personality, language } = req.body;
   const offerText = setterOfferText(offer, customDescription);
   try {
     const turns = history || [];
@@ -1558,7 +1604,8 @@ ${STYLE_RULES}
 Return ONLY valid JSON. Each note is the lesson for that exact line, under 14 words, action-focused:
 { "highlights": [ { "index": <integer>, "verdict": "good" | "improve" | "bad", "note": "under 14 words" } ] }`,
       900,
-      HAIKU
+      HAIKU,
+      language
     );
 
     // 2) SONNET — grade against the TRIAGE structure + decide the outcome.
@@ -1601,7 +1648,8 @@ Return JSON:
 }
 The "structure" array MUST include one entry for every stage key: ${SETTER_STAGES.map((s) => s.key).join(", ")}.`,
       2000,
-      SONNET
+      SONNET,
+      language
     );
 
     const [highlightsData, summary] = await Promise.all([
@@ -1645,6 +1693,7 @@ The "structure" array MUST include one entry for every stage key: ${SETTER_STAGE
         source: "Setter",
         persona: personality && personality.label ? personality.label : null,
         callScore: summary.callScore,
+        language,
       });
     }
     if (req.userId) {
@@ -1763,7 +1812,7 @@ app.get("/api/lessons", authMiddleware, async (req, res) => {
   if (!db) return res.json({ dbDisabled: true, lessons: [] });
   try {
     const rows = await db.query(
-      `SELECT id, content, headline, source, persona, call_score, reviewed, pinned, created_at
+      `SELECT id, content, headline, source, persona, call_score, language, reviewed, pinned, created_at
        FROM lessons WHERE user_id=$1
        ORDER BY pinned DESC, created_at DESC`,
       [req.userId]

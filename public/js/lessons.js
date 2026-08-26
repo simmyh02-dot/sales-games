@@ -128,6 +128,9 @@ const SCG_LESSONS = (() => {
         <div class="lesson-card${reviewed ? " reviewed" : ""}${pinned ? " pinned" : ""}" data-id="${l.id}">
           <div class="lesson-card-top">
             <div class="lesson-badges">
+              ${typeof SCG_LANG !== "undefined"
+                ? `<span class="lesson-flag" title="${SCG_LANG.name(l.language) || "Language not recorded"}">${SCG_LANG.flagSvg(l.language)}</span>`
+                : ""}
               <span class="lesson-badge source-${src || "closer"}">${esc(l.source || "Call")}</span>
               ${l.persona ? `<span class="lesson-badge persona">${esc(l.persona)}</span>` : ""}
               ${typeof l.call_score === "number" ? `<span class="lesson-score">${l.call_score}/100</span>` : ""}
