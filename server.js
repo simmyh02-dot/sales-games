@@ -99,6 +99,7 @@ if (process.env.DATABASE_URL) {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
     ALTER TABLE lessons ADD COLUMN IF NOT EXISTS language TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT;
   `).catch(() => {});
 }
 
@@ -584,7 +585,7 @@ app.get("/api/auth/me", async (req, res) => {
   if (!db) return res.json({ id: payload.sub, name: "User", email: "", picture: "" });
 
   try {
-    const result = await db.query("SELECT id, name, email, picture FROM users WHERE id=$1", [payload.sub]);
+    const result = await db.query("SELECT id, name, email, picture, language FROM users WHERE id=$1", [payload.sub]);
     if (!result.rows.length) return res.status(404).json({ error: "User not found" });
     res.json(result.rows[0]);
   } catch (err) {
@@ -1877,6 +1878,23 @@ app.get("/api/user/status", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("user/status error:", err.message);
     res.status(500).json({ error: "Failed to fetch user status" });
+  }
+});
+
+// Persist the chosen conversation language on the user record so it follows
+// them across devices. localStorage stays the fast local source of truth; this
+// is the copy that survives a new browser. Best-effort: a failure here must
+// never block training, so the client fires it and moves on.
+app.put("/api/user/language", authMiddleware, async (req, res) => {
+  const lang = req.body && req.body.language;
+  if (!AI_LANGUAGES[lang]) return res.status(400).json({ error: "Unsupported language." });
+  if (!db) return res.json({ ok: true, dbDisabled: true, language: lang });
+  try {
+    await db.query("UPDATE users SET language=$1 WHERE id=$2", [lang, req.userId]);
+    res.json({ ok: true, language: lang });
+  } catch (err) {
+    console.error("user/language error:", err.message);
+    res.status(500).json({ error: "Failed to save language." });
   }
 });
 

@@ -27,7 +27,15 @@
       if (r.status === 401 || r.status === 404) {
         try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); } catch (e) {}
         location.replace("/");
+        return null;
       }
+      return r.ok ? r.json() : null;
+    })
+    .then(function (user) {
+      // Adopt the conversation language stored on the account, so a new browser
+      // picks up the choice instead of silently falling back to English. Piggy-
+      // backs on this request rather than making its own.
+      if (user && typeof SCG_LANG !== "undefined") SCG_LANG.syncFromServer(user.language);
     })
     .catch(function () { /* offline: keep the optimistic render */ });
 })();

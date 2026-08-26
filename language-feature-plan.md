@@ -85,6 +85,36 @@ What replaced it:
 
 The sections below are kept as a record of what was built and why it was dropped.
 
+## Cross-device persistence (2026-08-26)
+
+The choice now lives on the user record, so a new browser picks it up instead of
+silently falling back to English.
+
+- **Schema:** `ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT`.
+- **Read:** `/api/auth/me` returns `language`.
+- **Write:** `PUT /api/user/language` (auth required), validated against `AI_LANGUAGES`;
+  400 on anything unsupported, 401 unauthenticated.
+- **Hydration:** `auth-guard.js` already calls `/api/auth/me` on every protected page, so
+  it passes the result to `SCG_LANG.syncFromServer()` rather than adding a request.
+- **Conflict rule:** the **server wins** on load (it is the cross-device record). If the
+  account has nothing stored yet, this device pushes its local value up to become the record.
+- **`adopt()` vs `set()`:** `adopt()` writes locally only (used when hydrating, so the
+  server value never echoes straight back); `set()` writes locally *and* pushes. Saving is
+  best-effort — the local write already happened, so a failed push just leaves this device
+  ahead until the next change.
+- **Late-arrival fix:** hydration lands after first paint, so `adopt()` fires a
+  `scg:languagechange` event (only when the value actually changed). The Settings picker and
+  the pre-call note both re-read it, so a fresh browser does not flash the wrong language.
+- `pushToServer` deliberately uses the unwrapped `_fetch`, not `window.fetch` — the wrapper
+  only touches POSTs, and this keeps the save independent of it.
+- `skill-map.html` has no `lang.js`: no conversation, nothing language-dependent to show.
+
+**Verified locally:** endpoint returns 200 / 400 / 401 correctly; server value wins over
+local; repeat syncs fire no redundant event; invalid codes ignored; an empty account gets
+the local value pushed up; the pre-call note self-corrects from English to Swedish when
+hydration lands. Actual DB persistence needs the deploy (no DB locally).
+
+
 ## Phase 2 — Translate the UI chrome
 
 **All UI surfaces DONE (2026-08-26).** App chrome, the three mode pages, skill-map chrome

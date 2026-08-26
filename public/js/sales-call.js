@@ -214,6 +214,8 @@
     el.textContent = `This call will be in ${name}.`;
   }
   renderCallLangNote();
+  // The account's language arrives just after first paint on a fresh browser.
+  document.addEventListener("scg:languagechange", renderCallLangNote);
   // Randomize is selected by default, so the call can start immediately.
   selectedPersonality = "random";
   els.confirmPersonalityBtn.disabled = false;

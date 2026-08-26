@@ -89,10 +89,58 @@ const SCG_LANG = (() => {
     const saved = localStorage.getItem(KEY);
     return CODES.includes(saved) ? saved : "en";
   }
-  function set(code) {
+  // Write locally only. Used when adopting the server's value on load, so
+  // hydrating a device never echoes straight back to the server.
+  function adopt(code) {
     const next = CODES.includes(code) ? code : "en";
+    const changed = next !== localStorage.getItem(KEY);
     localStorage.setItem(KEY, next);
+    syncSelects(next);
+    // Hydration from the server lands after first paint, so anything already
+    // showing the language needs a nudge to re-read it.
+    if (changed) {
+      document.dispatchEvent(new CustomEvent("scg:languagechange", { detail: { lang: next } }));
+    }
     return next;
+  }
+
+  // The user actively picked a language: save locally, then mirror it onto
+  // their account so it follows them to another browser. Best-effort - the
+  // local write already took effect, so a failed sync just leaves this device
+  // ahead until the next change.
+  function set(code) {
+    const next = adopt(code);
+    pushToServer(next);
+    return next;
+  }
+
+  function pushToServer(code) {
+    let token = null;
+    try { token = localStorage.getItem("scg_auth_token"); } catch (_) {}
+    if (!token) return;
+    _fetch("/api/user/language", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ language: code }),
+    }).catch(() => { /* stays local-only until the next change */ });
+  }
+
+  // Called once per page load with whatever the account has stored. The server
+  // is the cross-device source of truth, so it wins; if the account has nothing
+  // stored yet, this device's choice becomes the record.
+  function syncFromServer(serverLang) {
+    if (CODES.includes(serverLang)) {
+      if (serverLang !== get()) adopt(serverLang);
+      return;
+    }
+    pushToServer(get());
+  }
+
+  // Keep a mounted picker in step when the value changes underneath it.
+  function syncSelects(code) {
+    document.querySelectorAll("select.settings-select[data-scg-lang]").forEach((el) => {
+      if (el.value !== code) el.value = code;
+    });
   }
   function name(code) { return (byCode[code] || {}).name || null; }
 
@@ -107,7 +155,8 @@ const SCG_LANG = (() => {
   function buildSelect() {
     const sel = document.createElement("select");
     sel.className = "settings-select";
-    sel.setAttribute("aria-label", "Training language");
+    sel.setAttribute("data-scg-lang", "");
+    sel.setAttribute("aria-label", "Conversation language");
     const cur = get();
     sel.innerHTML = LANGS.map(
       (l) => `<option value="${l.code}"${l.code === cur ? " selected" : ""}>${l.native} — ${l.name}</option>`
@@ -148,5 +197,5 @@ const SCG_LANG = (() => {
     return _fetch(input, init);
   };
 
-  return { LANGS, get, set, name, flagSvg, buildSelect, mountSelect };
+  return { LANGS, get, set, adopt, syncFromServer, name, flagSvg, buildSelect, mountSelect };
 })();
