@@ -2,10 +2,12 @@ require("dotenv").config();
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const PDFDocument = require("pdfkit");
 const Anthropic = require("@anthropic-ai/sdk");
 const { OAuth2Client } = require("google-auth-library");
 const { Pool } = require("pg");
 const jwt = require("jsonwebtoken");
+const rateLimit = require("express-rate-limit");
 let stripe = null;
 if (process.env.STRIPE_SECRET_KEY) {
   try { stripe = require("stripe")(process.env.STRIPE_SECRET_KEY); } catch (e) { console.warn("Stripe load failed:", e.message); }
@@ -14,6 +16,62 @@ if (process.env.STRIPE_SECRET_KEY) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Behind Vercel's proxy, so the client IP lives in x-forwarded-for. Without
+// this every request looks like one address and rate limiting is meaningless.
+app.set("trust proxy", 1);
+
+// ---------------------------------------------------------------------
+// Fail fast on missing production config. A missing JWT_SECRET used to fall
+// back to a public literal, which silently made every session forgeable —
+// a loud crash on boot is strictly better than that.
+// ---------------------------------------------------------------------
+
+if (process.env.NODE_ENV === "production") {
+  const missing = ["JWT_SECRET", "DATABASE_URL"].filter((k) => !process.env[k]);
+  if (missing.length) {
+    throw new Error(`Refusing to start: missing required env var(s): ${missing.join(", ")}`);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Rate limiting. NOTE: the default store is in-memory, so on Vercel each
+// serverless instance counts separately and the window resets on a cold
+// start. That still stops a single client hammering one instance; a hard
+// global cap needs a shared store (Upstash/Redis) — see the roadmap.
+// ---------------------------------------------------------------------
+
+// Key on the account when the caller presents a usable token, so two people
+// behind one office NAT get their own budgets. Falls back to IP for anything
+// unauthenticated — which is also what an attacker without a token gets.
+// The limiter runs BEFORE authMiddleware on purpose: junk should be turned
+// away before it reaches anything that costs money.
+function aiRateKey(req) {
+  const header = req.headers.authorization || "";
+  const token  = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (token) {
+    const payload = verifyToken(token);
+    if (payload && payload.sub) return `u:${payload.sub}`;
+  }
+  return `ip:${rateLimit.ipKeyGenerator(req.ip)}`;
+}
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 40,                       // a fast conversational pace is ~10-15/min
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: aiRateKey,
+  message: { error: "rate_limited", detail: "Slow down a moment — too many requests." },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "rate_limited", detail: "Too many sign-in attempts. Try again shortly." },
+});
+
 const HAIKU  = "claude-haiku-4-5-20251001";
 const SONNET = "claude-sonnet-4-6";
 
@@ -21,6 +79,20 @@ const SALES_NOTES = fs.readFileSync(
   path.join(__dirname, "knowledge", "sales_notes.md"),
   "utf-8"
 );
+
+// The Setter Call Framework — the trainee's playbook for Setter mode. Read from
+// disk at boot so edits to the markdown flow straight into grading without a
+// code change. It is NEVER shown to the AI prospect: it only grounds the
+// end-of-call analysis. Missing file degrades to the stage list alone.
+let SETTER_FRAMEWORK = "";
+try {
+  SETTER_FRAMEWORK = fs.readFileSync(
+    path.join(__dirname, "setter_call_framework.md"),
+    "utf-8"
+  );
+} catch {
+  console.warn("WARNING: setter_call_framework.md not found — setter grading falls back to the stage list.");
+}
 
 // ---------------------------------------------------------------------
 // AI client
@@ -80,6 +152,25 @@ if (process.env.DATABASE_URL) {
       pinned BOOLEAN DEFAULT FALSE,
       created_at BIGINT
     );
+    CREATE TABLE IF NOT EXISTS prospect_beliefs (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT,
+      belief TEXT,
+      created_at BIGINT
+    );
+    CREATE TABLE IF NOT EXISTS saved_calls (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT,
+      mode TEXT,
+      label TEXT,
+      persona TEXT,
+      section TEXT,
+      outcome TEXT,
+      score INTEGER,
+      transcript TEXT,
+      analysis TEXT,
+      created_at BIGINT
+    );
     CREATE TABLE IF NOT EXISTS call_history (
       id SERIAL PRIMARY KEY,
       user_id TEXT,
@@ -100,7 +191,21 @@ if (process.env.DATABASE_URL) {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
     ALTER TABLE lessons ADD COLUMN IF NOT EXISTS language TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_status TEXT;
   `).catch(() => {});
+  // Every table is read by user_id. The scores index matters most: the monthly
+  // session count runs before every session start and grows with total rows.
+  // The stripe_customer_id index is hit by every webhook.
+  db.query(`
+    CREATE INDEX IF NOT EXISTS idx_scores_user_date        ON scores (user_id, date);
+    CREATE INDEX IF NOT EXISTS idx_lessons_user            ON lessons (user_id, pinned DESC, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_call_history_user       ON call_history (user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_unlocked_skills_user    ON unlocked_skills (user_id);
+    CREATE INDEX IF NOT EXISTS idx_users_stripe_customer   ON users (stripe_customer_id);
+    CREATE INDEX IF NOT EXISTS idx_rivals_user             ON rivals (user_id);
+    CREATE INDEX IF NOT EXISTS idx_prospect_beliefs_user   ON prospect_beliefs (user_id, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_saved_calls_user        ON saved_calls (user_id, created_at DESC);
+  `).catch((e) => console.error("DB index error:", e.message));
 }
 
 // ---------------------------------------------------------------------
@@ -147,15 +252,9 @@ const PRE_UNLOCKED = new Set([
 const SKILL_ID_PROMPT = `Unlockable skill IDs (use exact ID strings in discovered_skills):
 spine(One-Call Close), opening(Opening), setframe(Set Frame), situation(Situation), problem(Problem), eliminate(Eliminate Solutions), buying(Buying Decision), futurepacing(Future Pacing), consequences(Consequences), presentation(Presentation), objections_phase(Objections Phase), sixneeds(6 Human Needs), maslow(Maslow's Pyramid), problemvssymptom(Problem vs Symptom), probingladder(Probing Ladder), improvementoffer(Improvement Offer), newopp(New Opportunity), pb_justtellme(Pushback-Just Tell Me), pb_allgood(Pushback-Everything Fine), limitingbeliefs(Limiting Beliefs), reframe4(4-Step Reframe), belief_types(Belief Types), reframeladder(Reframe Steps), prehandle_q(Pre-Handle Question), b_tried(Tried Before), b_companies(Talking to Others), b_youtube(Tried It Alone), b_nothing(Done Nothing), ex_time(Excuse-Time), ex_money(Excuse-Money), ex_didntknow(Excuse-DidntKnow), ex_research(Excuse-Just Looking), realbeliefs(Real Beliefs), identityframe(Identity Frame), roimath(ROI Math), rf_restaurant(Restaurant Reframe), rf_beach(Beach Reframe), rf_medal(Medal Reframe), rf_lion(Lion Reframe), rf_boats(Burn the Boats), rf_nicekind(Nice vs Kind), objections(Objections), smoke_vs_real(Smoke Screen vs Real), slowdown(Slow Down), o_think(Need to Think), o_partner(Need Partner), niche_smoke(Niche Smoke Screens), o_money(Money Objection), cdr(CDR), twofold(Two-Fold Choice), o_time(Time Objection), dmp(Decision-Making Process), dmp_partner(DMP-Partner), dmp_scale(DMP-Scale), rf_airplane(Airplane Reframe), fear(Fear Objection), abc(ABC), bossvoice(Boss Voice), identity(Identity), logiclevels(Logical Levels), identitygap(Identity Gap), desiredidentity(Desired Identity), identitybridge(Identity Bridge), realurgency(Real Urgency), straightline(Straight Line), talkmirror(Language=Self-Talk), l_wishful(Wishful Language), l_minimize(Minimizing Language), l_external(Victim Language), l_ambiguous(Ambiguous Language), authority(Authority), funnel(Funnel), theirwords(Use Their Words), selleridentity(Seller Identity), discovery(Discovery), openq(Open Questions), dozenq(A Dozen Questions), threefour(3-4 Problem Rule), talklisten(Talk-Listen Ratio), seqq(Sequence Questions), objframework(5-Step Framework), rootcauses(3 Root Causes), feelfeltfound(Feel-Felt-Found), proactive(Pre-empt Objections), fundamentals(Fundamentals), remote(Remote High-Ticket), cameraon(Camera On), framecontrol(Frame Control), remoteopen(Remote Opening), derisk(De-Risk not Discount)`;
 
-function optionalAuth(req, res, next) {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-  if (token) {
-    const payload = verifyToken(token);
-    if (payload) req.userId = payload.sub;
-  }
-  next();
-}
+// (optionalAuth was removed: every /api route now requires a real session.
+// It let signed-out callers through with req.userId undefined, which silently
+// skipped the session limit and the lesson/history/unlock writes.)
 
 async function autoUnlock(userId, discoveredSkills) {
   if (!db || !userId || !Array.isArray(discoveredSkills) || discoveredSkills.length === 0) return;
@@ -178,6 +277,24 @@ function pointsForCall(base, rating) {
   return Math.round(base * r / 10);
 }
 function clampRating(v) { return Math.max(0, Math.min(10, Math.round(Number(v) || 0))); }
+
+// The conversation history is supplied by the client and goes straight into a
+// prompt, so it is the one input that can inflate token spend without limit.
+// Cap it: keep the most recent turns, and cap each line's length. A real call
+// never approaches these numbers — they only bite on abuse or a runaway client.
+const MAX_HISTORY_TURNS = 60;
+const MAX_TURN_CHARS    = 2000;
+
+function capHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history
+    .slice(-MAX_HISTORY_TURNS)
+    .filter((m) => m && typeof m.content === "string")
+    .map((m) => ({
+      role:    m.role === "user" ? "user" : "assistant",
+      content: m.content.slice(0, MAX_TURN_CHARS),
+    }));
+}
 
 // Persist a call's key takeaway as a Lesson (Sales Call modes only).
 // Reuses the /end analysis output that used to be shown once and discarded.
@@ -254,6 +371,9 @@ async function getMonthlySessionCount(userId) {
   } catch { return 0; }
 }
 
+// Runs after authMiddleware, so req.userId is always set here. (It used to sit
+// behind optionalAuth, which meant a signed-out caller skipped the limit
+// entirely — the whole product was free to anyone bypassing the browser.)
 async function checkSessionLimit(req, res, next) {
   if (!req.userId || !db) return next();
   try {
@@ -268,7 +388,12 @@ async function checkSessionLimit(req, res, next) {
       return res.status(403).json({ error: "limit_reached", tier: tier || "free", sessionsUsed: count, sessionsLimit: limit });
     }
     next();
-  } catch { next(); }
+  } catch (e) {
+    // Fail OPEN on purpose: a database blip shouldn't lock a paying user out
+    // of training. But it must be visible — this used to swallow silently.
+    console.error("checkSessionLimit error (allowing through):", e.message);
+    next();
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -403,7 +528,7 @@ names naturally into ${name}. Keep all JSON keys, enum values, and skill_id
 strings exactly as specified (in English). Do not mix languages in the prose.`;
 }
 
-const BASE_SYSTEM = `You are the AI engine behind "Sales Camp Games", a sales training app.
+const BASE_SYSTEM = `You are the AI engine behind "Sales Camp AI", a sales training app.
 Every piece of coaching, feedback, generated objection, scenario, and explanation you produce
 MUST be grounded in the sales study notes below. Reference the underlying principles by name
 where relevant (e.g. Authority, Language Fixing, Limiting Beliefs, Tonality, Identity Shift,
@@ -503,10 +628,19 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
       let tier = "free";
       if (priceId === process.env.STRIPE_PRO_PRICE_ID)   tier = "pro";
       if (priceId === process.env.STRIPE_POWER_PRICE_ID) tier = "power";
+
+      // A subscription can exist without being paid for. Stripe retries a failed
+      // charge for weeks, so "past_due" keeps access — pulling the plan out from
+      // under someone whose card just expired is the wrong call. Anything past the
+      // retry window ("unpaid", "canceled", "incomplete_expired") drops to free.
+      const KEEPS_ACCESS = ["active", "trialing", "past_due"];
+      if (!KEEPS_ACCESS.includes(sub.status)) tier = "free";
+      const paymentStatus = sub.status === "past_due" ? "past_due" : null;
+
       if (db && sub.customer) {
         await db.query(
-          "UPDATE users SET tier=$1, stripe_subscription_id=$2 WHERE stripe_customer_id=$3",
-          [tier, sub.id, sub.customer]
+          "UPDATE users SET tier=$1, stripe_subscription_id=$2, payment_status=$3 WHERE stripe_customer_id=$4",
+          [tier, sub.id, paymentStatus, sub.customer]
         );
       }
     }
@@ -514,8 +648,29 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
       const sub = event.data.object;
       if (db && sub.customer) {
         await db.query(
-          "UPDATE users SET tier='free', stripe_subscription_id=NULL WHERE stripe_customer_id=$1",
+          "UPDATE users SET tier='free', stripe_subscription_id=NULL, payment_status=NULL WHERE stripe_customer_id=$1",
           [sub.customer]
+        );
+      }
+    }
+    // Flag the account so Settings can say "your last payment failed" instead of
+    // the subscription silently lapsing weeks later with no warning at all.
+    if (event.type === "invoice.payment_failed") {
+      const invoice = event.data.object;
+      if (db && invoice.customer) {
+        await db.query(
+          "UPDATE users SET payment_status='past_due' WHERE stripe_customer_id=$1",
+          [invoice.customer]
+        );
+      }
+      console.warn("Stripe payment failed for customer", invoice.customer);
+    }
+    if (event.type === "invoice.payment_succeeded" || event.type === "invoice.paid") {
+      const invoice = event.data.object;
+      if (db && invoice.customer) {
+        await db.query(
+          "UPDATE users SET payment_status=NULL WHERE stripe_customer_id=$1",
+          [invoice.customer]
         );
       }
     }
@@ -526,7 +681,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
   }
 });
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 // Explicit page routes (must be before express.static so they take priority)
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "landing.html")));
@@ -534,13 +689,20 @@ app.get("/home", (req, res) => res.sendFile(path.join(__dirname, "public", "home
 app.get("/settings", (req, res) => res.sendFile(path.join(__dirname, "public", "settings.html")));
 app.get("/lessons", (req, res) => res.sendFile(path.join(__dirname, "public", "pages", "lessons.html")));
 
+app.get("/previous-calls", (req, res) => res.sendFile(path.join(__dirname, "public", "pages", "previous-calls.html")));
+
+// Legal. Linked from the landing footer and required by Stripe and the GDPR.
+for (const slug of ["terms", "privacy", "refunds", "contact"]) {
+  app.get(`/${slug}`, (req, res) => res.sendFile(path.join(__dirname, "public", "pages", `${slug}.html`)));
+}
+
 app.use(express.static(path.join(__dirname, "public")));
 
 // ---------------------------------------------------------------------
 // Auth routes
 // ---------------------------------------------------------------------
 
-app.post("/api/auth/google", async (req, res) => {
+app.post("/api/auth/google", authLimiter, async (req, res) => {
   if (!googleClient) return res.status(503).json({ error: "Google auth not configured. Set GOOGLE_CLIENT_ID." });
   if (!db) return res.status(503).json({ error: "Database not configured. Set DATABASE_URL." });
 
@@ -777,7 +939,7 @@ const DIFFICULTY_LABELS = {
   3: "hard layered objection (requires deep identity or certainty work, or a hidden belief beneath the surface excuse)",
 };
 
-app.post("/api/objection/new", optionalAuth, checkSessionLimit, async (req, res) => {
+app.post("/api/objection/new", aiLimiter, authMiddleware, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
 
   // Honour a chosen difficulty from the pre-start screen; fall back to random.
@@ -830,7 +992,7 @@ Respond with ONLY valid JSON:
   }
 });
 
-app.post("/api/objection/feedback", optionalAuth, async (req, res) => {
+app.post("/api/objection/feedback", aiLimiter, authMiddleware, async (req, res) => {
   if (!requireAI(res)) return;
   const { objection, context, userResponse, timeTakenSeconds, difficulty, language } = req.body;
 
@@ -906,7 +1068,7 @@ const PATTERN_TYPES = [
   "scarcity / loss aversion (reasoning from fear of losing rather than hope of gaining)",
 ];
 
-app.post("/api/pattern/new", optionalAuth, checkSessionLimit, async (req, res) => {
+app.post("/api/pattern/new", aiLimiter, authMiddleware, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
   const difficulty = parseInt(req.body.difficulty) || 2;
 
@@ -974,7 +1136,7 @@ Return ONLY valid JSON. "correctAnswer" MUST be "${correctSlot}":
   }
 });
 
-app.post("/api/pattern/feedback", optionalAuth, async (req, res) => {
+app.post("/api/pattern/feedback", aiLimiter, authMiddleware, async (req, res) => {
   if (!requireAI(res)) return;
   const { statement, question, options, correctAnswer, userAnswer, twoCorrect, secondCorrect, difficulty, language } = req.body;
   const pickedBest   = userAnswer === correctAnswer;
@@ -1097,7 +1259,218 @@ function commStyleBlock(style) {
 - Never mention you are an AI. Never use em-dashes. Use plain punctuation.`;
 }
 
-app.post("/api/call/start", optionalAuth, checkSessionLimit, async (req, res) => {
+// ---------------------------------------------------------------------
+// BELIEF ENGINE — why every prospect used to sound the same.
+//
+// BASE_SYSTEM injects the whole study-notes document into every generation
+// and orders the model to ground itself in it. The notes' "Identify" section
+// lists a handful of example beliefs, so left to itself the model reached for
+// the same two or three every time ("am I the type of person who can do this",
+// "it works for others, not for me") whichever persona was rolled. Asking the
+// prompt for variety does not fix that. The fix is to stop letting the model
+// choose the theme at all.
+//
+// So: roll the AXES server-side (the way pickCommStyle already rolls tone),
+// one belief per axis, each anchored to a concrete particular. Every axis
+// below comes from the notes' own taxonomy, so output stays grounded in the
+// methodology instead of drifting into generic sales-objection soup.
+// ---------------------------------------------------------------------
+
+// `weights` is per persona key; `base` covers personas with no explicit entry.
+const BELIEF_AXES = [
+  { key: "skeptic", label: "Been burned / everything is a scam",
+    surfaces: "They have been sold to before and it did not deliver. They half-expect this to be the same thing in a new wrapper.",
+    weights: { base: 3, unemployed: 5, retiree: 4, "business-owner": 2 } },
+
+  { key: "money_specific", label: "The money is genuinely committed elsewhere",
+    surfaces: "Not a vague 'it's expensive' - a specific obligation the money is already spoken for.",
+    weights: { base: 3, unemployed: 5, retiree: 4, worker: 3, "business-owner": 1 } },
+
+  { key: "resourcefulness", label: "Not willing to be resourceful about the money",
+    surfaces: "The money exists somewhere - savings, a card, a person they could ask - but moving it feels out of the question. The problem is the unwillingness, not the amount.",
+    weights: { base: 3, unemployed: 4, beginner: 3, "business-owner": 1 } },
+
+  { key: "minimizer", label: "Things aren't that bad after all",
+    surfaces: "Downplays their own pain to protect their ego. Half-defends the situation they were just complaining about.",
+    weights: { base: 3, "business-owner": 5, worker: 4, retiree: 3, unemployed: 2 } },
+
+  { key: "blamer", label: "External circumstances are the reason",
+    surfaces: "The economy, the market, their employer, their area, their luck. Anything but a decision they made.",
+    weights: { base: 3, unemployed: 4, worker: 3, "business-owner": 2 } },
+
+  { key: "passive", label: "It will sort itself out",
+    surfaces: "Wishful language - 'hopefully', 'it should pick up', 'we'll see how it goes'. No sense of urgency at all.",
+    weights: { base: 3, worker: 4, retiree: 3 } },
+
+  { key: "later", label: "I'll do this, but not now",
+    surfaces: "Agrees with everything, then puts it past a horizon - after a date, after a thing finishes, after life calms down.",
+    weights: { base: 4, worker: 4, beginner: 4, "business-owner": 3 } },
+
+  { key: "research", label: "Analysis paralysis / still comparing",
+    surfaces: "Wants to look into it more, compare options, watch more content first. Research as a way of never deciding.",
+    weights: { base: 3, beginner: 5, "business-owner": 3 } },
+
+  { key: "permission", label: "Someone else has to sign off",
+    surfaces: "A partner, a parent, a business partner. Sometimes real, sometimes a shield.",
+    weights: { base: 3, worker: 5, retiree: 4, beginner: 3, unemployed: 2 } },
+
+  { key: "time", label: "It won't fit around what I already do",
+    surfaces: "Shifts, kids, a second job, care responsibilities. The hours genuinely do not obviously exist.",
+    weights: { base: 3, worker: 5, unemployed: 2, "business-owner": 4 } },
+
+  { key: "trust_you", label: "Doesn't trust YOU specifically",
+    surfaces: "Not the industry - the person on the phone. Why are you calling, who are you, what do you get out of this.",
+    weights: { base: 3, "business-owner": 4, retiree: 4 } },
+
+  { key: "proof", label: "Generic claims bounce off, wants specifics",
+    surfaces: "Asks for numbers, names, timelines, someone like them who did it. Vague answers actively lose them.",
+    weights: { base: 3, "business-owner": 5, beginner: 2 } },
+
+  { key: "sunk_cost", label: "Already paying for something similar",
+    surfaces: "A course, a subscription, a coach, a membership they are still on the hook for and barely using.",
+    weights: { base: 3, beginner: 4, "business-owner": 3, unemployed: 2 } },
+
+  { key: "social_risk", label: "What the people around them would say",
+    surfaces: "Status and image. How it would look to a spouse, a parent, colleagues, friends who already have opinions about it.",
+    weights: { base: 3, worker: 4, retiree: 3, "business-owner": 3 } },
+
+  { key: "start_over", label: "Tired of starting over",
+    surfaces: "Has begun several things and finished none. The fear is not failing, it is being the person who quits again.",
+    weights: { base: 3, beginner: 4, unemployed: 4 } },
+
+  { key: "pace", label: "Doubts the timeline, not the method",
+    surfaces: "Believes it works - for people with more runway than they have. Their doubt is 'not fast enough for my situation'.",
+    weights: { base: 3, unemployed: 4, retiree: 3 } },
+
+  // The two the model used to reach for by default. Kept, because they are
+  // real beliefs from the notes - but weighted down hard, so they become an
+  // occasional prospect instead of every prospect.
+  { key: "capability", label: "Am I the type of person who can do this",
+    surfaces: "Self-efficacy doubt. Only usable when tied to a specific thing they have already tried and how it went.",
+    weights: { base: 1, beginner: 2, retiree: 2, "business-owner": 0 } },
+
+  { key: "works_for_others", label: "Works for others, not for me",
+    surfaces: "Believes the results are real but that something about their own circumstances makes them the exception.",
+    weights: { base: 1, unemployed: 2, beginner: 2 } },
+];
+
+// Concrete particulars rolled alongside the axes. Beliefs stated as slogans
+// all sound alike; beliefs hung on a number, a person or a date do not.
+const LIFE_ANCHORS = [
+  "a specific person in their life with a stated opinion about this (name the relationship, not the name)",
+  "a specific past attempt: what they bought or tried, roughly when, and how it actually ended",
+  "a specific money fact: an amount, a monthly commitment, or what their account realistically looks like",
+  "a specific time fact: their shift pattern, their hours, or a fixed commitment in their week",
+  "a specific recent event in the last few weeks that is why they responded at all",
+  "a specific number attached to their goal: an amount they need, by when, and what it is for",
+];
+
+function axisWeight(axis, personaKey) {
+  const w = axis.weights || {};
+  return personaKey && w[personaKey] !== undefined ? w[personaKey] : (w.base || 1);
+}
+
+function pickWeightedAxis(pool, personaKey) {
+  const total = pool.reduce((sum, a) => sum + axisWeight(a, personaKey), 0);
+  if (total <= 0) return pool[Math.floor(Math.random() * pool.length)];
+  let r = Math.random() * total;
+  for (const a of pool) {
+    r -= axisWeight(a, personaKey);
+    if (r < 0) return a;
+  }
+  return pool[pool.length - 1];
+}
+
+// 3-5 DISTINCT axes, weighted toward the ones that fit the rolled persona.
+// Sampling WITHOUT replacement is what makes the bank internally varied - the
+// model can no longer return four flavours of the same doubt.
+function pickBeliefAxes(personaKey) {
+  const count = 3 + Math.floor(Math.random() * 3);   // 3, 4 or 5
+  const pool = BELIEF_AXES.slice();
+  const picked = [];
+  while (picked.length < count && pool.length) {
+    const axis = pickWeightedAxis(pool, personaKey);
+    picked.push(axis);
+    pool.splice(pool.indexOf(axis), 1);
+  }
+  return picked;
+}
+
+function pickAnchors() {
+  const pool = LIFE_ANCHORS.slice();
+  const out = [];
+  for (let i = 0; i < 2 && pool.length; i++) {
+    out.push(...pool.splice(Math.floor(Math.random() * pool.length), 1));
+  }
+  return out;
+}
+
+// The prompt block. It ASSIGNS axes rather than offering them: the model gets
+// no say in the theme, only in the wording.
+function beliefBrief(axes, anchors, avoid) {
+  const assigned = axes.map((a, i) => (i + 1) + ". [" + a.label + "] " + a.surfaces).join("\n");
+  const anchorLines = anchors.map((a) => "  - " + a).join("\n");
+  const avoidBlock = avoid && avoid.length
+    ? "\nThis trainee has already faced these exact beliefs in recent calls. Do NOT reuse them or close paraphrases:\n" +
+      avoid.map((b) => "- " + b).join("\n") + "\n"
+    : "";
+
+  return `LIMITING BELIEFS - build the bank from the assigned axes below, one belief per axis, in this order:
+${assigned}
+
+Rules for the bank:
+- Write each belief as ONE sentence in the prospect's own spoken voice, the way it would actually come out on a call. Not a label, not a category name, not a tidy summary.
+- Every belief must contain a CONCRETE PARTICULAR: a number, a timeframe, a named relationship, or a specific thing that happened. A belief that could be pasted into any other prospect's profile is wrong and must be rewritten.
+- Weave in these particulars from this prospect's life, and keep goal, currentSituation and problem consistent with them:
+${anchorLines}
+- The beliefs should sit slightly at odds with each other, the way real people are inconsistent. A surface excuse can be cover for something further down the list.
+- BANNED, because every previous prospect said them: "I don't know if I'm fit for this", "I'm not sure I'm cut out for this", "some people are just born with it", "people who are born with it are the ones who win", "it works for others but not for me" (allowed ONLY if that exact axis is assigned above, and then only anchored to a specific past attempt), and any bare version of "is this a scam".
+- hiddenBelief must be a DIFFERENT fear from all of the above, not a restatement of the strongest one.${avoidBlock}`;
+}
+
+// Per-user novelty. The axis roll fixes variety inside one call; this fixes
+// "every call feels the same" across a training session. Best-effort both
+// ways - a DB blip must never stop a call from starting.
+async function recentBeliefsFor(userId) {
+  if (!db || !userId) return [];
+  try {
+    const rows = await db.query(
+      "SELECT belief FROM prospect_beliefs WHERE user_id=$1 ORDER BY id DESC LIMIT 15",
+      [userId]
+    );
+    return rows.rows.map((r) => r.belief).filter(Boolean);
+  } catch (err) {
+    console.error("recentBeliefsFor error:", err.message);
+    return [];
+  }
+}
+
+function rememberBeliefs(userId, beliefs) {
+  if (!db || !userId || !Array.isArray(beliefs) || !beliefs.length) return;
+  const values = beliefs.slice(0, 5).map((b) => String(b).slice(0, 300));
+  const params = [];
+  const tuples = values.map((b, i) => {
+    params.push(userId, b, Date.now());
+    return "($" + (i * 3 + 1) + ", $" + (i * 3 + 2) + ", $" + (i * 3 + 3) + ")";
+  });
+  db.query(
+    "INSERT INTO prospect_beliefs (user_id, belief, created_at) VALUES " + tuples.join(", "),
+    params
+  ).catch((e) => console.error("rememberBeliefs error:", e.message));
+}
+
+// Keep the anti-repeat table from growing without bound: trim a user's rows
+// to the newest 40 on every write. Cheap, and it runs off the hot path.
+function trimBeliefMemory(userId) {
+  if (!db || !userId) return;
+  db.query(
+    `DELETE FROM prospect_beliefs WHERE user_id=$1 AND id NOT IN (
+       SELECT id FROM prospect_beliefs WHERE user_id=$1 ORDER BY id DESC LIMIT 40)`,
+    [userId]
+  ).catch(() => {});
+}
+
+app.post("/api/call/start", aiLimiter, authMiddleware, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
   const { scenario, customDescription, section, personality, prospectName, language } = req.body;
 
@@ -1115,9 +1488,12 @@ Shape their goal, current situation, problem, limiting beliefs, opening line and
     ? `Use exactly "${prospectName}" as the prospect's name.`
     : `Give the prospect a realistic first name.`;
 
-  const commStyle = pickCommStyle();
+  const commStyle  = pickCommStyle();
+  const beliefAxes = pickBeliefAxes(personality && personality.key);
+  const anchors    = pickAnchors();
 
   try {
+    const avoid = await recentBeliefsFor(req.userId);
     const data = await askClaude(
       `Generate a prospect profile for a sales call roleplay simulation.
 Scenario: ${scenario}${customDescription ? ` — ${customDescription}` : ""}
@@ -1126,10 +1502,9 @@ ${personalityContext}
 ${commStyleSeed(commStyle)}
 ${nameInstruction}
 
-The "limitingBeliefs" array is a small BANK of 3-5 distinct objections / limiting beliefs this specific
-prospect holds (surface excuses AND deeper fears), ordered from the one most likely to come up first to last.
-These are what the prospect will work through during the call. Keep each to one short sentence in the
-prospect's own voice.
+${beliefBrief(beliefAxes, anchors, avoid)}
+The "limitingBeliefs" array is that bank, ordered from the one most likely to surface first to last.
+These are what the prospect works through during the call.
 
 Return JSON:
 {
@@ -1150,6 +1525,9 @@ Return JSON:
     if (prospectName) data.name = prospectName;
     // Ride the rolled style along on the prospect so /message stays consistent.
     data.communicationStyle = { key: commStyle.key, label: commStyle.label };
+    data.beliefAxes = beliefAxes.map((a) => a.key);
+    rememberBeliefs(req.userId, data.limitingBeliefs);
+    trimBeliefMemory(req.userId);
     res.json(data);
   } catch (err) {
     console.error("call/start error:", err.stack || err.message);
@@ -1157,7 +1535,7 @@ Return JSON:
   }
 });
 
-app.post("/api/call/message", async (req, res) => {
+app.post("/api/call/message", aiLimiter, authMiddleware, async (req, res) => {
   if (!requireAI(res)) return;
   const { scenario, prospect, history, userMessage, section, personality, language } = req.body;
 
@@ -1170,7 +1548,7 @@ app.post("/api/call/message", async (req, res) => {
   }
 
   try {
-    const historyText = (history || [])
+    const historyText = capHistory(history)
       .map((m) => `${m.role === "user" ? "Salesperson" : "Prospect"}: ${m.content}`)
       .join("\n");
 
@@ -1248,11 +1626,11 @@ Return ONLY valid JSON:
   }
 });
 
-app.post("/api/call/end", optionalAuth, async (req, res) => {
+app.post("/api/call/end", aiLimiter, authMiddleware, async (req, res) => {
   if (!requireAI(res)) return;
   const { scenario, prospect, history, section, personality, language } = req.body;
   try {
-    const turns = history || [];
+    const turns = capHistory(history);
     const historyText = turns
       .map((m) => `${m.role === "user" ? "Salesperson" : "Prospect"}: ${m.content}`)
       .join("\n");
@@ -1387,10 +1765,10 @@ Return JSON:
 // SETTER MODE
 // A remote-setter RECRUITMENT call. The trainee is the setter, phoning a
 // warm lead who responded to a video about becoming a remote setter. The
-// TRIAGE script below is the trainee's PLAYBOOK — it is NEVER shown to the
-// AI prospect. It drives only (a) the grading of the trainee's structure and
-// (b) the Qualified / Not Qualified outcome. The AI prospect just plays a
-// challenging persona and resists, exactly like Closer mode.
+// Setter Call Framework (setter_call_framework.md) is the trainee's PLAYBOOK —
+// it is NEVER shown to the AI prospect. It drives only (a) the grading of the
+// trainee's structure and (b) the Qualified / Not Qualified outcome. The AI
+// prospect just plays a challenging persona and resists, like Closer mode.
 // ---------------------------------------------------------------------
 
 // The offer list is now shared with Closer mode. In Setter mode each label is
@@ -1414,19 +1792,20 @@ function setterOfferText(offer, customDescription) {
   return SETTER_OFFERS[offer] || SETTER_OFFERS["High Ticket Sales"];
 }
 
-// The ideal call STRUCTURE (order matters). Used only for grading — never fed
-// to the prospect. Loose guide, not a verbatim script.
+// The ideal call STRUCTURE (order matters). Mirrors the stage order in
+// setter_call_framework.md — keep the two in step when that file changes.
+// Used only for grading — never fed to the prospect. Loose guide, not a
+// verbatim script.
 const SETTER_STAGES = [
-  { key: "soft_intro_frame", label: "Soft Intro + Frame",        desc: "Neutral, low-pressure open; names why they're calling (the video) and frames the call as understanding where the lead is and where they want to go." },
-  { key: "shot_across_bow",  label: "Shot Across the Bow (Intent)", desc: "Surfaces intent — what caught their attention in the video and motivated them to reach out." },
-  { key: "situation",        label: "Situation",                 desc: "What they do now, how long, whether they like it (and a 2nd-truth check on why change if it's fine)." },
-  { key: "problem",          label: "Problem",                   desc: "What they don't like about their current situation; clarifies and digs (what do you mean / tell me more / in what way)." },
-  { key: "impact",           label: "Impact",                    desc: "The personal impact of the problem — how it makes them feel, how long it's gone on, what's happening." },
-  { key: "solution_awareness", label: "Solution Awareness",      desc: "What they've already tried and why it didn't work; why fixing this matters NOW after all this time." },
-  { key: "goals",            label: "Goals",                     desc: "Where they want to get to — income to replace, the bigger vision, why that goal matters to them." },
-  { key: "impact_goal",      label: "Impact (of goal)",          desc: "How long it's been a goal, how long until they'd get there on their current path; challenges weak answers, establishes why now." },
-  { key: "transition",       label: "Transition",                desc: "Asks permission to share thoughts; mirrors their pain and goals back; frames remote setting as the fit (hell island vs heaven island)." },
-  { key: "pitch",            label: "Pitch the Closing Call",    desc: "Positions a 2nd call with a closer/coach as the next step, explains what that call does, then offers a specific time slot to book it." },
+  { key: "warm_open",          label: "Warm Open & Framing",           desc: "Neutral, low-pressure open; names why they're calling (the video) and frames the call as understanding where the lead is and where they want to go." },
+  { key: "hook",               label: "Hook / Reason for Reaching Out", desc: "Surfaces what triggered them to respond — what caught their attention in the video and motivated them to reach out." },
+  { key: "situation",          label: "Situation Discovery",           desc: "What they do now, how long, whether they like it (and a two-truths check on why change at all if it sounds fine)." },
+  { key: "problem",            label: "Problem Discovery",             desc: "What they don't like, clarified and chunked down (what do you mean / tell me more / in what way), plus the personal impact: how it makes them feel, how long it's gone on." },
+  { key: "solution_awareness", label: "Solution Awareness",            desc: "What they've already tried and why it didn't work; why fixing this is a priority NOW after all this time." },
+  { key: "goals",              label: "Goals & Vision",                desc: "Where they want to get to — income to replace, the bigger vision, and why that goal matters to them." },
+  { key: "cost_of_inaction",   label: "Cost of Inaction",              desc: "How long it's been a goal, how long until they'd get there on their current path; challenges weak answers and establishes why now." },
+  { key: "transition",         label: "Transition",                    desc: "Asks permission to share thoughts; mirrors their pain and goals back; frames remote setting as the fit, then checks if they can see themselves doing it." },
+  { key: "pitch",              label: "Pitch (Book the Closer Call)",  desc: "Positions a call with a coach/closer as the next step, explains what that call does, then offers specific time slots to book it." },
 ];
 
 const SETTER_OBJECTIVES = `TWO objectives decide qualification:
@@ -1438,7 +1817,28 @@ function setterStagesForPrompt() {
   return SETTER_STAGES.map((s, i) => `${i + 1}. ${s.label} — ${s.desc}`).join("\n");
 }
 
-app.post("/api/setter/start", optionalAuth, checkSessionLimit, async (req, res) => {
+// The framework's own stage goals and example questions, as extra grounding for
+// GRADING only. Trimmed to the stage sections: the file's preamble and closing
+// notes are instructions to a human reader, not to the grader.
+function setterFrameworkBlock() {
+  if (!SETTER_FRAMEWORK) return "";
+  const start = SETTER_FRAMEWORK.indexOf("## Stage 1");
+  const end   = SETTER_FRAMEWORK.lastIndexOf("## Notes");
+  const body  = SETTER_FRAMEWORK.slice(
+    start === -1 ? 0 : start,
+    end === -1 ? undefined : end
+  ).trim();
+  if (!body) return "";
+  return `
+THE FRAMEWORK IN FULL (the trainee's playbook). The example questions show the
+KIND of question each stage calls for — wording will and should differ, and
+reciting them verbatim is worse than a real conversation that hits the same
+beats. Grade against the intent of each stage, not the phrasing:
+${body}
+`;
+}
+
+app.post("/api/setter/start", aiLimiter, authMiddleware, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
   const { offer, customDescription, personality, prospectName, language } = req.body;
   const offerText = setterOfferText(offer, customDescription);
@@ -1451,9 +1851,12 @@ app.post("/api/setter/start", optionalAuth, checkSessionLimit, async (req, res) 
     ? `Use exactly "${prospectName}" as the lead's name.`
     : `Give the lead a realistic first name.`;
 
-  const commStyle = pickCommStyle();
+  const commStyle  = pickCommStyle();
+  const beliefAxes = pickBeliefAxes(personality && personality.key);
+  const anchors    = pickAnchors();
 
   try {
+    const avoid = await recentBeliefsFor(req.userId);
     const data = await askClaude(
       `Generate a prospect profile for a REMOTE-INCOME RECRUITMENT call roleplay.
 The offer: ${offerText}
@@ -1462,7 +1865,8 @@ ${personaContext}
 ${commStyleSeed(commStyle)}
 ${nameInstruction}
 
-The "limitingBeliefs" array is a BANK of 3-5 distinct objections/hesitations this lead holds about pursuing remote setting and about committing to a next step (surface excuses AND deeper fears), ordered most-likely-first. Keep each to one short sentence in the lead's own voice.
+${beliefBrief(beliefAxes, anchors, avoid)}
+The "limitingBeliefs" array is that bank - hesitations about pursuing remote setting AND about committing to a next step - ordered most-likely-first.
 
 Return JSON:
 {
@@ -1483,6 +1887,9 @@ Return JSON:
     if (prospectName) data.name = prospectName;
     // Ride the rolled style along on the lead so /message stays consistent.
     data.communicationStyle = { key: commStyle.key, label: commStyle.label };
+    data.beliefAxes = beliefAxes.map((a) => a.key);
+    rememberBeliefs(req.userId, data.limitingBeliefs);
+    trimBeliefMemory(req.userId);
     res.json(data);
   } catch (err) {
     console.error("setter/start error:", err.stack || err.message);
@@ -1490,7 +1897,7 @@ Return JSON:
   }
 });
 
-app.post("/api/setter/message", async (req, res) => {
+app.post("/api/setter/message", aiLimiter, authMiddleware, async (req, res) => {
   if (!requireAI(res)) return;
   const { offer, customDescription, prospect, history, userMessage, personality, language } = req.body;
   const offerText = setterOfferText(offer, customDescription);
@@ -1503,7 +1910,7 @@ app.post("/api/setter/message", async (req, res) => {
   }
 
   try {
-    const historyText = (history || [])
+    const historyText = capHistory(history)
       .map((m) => `${m.role === "user" ? "Setter" : "Lead"}: ${m.content}`)
       .join("\n");
 
@@ -1572,12 +1979,12 @@ Return ONLY valid JSON:
   }
 });
 
-app.post("/api/setter/end", optionalAuth, async (req, res) => {
+app.post("/api/setter/end", aiLimiter, authMiddleware, async (req, res) => {
   if (!requireAI(res)) return;
   const { offer, customDescription, prospect, history, liveBooking, personality, language } = req.body;
   const offerText = setterOfferText(offer, customDescription);
   try {
-    const turns = history || [];
+    const turns = capHistory(history);
     const historyText = turns
       .map((m) => `${m.role === "user" ? "Setter" : "Lead"}: ${m.content}`)
       .join("\n");
@@ -1609,14 +2016,14 @@ Return ONLY valid JSON. Each note is the lesson for that exact line, under 14 wo
       language
     );
 
-    // 2) SONNET — grade against the TRIAGE structure + decide the outcome.
+    // 2) SONNET — grade against the Setter Call Framework + decide the outcome.
     const summaryPromise = askClaude(
       `A REMOTE-INCOME RECRUITMENT call roleplay just ended. The offer being recruited for: ${offerText}
 Grade the SETTER (the trainee) against the ideal call structure and objectives below.
 
 THE IDEAL STRUCTURE (order matters, but it's a loose guide — reward following the STRUCTURE and having a real conversation, not reciting questions verbatim):
 ${setterStagesForPrompt()}
-
+${setterFrameworkBlock()}
 ${SETTER_OBJECTIVES}
 
 Lead profile: ${JSON.stringify(prospect)}
@@ -1723,7 +2130,7 @@ The "structure" array MUST include one entry for every stage key: ${SETTER_STAGE
 // call and fills out. Cheap by design.
 // ---------------------------------------------------------------------
 
-app.post("/api/call/quit", optionalAuth, async (req, res) => {
+app.post("/api/call/quit", aiLimiter, authMiddleware, async (req, res) => {
   const { scenario, prospect, history, section, personality } = req.body || {};
   const turns = Array.isArray(history) ? history : [];
   const historyText = turns
@@ -1751,7 +2158,7 @@ app.post("/api/call/quit", optionalAuth, async (req, res) => {
   res.json({ ok: true, discovered_skills: skills });
 });
 
-app.post("/api/setter/quit", optionalAuth, async (req, res) => {
+app.post("/api/setter/quit", aiLimiter, authMiddleware, async (req, res) => {
   const { offer, customDescription, history, personality } = req.body || {};
   const offerText = setterOfferText(offer, customDescription);
   const turns = Array.isArray(history) ? history : [];
@@ -1802,6 +2209,430 @@ app.get("/api/calls/recent", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("calls/recent error:", err.message);
     res.json({ calls: [] });
+  }
+});
+
+// ---------------------------------------------------------------------
+// Saved calls — the ones the trainee explicitly chose to keep.
+//
+// Separate from call_history on purpose: that table is the Skill Tree's
+// automatic memory (capped, fire-and-forget, never shown as a document).
+// This one holds only what someone deliberately saved, at full length, so
+// it can be re-read or handed to a coach as a PDF.
+// ---------------------------------------------------------------------
+
+const SAVED_LIMIT = 200;   // per account, oldest pruned beyond this
+
+function normalizeTranscript(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 200).map((t) => ({
+    role: t && t.role === "user" ? "user" : "prospect",
+    content: typeof (t && t.content) === "string" ? t.content.slice(0, 4000) : "",
+  })).filter((t) => t.content);
+}
+
+app.post("/api/calls/save", authMiddleware, async (req, res) => {
+  if (!db) return res.status(503).json({ error: "Database not configured" });
+  const { mode, label, persona, section, outcome, score, transcript, analysis } = req.body || {};
+  const turns = normalizeTranscript(transcript);
+  if (!turns.length) return res.status(400).json({ error: "Nothing to save — the call has no transcript." });
+
+  let analysisJson = null;
+  if (analysis && typeof analysis === "object") {
+    try { analysisJson = JSON.stringify(analysis).slice(0, 40000); } catch { analysisJson = null; }
+  }
+
+  try {
+    const row = await db.query(
+      `INSERT INTO saved_calls (user_id, mode, label, persona, section, outcome, score, transcript, analysis, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+      [
+        req.userId,
+        (mode || "closer").slice(0, 40),
+        (label || "Sales call").slice(0, 200),
+        (persona || "").slice(0, 120) || null,
+        (section || "").slice(0, 120) || null,
+        (outcome || "").slice(0, 120) || null,
+        Number.isFinite(score) ? score : null,
+        JSON.stringify(turns),
+        analysisJson,
+        Date.now(),
+      ]
+    );
+    // Keep the shelf from growing forever; the newest SAVED_LIMIT survive.
+    db.query(
+      `DELETE FROM saved_calls WHERE user_id=$1 AND id NOT IN (
+         SELECT id FROM saved_calls WHERE user_id=$1 ORDER BY id DESC LIMIT ${SAVED_LIMIT})`,
+      [req.userId]
+    ).catch(() => {});
+    res.json({ ok: true, id: row.rows[0].id });
+  } catch (err) {
+    console.error("calls/save error:", err.message);
+    res.status(500).json({ error: "Could not save this conversation." });
+  }
+});
+
+app.get("/api/calls/saved", authMiddleware, async (req, res) => {
+  if (!db) return res.json({ calls: [] });
+  try {
+    const result = await db.query(
+      `SELECT id, mode, label, persona, section, outcome, score, analysis, transcript, created_at
+         FROM saved_calls WHERE user_id=$1 ORDER BY created_at DESC LIMIT 200`,
+      [req.userId]
+    );
+    const calls = result.rows.map((r) => ({
+      id: r.id,
+      mode: r.mode,
+      label: r.label,
+      persona: r.persona,
+      section: r.section,
+      outcome: r.outcome,
+      score: r.score,
+      reviewed: !!r.analysis,
+      turns: (() => { try { return JSON.parse(r.transcript || "[]").length; } catch { return 0; } })(),
+      created_at: Number(r.created_at),
+    }));
+    res.json({ calls });
+  } catch (err) {
+    console.error("calls/saved error:", err.message);
+    res.json({ calls: [] });
+  }
+});
+
+app.get("/api/calls/saved/:id", authMiddleware, async (req, res) => {
+  if (!db) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const row = await loadSavedCall(req.params.id, req.userId);
+    if (!row) return res.status(404).json({ error: "Not found" });
+    res.json(row);
+  } catch (err) {
+    console.error("calls/saved/:id error:", err.message);
+    res.status(500).json({ error: "Could not load that conversation." });
+  }
+});
+
+app.delete("/api/calls/saved/:id", authMiddleware, async (req, res) => {
+  if (!db) return res.status(503).json({ error: "Database not configured" });
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad id" });
+  try {
+    await db.query("DELETE FROM saved_calls WHERE id=$1 AND user_id=$2", [id, req.userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("calls/saved delete error:", err.message);
+    res.status(500).json({ error: "Could not delete that conversation." });
+  }
+});
+
+// Scoped by user_id in the WHERE clause, not just by id — an id alone must
+// never be enough to read someone else's call.
+async function loadSavedCall(rawId, userId) {
+  const id = Number(rawId);
+  if (!Number.isInteger(id)) return null;
+  const result = await db.query(
+    `SELECT id, mode, label, persona, section, outcome, score, transcript, analysis, created_at
+       FROM saved_calls WHERE id=$1 AND user_id=$2`,
+    [id, userId]
+  );
+  if (!result.rows.length) return null;
+  const r = result.rows[0];
+  const parse = (raw, fallback) => { try { return JSON.parse(raw); } catch { return fallback; } };
+  return {
+    id: r.id,
+    mode: r.mode,
+    label: r.label,
+    persona: r.persona,
+    section: r.section,
+    outcome: r.outcome,
+    score: r.score,
+    created_at: Number(r.created_at),
+    transcript: parse(r.transcript, []),
+    analysis: r.analysis ? parse(r.analysis, null) : null,
+  };
+}
+
+// ---------------------------------------------------------------------
+// PDF export. The page is the chat: left/right bubbles, same proportions
+// as the live call screen, so a coach reading the PDF sees what the
+// trainee saw. Theme and whether the score is printed are the reader's
+// choice, sent as query params from Settings.
+// ---------------------------------------------------------------------
+
+const PDF_THEMES = {
+  light: {
+    page:        "#ffffff",
+    ink:         "#1a1310",
+    muted:       "#6b5750",
+    accent:      "#d4431e",
+    rule:        "#e3d9d4",
+    themBg:      "#f4f1ef",
+    themBorder:  "#e3d9d4",
+    themInk:     "#1a1310",
+    youBg:       "#fdeee8",
+    youBorder:   "#f2c7b5",
+    youInk:      "#1a1310",
+    good:        "#1f7a45",
+    bad:         "#b3261e",
+    panel:       "#faf7f6",
+  },
+  dark: {
+    page:        "#0a0605",
+    ink:         "#f2ece9",
+    muted:       "#9a857e",
+    accent:      "#ff5a2e",
+    rule:        "#241713",
+    themBg:      "#171010",
+    themBorder:  "#241713",
+    themInk:     "#e7ded9",
+    youBg:       "#26110b",
+    youBorder:   "#5a2416",
+    youInk:      "#f6ece7",
+    good:        "#5fd08a",
+    bad:         "#ff5a4e",
+    panel:       "#100907",
+  },
+};
+
+const PDF_MARGIN = 56;
+
+function pdfOptions(query) {
+  const q = query || {};
+  const theme = PDF_THEMES[q.theme] ? q.theme : "light";
+  // Absent means "print it" - only an explicit 0/false turns the score off.
+  const showScore = !(q.score === "0" || q.score === "false" || q.score === "no");
+  return { theme, palette: PDF_THEMES[theme], showScore };
+}
+
+// A dark PDF needs the page painted, not just the text recoloured — and on
+// every page, including ones pdfkit adds mid-transcript.
+function paintPage(doc, c) {
+  if (c.page === "#ffffff") return;
+  const { width, height } = doc.page;
+  doc.save().rect(0, 0, width, height).fill(c.page).restore();
+}
+
+function pdfNewPage(doc, c) {
+  doc.addPage();
+  return doc.y;
+}
+
+function pdfHeading(doc, c, text) {
+  if (doc.y > 640) pdfNewPage(doc, c);
+  doc.moveDown(1.1);
+  doc.fillColor(c.accent).font("Helvetica-Bold").fontSize(9)
+     .text(text.toUpperCase(), PDF_MARGIN, doc.y, { characterSpacing: 1.4 });
+  doc.moveTo(PDF_MARGIN, doc.y + 3).lineTo(doc.page.width - PDF_MARGIN, doc.y + 3)
+     .strokeColor(c.rule).lineWidth(1).stroke();
+  doc.moveDown(0.7);
+}
+
+function pdfBullets(doc, c, items) {
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const text = typeof item === "string" ? item : (item && (item.text || item.note)) || "";
+    if (!text) return;
+    if (doc.y > 720) pdfNewPage(doc, c);
+    doc.fillColor(c.ink).font("Helvetica").fontSize(10.5)
+       .text("•  " + text, PDF_MARGIN, doc.y, { width: doc.page.width - PDF_MARGIN * 2, paragraphGap: 4, lineGap: 1.5 });
+  });
+}
+
+// A bubble with one squared-off corner on the speaker's side, the same tail
+// the chat window draws with border-bottom-*-radius: 4px.
+function bubblePath(doc, x, y, w, h, radii) {
+  const [tl, tr, br, bl] = radii;
+  doc.moveTo(x + tl, y)
+     .lineTo(x + w - tr, y)
+     .quadraticCurveTo(x + w, y, x + w, y + tr)
+     .lineTo(x + w, y + h - br)
+     .quadraticCurveTo(x + w, y + h, x + w - br, y + h)
+     .lineTo(x + bl, y + h)
+     .quadraticCurveTo(x, y + h, x, y + h - bl)
+     .lineTo(x, y + tl)
+     .quadraticCurveTo(x, y, x + tl, y);
+}
+
+const BUBBLE_PAD_X = 14;
+const BUBBLE_PAD_Y = 11;
+const BUBBLE_GAP   = 12;
+const BUBBLE_FONT  = 10.5;
+
+function drawBubble(doc, c, turn) {
+  const isUser    = turn.role === "user";
+  const contentW  = doc.page.width - PDF_MARGIN * 2;
+  const maxBubble = contentW * 0.75;                    // matches .chat-bubble max-width
+  const maxInner  = maxBubble - BUBBLE_PAD_X * 2;
+
+  doc.font("Helvetica").fontSize(BUBBLE_FONT);
+  // Short lines keep a short bubble, the way the chat window does.
+  const innerW  = Math.min(Math.ceil(doc.widthOfString(turn.content)) + 1, maxInner);
+  const textH   = doc.heightOfString(turn.content, { width: innerW, lineGap: 1.6 });
+  const bubbleW = innerW + BUBBLE_PAD_X * 2;
+  const bubbleH = textH + BUBBLE_PAD_Y * 2;
+
+  const bottom = doc.page.height - PDF_MARGIN;
+  if (doc.y + bubbleH + 18 > bottom) pdfNewPage(doc, c);
+
+  const x = isUser ? doc.page.width - PDF_MARGIN - bubbleW : PDF_MARGIN;
+  const y = doc.y;
+
+  // Speaker label, tucked above the bubble on the speaker's side.
+  doc.fillColor(c.muted).font("Helvetica-Bold").fontSize(7.5)
+     .text(isUser ? "YOU" : "PROSPECT", isUser ? x : x, y, {
+       width: bubbleW,
+       align: isUser ? "right" : "left",
+       characterSpacing: 1,
+     });
+
+  const bubbleY = doc.y + 3;
+  bubblePath(doc, x, bubbleY, bubbleW, bubbleH, isUser ? [14, 14, 4, 14] : [14, 14, 14, 4]);
+  doc.fillColor(isUser ? c.youBg : c.themBg)
+     .strokeColor(isUser ? c.youBorder : c.themBorder)
+     .lineWidth(0.8)
+     .fillAndStroke();
+
+  doc.fillColor(isUser ? c.youInk : c.themInk).font("Helvetica").fontSize(BUBBLE_FONT)
+     .text(turn.content, x + BUBBLE_PAD_X, bubbleY + BUBBLE_PAD_Y, { width: innerW, lineGap: 1.6 });
+
+  doc.x = PDF_MARGIN;
+  doc.y = bubbleY + bubbleH + BUBBLE_GAP;
+}
+
+function renderCallPdf(doc, call, opts) {
+  const o = opts || pdfOptions({});
+  const c = o.palette;
+  const contentW = doc.page.width - PDF_MARGIN * 2;
+
+  paintPage(doc, c);
+  doc.on("pageAdded", () => paintPage(doc, c));
+
+  const date = new Date(Number(call.created_at) || Date.now());
+  const dateText = date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+
+  // Masthead
+  doc.fillColor(c.accent).font("Helvetica-Bold").fontSize(9)
+     .text("SALES CAMP AI", PDF_MARGIN, doc.y, { characterSpacing: 2 });
+  doc.fillColor(c.ink).font("Helvetica-Bold").fontSize(20)
+     .text(call.label || "Sales call", { width: contentW, paragraphGap: 2 });
+  doc.fillColor(c.muted).font("Helvetica").fontSize(10).text(dateText);
+
+  // Who you were calling and what you were selling. No score here — the
+  // number belongs with the debrief, and only when it's wanted at all.
+  const meta = [
+    ["Mode", call.mode === "setter" ? "Setter call" : "Closer call"],
+    ["Prospect persona", call.persona],
+    ["Section practised", call.section],
+    ["Outcome", call.outcome],
+    ["Length", (call.transcript || []).length + " messages"],
+  ].filter(([, v]) => v !== null && v !== undefined && v !== "");
+
+  doc.moveDown(0.8);
+  meta.forEach(([k, v]) => {
+    doc.fillColor(c.muted).font("Helvetica").fontSize(9.5)
+       .text(k + ": ", PDF_MARGIN, doc.y, { continued: true })
+       .fillColor(c.ink).font("Helvetica-Bold").text(String(v));
+  });
+
+  // The conversation, as it looked on screen
+  pdfHeading(doc, c, "The conversation");
+  doc.moveDown(0.2);
+  (call.transcript || []).forEach((turn) => drawBubble(doc, c, turn));
+
+  const a = call.analysis;
+  if (!a) {
+    pdfHeading(doc, c, "Debrief");
+    doc.fillColor(c.muted).font("Helvetica-Oblique").fontSize(10.5)
+       .text("This call was ended without a review, so there is no debrief to include.",
+             PDF_MARGIN, doc.y, { width: contentW });
+    return;
+  }
+
+  pdfHeading(doc, c, "Debrief");
+  if (o.showScore && Number.isFinite(a.callScore)) {
+    doc.fillColor(c.accent).font("Helvetica-Bold").fontSize(26)
+       .text(a.callScore + " / 10", PDF_MARGIN, doc.y, { paragraphGap: 2 });
+  }
+  if (a.headline) {
+    doc.fillColor(c.ink).font("Helvetica-Bold").fontSize(12)
+       .text(a.headline, PDF_MARGIN, doc.y, { width: contentW, paragraphGap: 8, lineGap: 2 });
+  }
+  if (a.rememberThis) {
+    doc.fillColor(c.muted).font("Helvetica-Bold").fontSize(9)
+       .text("REMEMBER THIS", PDF_MARGIN, doc.y, { characterSpacing: 1.1 });
+    doc.fillColor(c.ink).font("Helvetica-Oblique").fontSize(11)
+       .text(a.rememberThis, { width: contentW, paragraphGap: 10, lineGap: 2 });
+  }
+
+  // Setter-specific blocks
+  if (a.bookingRationale || a.outcome) {
+    pdfHeading(doc, c, "Outcome");
+    if (a.outcome) {
+      doc.fillColor(c.ink).font("Helvetica-Bold").fontSize(11)
+         .text(String(a.outcome), PDF_MARGIN, doc.y, { width: contentW });
+    }
+    if (a.bookingRationale) {
+      doc.fillColor(c.ink).font("Helvetica").fontSize(10.5)
+         .text((a.booked ? (a.unearned ? "Booked, but unearned. " : "Closer call booked. ") : "No closer call booked. ") + a.bookingRationale,
+               PDF_MARGIN, doc.y, { width: contentW, paragraphGap: 6, lineGap: 1.5 });
+    }
+  }
+
+  if (Array.isArray(a.structure) && a.structure.length) {
+    pdfHeading(doc, c, "Call structure");
+    a.structure.forEach((s) => {
+      if (doc.y > 700) pdfNewPage(doc, c);
+      const status = (s.status || "partial").toUpperCase();
+      doc.fillColor(c.ink).font("Helvetica-Bold").fontSize(10.5)
+         .text((s.label || s.key || "") + "  ", PDF_MARGIN, doc.y, { width: contentW, continued: true })
+         .fillColor(status === "HIT" ? c.good : status === "MISSED" ? c.bad : c.muted)
+         .fontSize(8.5).text(status, { characterSpacing: 0.8 });
+      if (s.note) {
+        doc.fillColor(c.muted).font("Helvetica").fontSize(10)
+           .text(s.note, PDF_MARGIN, doc.y, { width: contentW, paragraphGap: 6, lineGap: 1.5 });
+      }
+    });
+  }
+
+  if (Array.isArray(a.whatYouDidWell) && a.whatYouDidWell.length) {
+    pdfHeading(doc, c, "What you did well");
+    pdfBullets(doc, c, a.whatYouDidWell);
+  }
+  if (Array.isArray(a.thinkAboutNextTime) && a.thinkAboutNextTime.length) {
+    pdfHeading(doc, c, "Think about this next time");
+    pdfBullets(doc, c, a.thinkAboutNextTime);
+  }
+  if (a.principle && a.principle.name) {
+    pdfHeading(doc, c, "Principle to revisit");
+    doc.fillColor(c.ink).font("Helvetica-Bold").fontSize(10.5)
+       .text(a.principle.name + ": ", PDF_MARGIN, doc.y, { width: contentW, continued: true })
+       .font("Helvetica").text(a.principle.note || "");
+  }
+}
+
+app.get("/api/calls/saved/:id/pdf", authMiddleware, async (req, res) => {
+  if (!db) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const call = await loadSavedCall(req.params.id, req.userId);
+    if (!call) return res.status(404).json({ error: "Not found" });
+
+    const safeName = (call.label || "sales-call")
+      .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50) || "sales-call";
+    const stamp = new Date(Number(call.created_at) || Date.now()).toISOString().slice(0, 10);
+
+    // Theme and score visibility come from the trainee's download settings.
+    const opts = pdfOptions(req.query);
+
+    const doc = new PDFDocument({ size: "A4", margin: PDF_MARGIN, info: {
+      Title: (call.label || "Sales call") + " — Sales Camp AI",
+      Author: "Sales Camp AI",
+    }});
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="sales-camp-${safeName}-${stamp}.pdf"`);
+    doc.pipe(res);
+    renderCallPdf(doc, call, opts);
+    doc.end();
+  } catch (err) {
+    console.error("calls/saved pdf error:", err.message);
+    if (!res.headersSent) res.status(500).json({ error: "Could not build the PDF." });
   }
 });
 
@@ -1868,13 +2699,24 @@ app.delete("/api/lessons/:id", authMiddleware, async (req, res) => {
 app.get("/api/user/status", authMiddleware, async (req, res) => {
   if (!db) return res.json({ tier: "free", sessionsUsed: 0, sessionsLimit: 5 });
   try {
-    const row = await db.query("SELECT email, tier FROM users WHERE id=$1", [req.userId]);
+    const row = await db.query(
+      "SELECT email, tier, stripe_customer_id, payment_status FROM users WHERE id=$1",
+      [req.userId]
+    );
     if (!row.rows.length) return res.status(404).json({ error: "User not found" });
-    const { email, tier } = row.rows[0];
+    const { email, tier, stripe_customer_id, payment_status } = row.rows[0];
     const isAdmin = ADMIN_EMAILS.includes(email);
     const effectiveTier  = isAdmin ? "power" : (tier || "free");
     const limit = isAdmin ? null : (TIER_LIMITS[effectiveTier] === Infinity ? null : TIER_LIMITS[effectiveTier]);
-    res.json({ tier: effectiveTier, sessionsUsed: await getMonthlySessionCount(req.userId), sessionsLimit: limit, email });
+    res.json({
+      tier: effectiveTier,
+      sessionsUsed: await getMonthlySessionCount(req.userId),
+      sessionsLimit: limit,
+      email,
+      // Drives the "Manage billing" button and the failed-payment warning in Settings.
+      billable: !!stripe_customer_id,
+      paymentStatus: payment_status || null,
+    });
   } catch (err) {
     console.error("user/status error:", err.message);
     res.status(500).json({ error: "Failed to fetch user status" });
@@ -1930,6 +2772,31 @@ app.post("/api/stripe/create-checkout", authMiddleware, async (req, res) => {
   }
 });
 
+// Self-serve billing: cancel, switch plan, update the card, download invoices.
+// Everything happens on Stripe's hosted page, so no card data ever reaches us.
+// The portal must be enabled once in the Stripe dashboard
+// (Settings -> Billing -> Customer portal) or this call throws.
+app.post("/api/stripe/portal", authMiddleware, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: "Stripe not configured. Add STRIPE_SECRET_KEY to .env" });
+  if (!db)     return res.status(503).json({ error: "Database not configured" });
+  try {
+    const row = await db.query("SELECT stripe_customer_id FROM users WHERE id=$1", [req.userId]);
+    if (!row.rows.length) return res.status(404).json({ error: "User not found" });
+    const customerId = row.rows[0].stripe_customer_id;
+    // No customer record means they have never paid — there is nothing to manage.
+    if (!customerId) return res.status(400).json({ error: "no_subscription" });
+    const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${appUrl}/settings`,
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error("stripe/portal error:", err.message);
+    res.status(500).json({ error: "Could not open the billing portal. Please try again." });
+  }
+});
+
 // ---------------------------------------------------------------------
 // Health + config info
 // ---------------------------------------------------------------------
@@ -1944,9 +2811,74 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// ---------------------------------------------------------------------
+// 404 + error handling (must be registered after every route)
+// ---------------------------------------------------------------------
+
+// Branded, self-contained and inlined: an error page that depends on the
+// stylesheet loading is an error page that can fail the same way twice.
+function errorPage(code, heading, body) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${code} — Sales Camp AI</title>
+<style>
+  /* Values, not tokens, on purpose — this page must render with no stylesheet. */
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #0a0605; color: #f2ece9; text-align: center; padding: 24px;
+    font-family: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .code { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #ff5a2e; margin-bottom: 18px; }
+  h1 {
+    font-family: "Syne", "DM Mono", sans-serif; font-weight: 700; letter-spacing: -0.02em;
+    font-size: clamp(28px, 5vw, 42px); margin: 0 0 14px;
+  }
+  p { color: #9a857e; max-width: 440px; margin: 0 auto 30px; line-height: 1.6; font-size: 14px; }
+  a {
+    display: inline-block; padding: 12px 24px; text-decoration: none;
+    background: #ff5a2e; color: #0a0605; font-weight: 500; font-size: 13px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  a:hover { background: #ff7a54; }
+</style>
+</head>
+<body>
+  <main>
+    <div class="code">${code} · Sales Camp AI</div>
+    <h1>${heading}</h1>
+    <p>${body}</p>
+    <a href="/home">Back to training</a>
+  </main>
+</body>
+</html>`;
+}
+
+app.use((req, res) => {
+  if (req.path.startsWith("/api/")) return res.status(404).json({ error: "Not found" });
+  res.status(404).type("html").send(
+    errorPage(404, "This page went cold.", "The link is broken or the page has moved. Your training is still where you left it.")
+  );
+});
+
+// Four arguments — Express identifies an error handler by arity, so `next` must
+// stay even though it is unused.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err && err.stack ? err.stack : err);
+  if (res.headersSent) return;
+  if (req.path.startsWith("/api/")) return res.status(500).json({ error: "Something went wrong on our end." });
+  res.status(500).type("html").send(
+    errorPage(500, "Something broke on our end.", "That one is on us, not you. Try again in a moment — nothing you have done has been lost.")
+  );
+});
+
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`Sales Camp Games running at http://localhost:${PORT}`);
+    console.log(`Sales Camp AI running at http://localhost:${PORT}`);
     if (!anthropic) console.warn("WARNING: ANTHROPIC_API_KEY not set — AI features disabled.");
     if (!db)         console.warn("WARNING: DATABASE_URL not set — user scores use localStorage only.");
     if (!googleClient) console.warn("WARNING: GOOGLE_CLIENT_ID not set — Google login disabled.");

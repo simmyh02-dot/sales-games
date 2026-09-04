@@ -66,6 +66,25 @@ const SCG_PRICING = (() => {
     }
   }
 
+  // Sends the subscriber to Stripe's hosted portal, where they can cancel,
+  // switch plan, update the card or pull invoices. Nothing to build ourselves.
+  async function portal() {
+    const token = localStorage.getItem("scg_auth_token");
+    if (!token) { window.location.href = "/"; return; }
+    try {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.url) { window.location.href = data.url; return; }
+      if (data.error === "no_subscription") { showModal(); return; }
+      alert(data.error || "Could not open billing. Please try again.");
+    } catch {
+      alert("Could not connect to the payment server. Please try again.");
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     const params = new URLSearchParams(window.location.search);
 
@@ -85,5 +104,5 @@ const SCG_PRICING = (() => {
     }
   });
 
-  return { showModal, hideModal, checkout };
+  return { showModal, hideModal, checkout, portal };
 })();

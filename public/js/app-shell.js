@@ -23,6 +23,7 @@ const SCG_SHELL = (() => {
     progress: [
       { href: "/pages/skill-map.html", label: "Skill Tree", tag: "The methodology" },
       { href: "/pages/lessons.html",   label: "Lessons",    tag: "Your playbook" },
+      { href: "/pages/previous-calls.html", label: "Previous Calls", tag: "Calls you saved" },
     ],
   };
 
@@ -58,7 +59,7 @@ const SCG_SHELL = (() => {
     const bar = document.createElement("header");
     bar.className = "app-bar";
     bar.innerHTML = `
-      <a class="app-brand" href="/home" aria-label="Sales Camp Games home">
+      <a class="app-brand" href="/home" aria-label="Sales Camp AI home">
         <span class="app-brand-mark">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="9"></circle>
@@ -66,7 +67,7 @@ const SCG_SHELL = (() => {
             <circle cx="12" cy="12" r="0.5" fill="currentColor"></circle>
           </svg>
         </span>
-        <span class="app-brand-text">Sales Camp Games</span>
+        <span class="app-brand-text">Sales Camp AI</span>
       </a>
 
       <div class="app-bar-right">

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   score.js — Sales Camp Games points + session meter
+   score.js — Sales Camp AI points + session meter
    Each completed session/round posts ONE row to /api/scores. The row doubles
    as the monthly session-limit meter (the server counts rows, not the delta),
    so there must be exactly one insert per result — never insert server-side too.

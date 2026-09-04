@@ -1,5 +1,5 @@
 /* ==========================================================================
-   lessons.js — the Lessons library for Sales Camp Games
+   lessons.js — the Lessons library for Sales Camp AI
    Lists the takeaways saved after each Sales Call (Setter + Closer), and lets
    the user review, pin and filter them. Requires sign-in + the database.
    ========================================================================== */

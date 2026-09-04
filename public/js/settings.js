@@ -111,6 +111,25 @@
     if (res.ok) { setFriendsMsg(""); renderLeaderboard(data.leaderboard || []); }
   }
 
+  /* ---- Convo download settings ---- */
+  function renderDownloadPrefs() {
+    const current = SCG_SAVED.prefs();
+    document.querySelectorAll(".pdf-opt").forEach((btn) => {
+      const pref = btn.dataset.pref;
+      btn.classList.toggle("selected", current[pref] === btn.dataset.value);
+    });
+  }
+
+  function wireDownloadPrefs() {
+    document.querySelectorAll(".pdf-opt").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        SCG_SAVED.setPref(btn.dataset.pref, btn.dataset.value);
+        renderDownloadPrefs();
+      });
+    });
+    renderDownloadPrefs();
+  }
+
   /* ---- Plan ---- */
   function renderPlan(status) {
     const tier = (status && status.tier) || "free";
@@ -118,6 +137,16 @@
     $("plan-current").textContent = label;
     if (tier === "power") { $("plan-pro-btn").style.display = "none"; $("plan-power-btn").style.display = "none"; }
     else if (tier === "pro") { $("plan-pro-btn").style.display = "none"; }
+
+    // Anyone who has ever paid gets the portal — cancelling has to stay reachable
+    // after a downgrade, not just while the subscription is live.
+    if (status && status.billable) $("plan-billing-btn").style.display = "";
+
+    if (status && status.paymentStatus === "past_due") {
+      const warn = $("plan-warning");
+      warn.textContent = "Your last payment failed. Update your card in Manage billing to keep your plan.";
+      warn.style.display = "";
+    }
   }
 
   /* ---- Boot ---- */
@@ -125,6 +154,7 @@
     // Appearance toggle + language selector
     if (typeof SCG_THEME !== "undefined") SCG_THEME.mountToggle($("theme-toggle-host"));
     if (typeof SCG_LANG !== "undefined") SCG_LANG.mountSelect($("lang-select-host"));
+    if (typeof SCG_SAVED !== "undefined") wireDownloadPrefs();
 
     // Friends form
     $("add-friend-form").addEventListener("submit", (e) => {

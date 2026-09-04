@@ -1,5 +1,5 @@
 /* ==========================================================================
-   auth.js — Google Sign-In + JWT session for Sales Camp Games
+   auth.js — Google Sign-In + JWT session for Sales Camp AI
    Loaded on every page. Injects auth UI into #auth-widget.
    ========================================================================== */
 

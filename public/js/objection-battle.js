@@ -195,9 +195,13 @@
     statusLine.textContent = "AI is reviewing your response...";
 
     try {
+      const token = localStorage.getItem("scg_auth_token");
       const res = await fetch("/api/objection/feedback", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           objection:        currentObjection.objection,
           context:          currentObjection.context,

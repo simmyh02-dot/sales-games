@@ -1,5 +1,5 @@
 /* ==========================================================================
-   home.js — progress hero "Compete" leaderboard for Sales Camp Games
+   home.js — progress hero "Compete" leaderboard for Sales Camp AI
    Lets a signed-in user add friends by email and compare total points.
    Requires auth + a configured database on the server; degrades to a
    sign-in prompt otherwise.

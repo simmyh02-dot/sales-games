@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Previous Calls — Sales Camp AI</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script src="/js/theme.js"></script>
+  <script src="/js/lang.js"></script>
+  <script src="/js/auth-guard.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async></script>
+</head>
+<body>
+  <div class="bg-canvas"></div>
+
+  <div class="shell">
+    <div class="page-header">
+      <div class="mode-tag">Reference · Calls you kept</div>
+      <h1>Previous Calls</h1>
+      <p>
+        Only the conversations you chose to save land here. Open one to read it
+        back line by line, or download it as a PDF to keep or send to a coach.
+      </p>
+    </div>
+
+    <!-- Signed-out state -->
+    <div id="pc-signedout" class="notice" style="display:none;">
+      <h4>Sign in to see your saved calls</h4>
+      <p>Saved conversations belong to your account. Sign in from the top right to see them.</p>
+    </div>
+
+    <div id="pc-filters" class="lessons-filters" style="display:none;">
+      <button class="lesson-filter selected" data-filter="all">All</button>
+      <button class="lesson-filter" data-filter="closer">Closer</button>
+      <button class="lesson-filter" data-filter="setter">Setter</button>
+      <button class="lesson-filter" data-filter="reviewed">With debrief</button>
+    </div>
+
+    <div id="pc-list" class="pc-list"></div>
+    <div id="pc-empty" class="lessons-empty" style="display:none;"></div>
+  </div>
+
+  <!-- Reader -->
+  <div id="pc-reader" class="pc-reader-overlay" style="display:none;">
+    <div class="pc-reader" role="dialog" aria-modal="true" aria-labelledby="pc-reader-title">
+      <div class="pc-reader-head">
+        <div>
+          <div class="pc-reader-meta" id="pc-reader-meta"></div>
+          <h3 id="pc-reader-title"></h3>
+        </div>
+        <button class="pc-reader-close" id="pc-reader-close" aria-label="Close">×</button>
+      </div>
+      <div class="pc-reader-body" id="pc-reader-body"></div>
+      <div class="pc-reader-foot">
+        <button class="btn btn-ghost" id="pc-reader-delete">Delete</button>
+        <button class="btn btn-primary" id="pc-reader-download">Download PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app-shell.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/saved-calls.js"></script>
+  <script src="/js/previous-calls.js"></script>
+</body>
+</html>

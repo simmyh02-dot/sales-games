@@ -72,7 +72,7 @@ function cleanNewModule(raw) {
 
 (async () => {
   let out =
-    "# Sales Knowledge Base\n\nThis file is auto-extracted from Simon's sales study notes. It is used as grounding context for the Sales Camp Games AI coach.\n\n";
+    "# Sales Knowledge Base\n\nThis file is auto-extracted from Simon's sales study notes. It is used as grounding context for the Sales Camp AI AI coach.\n\n";
 
   for (const file of files) {
     const filePath = path.join(downloads, file);

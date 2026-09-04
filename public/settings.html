@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Settings — Sales Camp Games</title>
+  <title>Settings — Sales Camp AI</title>
   <link rel="stylesheet" href="/css/style.css" />
   <script src="/js/theme.js"></script>
   <script src="/js/lang.js"></script>
@@ -93,6 +93,32 @@
       </div>
     </section>
 
+    <!-- CONVO DOWNLOADS -->
+    <section class="settings-section" id="downloads">
+      <div class="settings-section-head">
+        <h2>Convo Download Setting</h2>
+        <span class="settings-hint">How your saved conversations look when you download them as a PDF.</span>
+      </div>
+      <div class="pdf-opt-row">
+        <div class="pdf-opt-label">Style</div>
+        <div class="pdf-opt-group" id="pdf-theme-group">
+          <button class="pdf-opt" data-pref="theme" data-value="light">Light</button>
+          <button class="pdf-opt" data-pref="theme" data-value="dark">Dark</button>
+        </div>
+      </div>
+      <div class="pdf-opt-row">
+        <div class="pdf-opt-label">Score</div>
+        <div class="pdf-opt-group" id="pdf-score-group">
+          <button class="pdf-opt" data-pref="score" data-value="1">Include score</button>
+          <button class="pdf-opt" data-pref="score" data-value="0">No score</button>
+        </div>
+      </div>
+      <div class="settings-hint pdf-opt-note">
+        Applies to the next PDF you download. Saved conversations live in
+        <a href="/pages/previous-calls.html">Previous Calls</a>.
+      </div>
+    </section>
+
     <!-- FRIENDS / LEADERBOARD -->
     <section class="settings-section" id="friends">
       <div class="settings-section-head">
@@ -113,9 +139,11 @@
         <h2>Plan</h2>
         <span class="settings-hint" id="plan-current"></span>
       </div>
+      <div class="plan-warning" id="plan-warning" style="display:none;"></div>
       <div class="plan-actions">
         <button class="btn btn-primary" id="plan-pro-btn" onclick="SCG_PRICING.checkout('pro')">Upgrade to Pro — $15/mo</button>
         <button class="btn btn-secondary" id="plan-power-btn" onclick="SCG_PRICING.checkout('power')">Go Power — $29/mo</button>
+        <button class="btn btn-ghost" id="plan-billing-btn" style="display:none;" onclick="SCG_PRICING.portal()">Manage billing</button>
       </div>
       <button class="btn btn-ghost settings-signout" id="settings-signout">Sign out</button>
     </section>
@@ -156,6 +184,7 @@
   <script src="/js/app-shell.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/pricing.js"></script>
+  <script src="/js/saved-calls.js"></script>
   <script src="/js/settings.js"></script>
 </body>
 </html>

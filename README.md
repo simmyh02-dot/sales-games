@@ -1,4 +1,4 @@
-# Sales Camp Games
+# Sales Camp AI
 
 A sales training arena with three AI-coached modes, all grounded in your own
 sales study notes (`knowledge/sales_notes.md`, auto-extracted from the PDFs in

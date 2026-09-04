@@ -138,9 +138,13 @@
     }
 
     try {
+      const token = localStorage.getItem("scg_auth_token");
       const res = await fetch("/api/pattern/feedback", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           statement:     exercise.statement,
           question:      exercise.question,

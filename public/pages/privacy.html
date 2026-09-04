@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy &mdash; Sales Camp AI</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script src="/js/theme.js"></script>
+</head>
+<body>
+  <div class="bg-canvas"></div>
+
+  <div class="shell">
+    <div class="topbar">
+      <a href="/" class="brand">
+        <span class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#03130c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"></circle>
+            <circle cx="12" cy="12" r="4.5"></circle>
+            <circle cx="12" cy="12" r="0.5" fill="#03130c"></circle>
+          </svg>
+        </span>
+        <span class="brand-text">Sales Camp AI</span>
+      </a>
+      <div class="topbar-right">
+        <a href="/" class="btn btn-secondary">Back to site</a>
+      </div>
+    </div>
+
+    <main class="legal">
+      <div class="legal-eyebrow">// Legal</div>
+      <h1>Privacy Policy</h1>
+      <p class="legal-updated">Last updated 1 September 2026</p>
+
+      <p>This policy explains what Sales Camp AI does with your personal data. The controller is
+        <strong>Simon Myhr</strong>, a sole trader based in Sweden, reachable at
+        <a href="mailto:simmyh02@gmail.com">simmyh02@gmail.com</a>.</p>
+
+      <div class="legal-callout">
+        <strong>The short version:</strong> we store your Google account basics, your training
+        transcripts and your progress. Your training conversations are sent to Anthropic's AI to
+        play the prospect and grade the call. We do not sell your data and we do not use it to
+        train AI models. Email us and we will delete all of it.
+      </div>
+
+      <h2>1. What we collect</h2>
+      <ul>
+        <li><strong>Account.</strong> Your name, email address, profile picture and Google account
+          identifier, received from Google when you sign in.</li>
+        <li><strong>Training data.</strong> Call transcripts, scores, feedback, saved lessons,
+          unlocked skills, the offer and persona you picked, and your chosen conversation
+          language.</li>
+        <li><strong>Billing.</strong> Your plan tier and your Stripe customer and subscription
+          identifiers. <strong>We never see or store your card details</strong> &mdash; Stripe
+          handles the entire payment.</li>
+        <li><strong>Technical.</strong> IP address and request metadata, used for rate limiting,
+          security and error logs.</li>
+        <li><strong>Local storage.</strong> Your sign-in token, theme and language preference are
+          stored in your browser. These are functional only. We run no advertising or cross-site
+          tracking cookies.</li>
+      </ul>
+
+      <h2>2. Why we use it, and on what legal basis</h2>
+      <ul>
+        <li><strong>To run the Service</strong> &mdash; creating your account, generating and
+          grading training calls, tracking progress, enforcing session limits. Basis: performance
+          of our contract with you (GDPR Art. 6(1)(b)).</li>
+        <li><strong>To take payment</strong> &mdash; subscriptions, renewals, failed-payment
+          handling. Basis: contract, and legal obligation for accounting records.</li>
+        <li><strong>To keep the Service up and safe</strong> &mdash; rate limiting, abuse
+          prevention, debugging. Basis: our legitimate interest in a working, non-abused product
+          (Art. 6(1)(f)).</li>
+        <li><strong>To contact you</strong> about your account, a failed payment or a material
+          change. Basis: contract and legitimate interest.</li>
+      </ul>
+
+      <h2>3. Who else processes your data</h2>
+      <p>We use the processors below. Each is bound by a data processing agreement, and transfers
+        outside the EEA rely on the EU Standard Contractual Clauses or an adequacy decision.</p>
+      <div class="legal-table-wrap">
+        <table class="legal-table">
+          <thead><tr><th>Processor</th><th>What it does</th><th>What it receives</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Anthropic (Claude)</td>
+              <td>Plays the AI prospect and grades your calls</td>
+              <td><strong>Your training conversation transcripts</strong> and the exercise context</td>
+            </tr>
+            <tr>
+              <td>Google</td>
+              <td>Sign-in</td>
+              <td>The authentication request; returns your name, email and picture</td>
+            </tr>
+            <tr>
+              <td>Neon</td>
+              <td>Database hosting</td>
+              <td>Everything stored: account, progress, transcripts, plan</td>
+            </tr>
+            <tr>
+              <td>Stripe</td>
+              <td>Payments and subscriptions</td>
+              <td>Your email and payment details, entered directly with Stripe</td>
+            </tr>
+            <tr>
+              <td>Vercel</td>
+              <td>Application hosting</td>
+              <td>Request traffic and server logs</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Worth saying plainly:</strong> the words you type or speak in a training call
+        leave our systems and are processed by a third-party AI provider. Do not put real customer
+        names, real contact details, confidential business information or any special-category
+        personal data into a training call.</p>
+      <p>Anthropic does not use data submitted through its API to train its models. We do not sell
+        your data, and we share it with no one beyond the processors listed above except where the
+        law requires it.</p>
+
+      <h2>4. How long we keep it</h2>
+      <p>Account and training data are kept while your account exists. If you ask us to delete your
+        account we remove your personal data within 30 days, except records we must keep for
+        accounting and tax purposes (invoices, kept for seven years under Swedish law). Server logs
+        are kept for a short operational period and then rotated out.</p>
+
+      <h2>5. Your rights</h2>
+      <p>Under the GDPR you have the right to access your data, correct it, delete it, export it in
+        a portable format, restrict or object to processing, and withdraw consent where processing
+        relies on it. Email <a href="mailto:simmyh02@gmail.com">simmyh02@gmail.com</a> and we will respond within one
+        month. If you think we have handled your data badly you can complain to the Swedish
+        Authority for Privacy Protection (IMY) or the authority where you live.</p>
+
+      <h2>6. Security</h2>
+      <p>Traffic runs over HTTPS. Sessions use signed tokens. Database access is restricted and
+        credentials live in environment variables, never in the code. No system is perfectly
+        secure; if a breach affects your rights we will notify you and the regulator as the GDPR
+        requires.</p>
+
+      <h2>7. Children</h2>
+      <p>The Service is not for under-16s and we do not knowingly collect their data.</p>
+
+      <h2>8. Changes</h2>
+      <p>If this policy changes materially we will tell you by email or in the app before the
+        change takes effect.</p>
+
+      <h2>9. Contact</h2>
+      <p>Simon Myhr, Sweden &mdash; <a href="mailto:simmyh02@gmail.com">simmyh02@gmail.com</a>.</p>
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-brand">Sales Camp AI &mdash; Simon Myhr, Sweden</div>
+      <nav class="site-footer-links">
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/refunds">Refunds</a>
+        <a href="/contact">Contact</a>
+      </nav>
+    </footer>
+  </div>
+</body>
+</html>

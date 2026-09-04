@@ -418,6 +418,7 @@
     mascotState("thinking");   // the prospect is weighing your line
 
     try {
+      const token    = localStorage.getItem("scg_auth_token");
       const endpoint = isSetter ? "/api/setter/message" : "/api/call/message";
       const body = isSetter
         ? {
@@ -428,9 +429,14 @@
         : { scenario: currentOfferText(), prospect, history, userMessage: text, section: selectedSection, personality: activePersona };
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(body),
       });
+      if (res.status === 429) throw new Error("rate_limited");
+      if (res.status === 401) throw new Error("signed_out");
       if (!res.ok) throw new Error("request failed");
       const data = await res.json();
 
@@ -466,8 +472,11 @@
       els.callStatus.textContent = userMessageCount >= TARGET_MESSAGES
         ? "You've hit the suggested call length - wrap it up and analyze when ready."
         : "";
-    } catch {
-      els.callStatus.textContent = "Something went wrong reaching the prospect.";
+    } catch (err) {
+      els.callStatus.textContent =
+        err.message === "rate_limited" ? "You're sending lines faster than the prospect can answer. Wait a moment, then try again."
+        : err.message === "signed_out" ? "Your session expired. Sign in again to keep the call going."
+        : "Something went wrong reaching the prospect.";
       mascotState("idle");
     } finally {
       els.chatInput.disabled = false;
@@ -622,6 +631,7 @@
         <p class="summary-headline-p">You ended the call without a debrief. ${esc(skillLine)} No tokens spent on a review.</p>
         <div class="actions-row">
           <a class="objection-context" href="/pages/skill-map.html" style="text-decoration:underline;color:var(--text-1);">View your Skill Tree →</a>
+          <button class="btn btn-secondary" id="save-call-btn">Save this conversation</button>
           <button class="btn btn-primary" id="new-call-btn">Run another call</button>
         </div>
       </div>`;
@@ -632,7 +642,26 @@
     els.callStatus.textContent     = "";
     const newBtn = document.getElementById("new-call-btn");
     if (newBtn) newBtn.addEventListener("click", resetAll);
+
+    const saveBtn = document.getElementById("save-call-btn");
+    SCG_SAVED.bindSaveButton(saveBtn, () => savePayload(null));
     els.summaryPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    // There is no debrief to look at here, so the conversation itself is the
+    // only thing worth keeping - ask straight away rather than hoping they
+    // notice the button. Let the card land first.
+    if (history.length) {
+      setTimeout(() => {
+        SCG_SAVED.ask(savePayload(null), {
+          onSaved: () => {
+            if (!saveBtn) return;
+            saveBtn.disabled = true;
+            saveBtn.textContent = "Saved to Previous Calls";
+            saveBtn.classList.add("btn-saved");
+          },
+        });
+      }, 700);
+    }
   }
 
   // Paint each tagged salesperson line with a green/amber/red highlight + note.
@@ -701,6 +730,7 @@
 
         <div class="actions-row">
           <span class="objection-context">Green, amber and red marks above show your strongest and weakest moves.</span>
+          <button class="btn btn-secondary" id="save-call-btn">Save this conversation</button>
           <button class="btn btn-primary" id="new-call-btn">Run another call</button>
         </div>
       </div>`;
@@ -708,6 +738,7 @@
     els.summaryPanel.style.display = "block";
     const newBtn = document.getElementById("new-call-btn");
     if (newBtn) newBtn.addEventListener("click", resetAll);
+    SCG_SAVED.bindSaveButton(document.getElementById("save-call-btn"), () => savePayload(data));
     els.summaryPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -793,6 +824,7 @@
 
         <div class="actions-row">
           <span class="objection-context">Green, amber and red marks above show your strongest and weakest moves.</span>
+          <button class="btn btn-secondary" id="save-call-btn">Save this conversation</button>
           <button class="btn btn-primary" id="new-call-btn">Run another call</button>
         </div>
       </div>`;
@@ -800,7 +832,26 @@
     els.summaryPanel.style.display = "block";
     const newBtn = document.getElementById("new-call-btn");
     if (newBtn) newBtn.addEventListener("click", resetAll);
+    SCG_SAVED.bindSaveButton(document.getElementById("save-call-btn"), () => savePayload(data));
     els.summaryPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // Everything Previous Calls and the PDF need, in one shape for both modes.
+  // `analysis` is null when the call was ended without a review.
+  function savePayload(analysis) {
+    const setter = callMode === "setter";
+    return {
+      mode:    setter ? "setter" : "closer",
+      label:   currentOfferText(),
+      persona: activePersona && activePersona.label ? activePersona.label : null,
+      section: setter ? null : selectedSection,
+      outcome: analysis
+        ? (setter ? (analysis.outcome || (analysis.booked ? "Closer call booked" : "No booking")) : null)
+        : "Ended without review",
+      score:   analysis && Number.isFinite(analysis.callScore) ? analysis.callScore : null,
+      transcript: SCG_SAVED.toTranscript(history),
+      analysis: analysis || null,
+    };
   }
 
   function listItems(items) {
