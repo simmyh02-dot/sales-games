@@ -39,6 +39,12 @@
   };
 
   function render(data) {
+    // The sections ship hidden. auth-guard only requires *a* session, not
+    // this account's, so without this any signed-in user who guessed the URL
+    // would read the metric names off an empty page. The API is still the
+    // thing that protects the numbers; this just stops the shell leaking.
+    for (const el of document.querySelectorAll(".funnel-section")) el.hidden = false;
+
     $("f-first-rate").textContent   = rate(data.firstRep.completionRate);
     $("f-first-cohort").textContent = num(data.firstRep.cohort);
     $("f-first-done").textContent   = num(data.firstRep.completed);
@@ -71,7 +77,9 @@
       const res = await fetch("/api/admin/funnel", {
         headers: { "Authorization": `Bearer ${t}` },
       });
-      if (res.status === 403) { setMsg("This page is for the account owner.", true); return; }
+      // Not the owner — bounce, the same way auth-guard bounces a signed-out
+      // visitor. Nothing here is theirs to look at, not even the labels.
+      if (res.status === 403) { location.replace("/home"); return; }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || "Could not load the funnel.");
