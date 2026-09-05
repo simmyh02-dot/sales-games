@@ -3349,6 +3349,31 @@ input.custom-input:focus {
 }
 .danger-btn { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
 .danger-btn:hover { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+/* The consequences of deleting, folded away. They have to be readable before
+   anyone commits, but they are a wall of text nobody needs on arrival. */
+.danger-details { margin: 0 0 14px; }
+.danger-details > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-2);
+  list-style: none;
+}
+.danger-details > summary::-webkit-details-marker { display: none; }
+.danger-details > summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform 0.15s ease;
+}
+.danger-details[open] > summary::before { transform: rotate(90deg); }
+.danger-details > summary:hover { color: var(--bad); }
+.danger-details p { margin: 10px 0 0; }
 .danger-label { display: block; font-size: 12.5px; color: var(--text-1); margin: 12px 0 8px; }
 
 

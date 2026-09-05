@@ -211,6 +211,10 @@
   function wireDataSection() {
     $("data-export-btn").addEventListener("click", (e) => exportData(e.currentTarget));
     $("delete-open-btn").addEventListener("click", () => {
+      // Fold the consequences back open at the moment they matter. Collapsed is
+      // fine while browsing; it is not fine while typing the confirmation.
+      const why = document.querySelector(".danger-details");
+      if (why) why.open = true;
       $("delete-open-btn").style.display = "none";
       $("delete-confirm").style.display = "";
       $("delete-confirm-input").focus();
