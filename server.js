@@ -316,7 +316,13 @@ async function runMigrations(pool) {
         (await client.query("SELECT version FROM schema_migrations")).rows.map((r) => r.version)
       );
       const pending = files.filter((f) => !done.has(f));
-      if (!pending.length) return;
+      // Say something even when there is nothing to do. A silent runner and a
+      // runner whose files never made it into the bundle look identical in a
+      // log, and that is the one failure worth being able to rule out.
+      if (!pending.length) {
+        console.log(`Schema up to date (${done.size} migration(s) recorded).`);
+        return;
+      }
 
       for (const file of pending) {
         const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
