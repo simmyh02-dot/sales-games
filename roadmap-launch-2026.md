@@ -124,8 +124,40 @@ revisit if abuse appears.
       the mode pages). This is what `checkSessionLimit` actually meters, and
       it was nowhere in writing.
 - [ ] Numbered SQL migrations replacing the inline boot-time DDL.
-- [ ] `helmet()` + CSP (allow `accounts.google.com`, `fonts.googleapis.com`,
-      `fonts.gstatic.com`; re-test Google sign-in immediately after).
+- [x] **`helmet()` + CSP — shipped in Report-Only.** The enforced part is the
+      cheap part: `nosniff`, `X-Frame-Options`, COOP/CORP, and no more
+      `X-Powered-By: Express`. Helmet's HSTS is switched **off** — Vercel's
+      edge already sends it with `preload`, and two of the same header is
+      worse than one. Helmet's default `Referrer-Policy: no-referrer` is
+      overridden to `strict-origin-when-cross-origin`: that header *is*
+      enforced, a stripped `Referer` is a known way to upset Google sign-in,
+      and the origin-only default is the privacy that mattered anyway.
+
+      The CSP itself is `Content-Security-Policy-Report-Only` and only
+      enforces when **`CSP_ENFORCE`** is set. Getting it wrong breaks the only
+      door into the product, so it listens first: violations POST to
+      `/api/csp-report`, which `console.error`s them, which Sentry's console
+      integration turns into issues — deduped per process on
+      directive + blocked URI so one bad asset can't fire on every page view.
+      Script sources are nonce-based (`{{NONCE}}`, substituted per request by
+      `renderPage`) plus `accounts.google.com` and `d3js.org`.
+
+      Report-Only immediately earned its keep: the browser flagged that the
+      **GSI library injects a ~10 KB `<style>` of its own** and does not carry
+      our nonce onto it. Since CSP ignores `'unsafe-inline'` whenever a nonce
+      is present, a nonced `style-src` would have rendered the sign-in widget
+      unstyled in production. Styles therefore take `'unsafe-inline'` and no
+      nonce — the alternative was pinning a sha256 of Google's stylesheet,
+      which rots the next time they change a byte, and `style-src-attr` had to
+      allow inline styles regardless because the client sets `style=""`
+      everywhere. Scripts keep the nonce, which is where it counts.
+
+      **Next step, outside the code:** let reports accumulate for a few days,
+      confirm the only entries are ones you understand, then set
+      `CSP_ENFORCE=1` in Vercel and re-test Google sign-in immediately.
+      Remaining known gap: `script-src-attr 'unsafe-inline'`, needed by the
+      `onclick=` handlers on the pricing and Settings buttons. Rewriting those
+      as listeners is what removes it.
 - [ ] One real Neon restore into a scratch branch, steps written down.
 - [ ] `token_version` column for session revocation.
 - [ ] Accessibility pass on the custom buttons, dropdown menu and live chat.

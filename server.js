@@ -29,6 +29,8 @@ if (process.env.SENTRY_DSN) {
 }
 
 const express = require("express");
+const helmet = require("helmet");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const PDFDocument = require("pdfkit");
@@ -120,6 +122,120 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "rate_limited", detail: "Too many sign-in attempts. Try again shortly." },
 });
+
+// ---------------------------------------------------------------------
+// Security headers.
+//
+// The CSP ships in Report-Only and only enforces when CSP_ENFORCE is set.
+// A wrong policy breaks Google sign-in, which is the only door into the
+// product and therefore all of the revenue — so it listens first, the
+// reports land in Sentry, and enforcement is a deliberate flip once they
+// have gone quiet. See the roadmap for the switch-over.
+// ---------------------------------------------------------------------
+
+const GSI = "https://accounts.google.com";
+const CSP_ENFORCE = !!process.env.CSP_ENFORCE;
+
+// A fresh nonce per request for the two pages carrying inline code: the
+// landing page's bootstrap script and the skill tree's inline stylesheet.
+// renderPage swaps it into {{NONCE}}.
+app.use((req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString("base64");
+  next();
+});
+
+const nonce = (req, res) => `'nonce-${res.locals.cspNonce}'`;
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: false,
+    reportOnly: !CSP_ENFORCE,
+    directives: {
+      "default-src": ["'self'"],
+      // d3 backs the skill tree; GSI is the sign-in widget.
+      "script-src": ["'self'", nonce, GSI, "https://d3js.org"],
+      // The pricing and Settings buttons still use onclick attributes, which
+      // no nonce can cover. script-src-attr is scoped to event-handler
+      // attributes alone, so the exposure stops there — rewriting those as
+      // listeners is what removes it.
+      "script-src-attr": ["'unsafe-inline'"],
+      // Styles get 'unsafe-inline' and no nonce, which is a deliberate
+      // downgrade from the original plan. The GSI library injects a ~10 KB
+      // <style> element of its own at runtime and does not carry our nonce
+      // onto it, and CSP *ignores* 'unsafe-inline' the moment a nonce is
+      // present — so a nonce here means the sign-in widget renders unstyled.
+      // The alternative is pinning a sha256 of Google's stylesheet, which
+      // silently rots the next time they change a byte. The incremental risk
+      // is small: style-src-attr below already has to allow inline styles,
+      // because the client code sets style="" everywhere.
+      "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", GSI],
+      "style-src-attr": ["'unsafe-inline'"],
+      "font-src": ["'self'", "https://fonts.gstatic.com"],
+      // Google profile pictures come from lh3.googleusercontent.com; blob:
+      // is the PDF download.
+      "img-src": ["'self'", "data:", "blob:", "https://*.googleusercontent.com"],
+      "connect-src": ["'self'", GSI],
+      "frame-src": [GSI],
+      "object-src": ["'none'"],
+      "base-uri": ["'self'"],
+      "form-action": ["'self'"],
+      "frame-ancestors": ["'none'"],
+      "report-uri": ["/api/csp-report"],
+    },
+  },
+  // Vercel's edge already sends Strict-Transport-Security with preload.
+  // Two of the same header is worse than one.
+  hsts: false,
+  // Helmet defaults to no-referrer. This header is *enforced*, not
+  // report-only, and a stripped Referer is a documented way to upset the
+  // Google sign-in flow — not a thing to discover in production. The modern
+  // browser default sends the origin cross-origin and never the path, which
+  // is the privacy that actually mattered. (The avatar <img>s keep their own
+  // referrerpolicy="no-referrer": that one is deliberate.)
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  // The GSI popup needs to reach its opener.
+  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+  // Nothing here is cross-origin isolated and COEP breaks the Google widget.
+  crossOriginEmbedderPolicy: false,
+  // Avatars and the d3 bundle are cross-origin loads.
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
+
+// Violation sink. Every route in this file console.errors its failures and
+// Sentry's captureConsole integration promotes those, so a report here
+// becomes a Sentry issue without any extra wiring. Deduped per process on
+// directive + blocked URI: one bad asset would otherwise fire a report on
+// every page view by every visitor.
+const cspReportLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+});
+const seenCspViolations = new Set();
+
+app.post(
+  "/api/csp-report",
+  cspReportLimiter,
+  express.json({
+    type: ["application/csp-report", "application/reports+json", "application/json"],
+    limit: "16kb",
+  }),
+  (req, res) => {
+    res.status(204).end();
+    const report = (req.body && (req.body["csp-report"] || req.body)) || {};
+    const directive = report["effective-directive"] || report["violated-directive"] || "unknown";
+    const blocked   = String(report["blocked-uri"] || "unknown").slice(0, 200);
+    const key = `${directive}|${blocked}`;
+    if (seenCspViolations.has(key)) return;
+    if (seenCspViolations.size > 200) seenCspViolations.clear();
+    seenCspViolations.add(key);
+    console.error(
+      `CSP ${CSP_ENFORCE ? "violation" : "report-only"}: ${directive} blocked ${blocked} ` +
+      `on ${String(report["document-uri"] || "?").slice(0, 200)}`
+    );
+  }
+);
 
 const HAIKU  = "claude-haiku-4-5-20251001";
 const SONNET = "claude-sonnet-4-6";
@@ -760,7 +876,13 @@ function renderPage(req, res, file) {
     catch { return res.status(404).send("Not found"); }
     pageCache.set(file, html);
   }
-  res.type("html").send(html.split("{{ORIGIN}}").join(siteOrigin(req)));
+  // The cache holds the file with its placeholders intact; substitution is
+  // per request, which matters for the nonce — it must never be reused.
+  res.type("html").send(
+    html
+      .split("{{ORIGIN}}").join(siteOrigin(req))
+      .split("{{NONCE}}").join(res.locals.cspNonce || "")
+  );
 }
 
 const page = (...segments) => (req, res) => renderPage(req, res, path.join(PUBLIC_DIR, ...segments));
