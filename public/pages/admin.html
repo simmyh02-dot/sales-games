@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#0a0605" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#fbf6f3" media="(prefers-color-scheme: light)" />
+  <title>Funnel — Sales Camp AI</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script src="/js/theme.js"></script>
+  <script src="/js/lang.js"></script>
+  <script src="/js/auth-guard.js"></script>
+  <script src="https://accounts.google.com/gsi/client" nonce="{{NONCE}}" async></script>
+</head>
+<body>
+  <div class="bg-canvas"></div>
+
+  <div class="shell">
+    <div class="page-header">
+      <div class="mode-tag">Admin · Your numbers</div>
+      <h1>Funnel</h1>
+      <p>
+        Answered entirely from our own tables &mdash; no third-party analytics, and
+        nothing here that a visitor could see. The page exists because every route
+        in this app authenticates with a bearer token, so the JSON behind it
+        can&rsquo;t simply be opened in a tab.
+      </p>
+    </div>
+
+    <div class="settings-msg" id="funnel-msg"></div>
+
+    <section class="settings-section" id="headline">
+      <div class="settings-section-head">
+        <h2>First rep</h2>
+        <span class="settings-hint">
+          Of the people who started their very first rep, how many reached the grading.
+          This is the number to watch: the debrief is where the product proves itself,
+          so anyone who quits before it never had a reason to come back.
+        </span>
+      </div>
+      <div class="stat-row">
+        <div class="stat-tile">
+          <div class="stat-value" id="f-first-rate">&mdash;</div>
+          <div class="stat-label">First-rep completion</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-value" id="f-first-cohort">&mdash;</div>
+          <div class="stat-label">People who started one</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-value" id="f-first-done">&mdash;</div>
+          <div class="stat-label">Reached the grading</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section" id="accounts">
+      <div class="settings-section-head">
+        <h2>Accounts</h2>
+        <span class="settings-hint">Activation is the share of accounts that ever began a rep at all.</span>
+      </div>
+      <div class="stat-row">
+        <div class="stat-tile">
+          <div class="stat-value" id="f-accounts">&mdash;</div>
+          <div class="stat-label">Accounts</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-value" id="f-started">&mdash;</div>
+          <div class="stat-label">Started a rep</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-value" id="f-activation">&mdash;</div>
+          <div class="stat-label">Activation</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section" id="recent">
+      <div class="settings-section-head">
+        <h2>Last 30 days</h2>
+        <span class="settings-hint">Every rep, not just first ones &mdash; so this isn&rsquo;t skewed by how long the table has been filling.</span>
+      </div>
+      <div class="stat-row">
+        <div class="stat-tile">
+          <div class="stat-value" id="f-30-starts">&mdash;</div>
+          <div class="stat-label">Started</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-value" id="f-30-done">&mdash;</div>
+          <div class="stat-label">Graded</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-value" id="f-30-rate">&mdash;</div>
+          <div class="stat-label">Completion</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section" id="modes">
+      <div class="settings-section-head">
+        <h2>Where people start</h2>
+      </div>
+      <div class="leaderboard" id="f-modes"></div>
+      <p class="settings-hint plan-session-note" id="f-note"></p>
+    </section>
+  </div>
+
+  <script src="/js/app-shell.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/admin-funnel.js"></script>
+</body>
+</html>

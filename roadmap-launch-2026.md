@@ -105,7 +105,32 @@ revisit if abuse appears.
       were rendered from the brand mark and the landing headline.
 - [ ] **Transactional email** — *deferred by decision, 5 Sep 2026. See
       "Last steps before launch" at the bottom of this file.*
-- [ ] Analytics; track first-call completion rate as the leading indicator.
+- [x] **Analytics — the in-product half.** *Decision, 5 Sep 2026: this item was
+      really two. The traffic half needs a vendor and is deferred to "Last
+      steps"; the half that matters needs no vendor at all.*
+
+      The blocker was never a missing tool. `scores` and `call_history` only
+      get a row when a rep is **graded**, so an abandoned rep left no trace and
+      first-rep completion had no denominator. New `session_starts` table, one
+      fire-and-forget insert on each of the four gated start routes.
+
+      `GET /api/admin/funnel` (bearer auth + an `ADMIN_EMAILS` check) answers
+      it from our own tables — no third party, nothing added to the processor
+      table in the privacy notice. A start counts as completed if a graded rep
+      of the **same mode** lands within two hours, which avoids threading a
+      session id through the client and keeps a metric off the request path.
+      Rates are `null`, not `0`, when the denominator is zero: "nobody has
+      started" must not read as "nobody finishes".
+
+      `/admin` renders it, because every route here authenticates with a
+      bearer token and the JSON can't just be opened in a tab.
+
+      **Verified against real Postgres**, not by eye: the queries and the whole
+      boot DDL were run under PGlite with a seeded fixture covering the cases
+      the rate has to get right — someone who finished, someone who quit,
+      someone who finished three hours later (correctly excluded), and a
+      second start that must not inflate the first-rep cohort. The DDL also
+      passes a re-run, since boot repeats it on every cold start.
 - [x] **Visible session counter + a plain-English definition of a session.**
       A meter in the app bar on every signed-in page, from `/api/user/status`
       (which already returned the numbers — nothing outside Settings read
@@ -188,6 +213,17 @@ rather than now. Each is flagged here so it cannot quietly fall off.
       Prerequisite that takes real-world time: a **verified sending domain**
       with SPF/DKIM records. Start that before you need it — DNS propagation
       and provider review are not instant.
+
+- [ ] **Traffic analytics.** *Deferred 5 Sep 2026 by decision.* The in-product
+      funnel is done and needs no vendor; this is the other half — how many
+      people reach the landing page, where from, and what share of them sign
+      up. It only produces anything worth reading once real traffic exists,
+      which is why it waits.
+
+      Plausible is the pick when you get here: no cookies, so no cookie
+      banner, and one line to add to the processor table in the privacy
+      notice. Pair it with the existing `/admin` funnel and you can see the
+      whole path — visitor → account → first rep → graded rep → paid.
 
 ---
 

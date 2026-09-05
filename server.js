@@ -349,6 +349,17 @@ if (process.env.DATABASE_URL) {
       reviewed BOOLEAN DEFAULT FALSE,
       created_at BIGINT
     );
+
+    -- Every other table records a rep that FINISHED. A rep someone abandons
+    -- halfway left no trace anywhere, which made the one number worth
+    -- watching — what fraction of people who start a first call reach the
+    -- debrief — impossible to compute. This is the missing half.
+    CREATE TABLE IF NOT EXISTS session_starts (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT,
+      mode TEXT,
+      created_at BIGINT
+    );
   `).catch((e) => console.error("DB init error:", e.message));
   db.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'free';
@@ -370,6 +381,7 @@ if (process.env.DATABASE_URL) {
     CREATE INDEX IF NOT EXISTS idx_rivals_user             ON rivals (user_id);
     CREATE INDEX IF NOT EXISTS idx_prospect_beliefs_user   ON prospect_beliefs (user_id, id DESC);
     CREATE INDEX IF NOT EXISTS idx_saved_calls_user        ON saved_calls (user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_session_starts_user     ON session_starts (user_id, created_at);
   `).catch((e) => console.error("DB index error:", e.message));
 }
 
@@ -538,6 +550,18 @@ async function getMonthlySessionCount(userId) {
     );
     return parseInt(result.rows[0].cnt) || 0;
   } catch { return 0; }
+}
+
+// The other half of the funnel. `scores` only gets a row when a rep is
+// GRADED, so an abandoned call was invisible and "how many people who start
+// a first call reach the debrief" had no denominator. Fire-and-forget on
+// purpose: a failure to record a metric must never cost anyone a session.
+function recordSessionStart(userId, mode) {
+  if (!db || !userId) return;
+  db.query(
+    "INSERT INTO session_starts (user_id, mode, created_at) VALUES ($1, $2, $3)",
+    [userId, mode, Date.now()]
+  ).catch((e) => console.error("recordSessionStart error:", e.message));
 }
 
 // Runs after authMiddleware, so req.userId is always set here. (It used to sit
@@ -895,6 +919,10 @@ app.get("/lessons", page("pages", "lessons.html"));
 
 app.get("/previous-calls", page("pages", "previous-calls.html"));
 
+// The funnel numbers. Serving the page to anyone is fine — it is a shell with
+// no data in it, and /api/admin/funnel is what actually checks who is asking.
+app.get("/admin", page("pages", "admin.html"));
+
 // Legal. Linked from the landing footer and required by Stripe and the GDPR.
 for (const slug of ["terms", "privacy", "refunds", "contact"]) {
   app.get(`/${slug}`, page("pages", `${slug}.html`));
@@ -928,6 +956,7 @@ app.get("/robots.txt", (req, res) => {
       "Disallow: /settings",
       "Disallow: /lessons",
       "Disallow: /previous-calls",
+      "Disallow: /admin",
       "Disallow: /index.html",
       "",
       `Sitemap: ${siteOrigin(req)}/sitemap.xml`,
@@ -1191,6 +1220,7 @@ const DIFFICULTY_LABELS = {
 
 app.post("/api/objection/new", aiLimiter, authMiddleware, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
+  recordSessionStart(req.userId, "objection-battle");
 
   // Honour a chosen difficulty from the pre-start screen; fall back to random.
   const requestedDiff = parseInt(req.body && req.body.difficulty, 10);
@@ -1320,6 +1350,7 @@ const PATTERN_TYPES = [
 
 app.post("/api/pattern/new", aiLimiter, authMiddleware, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
+  recordSessionStart(req.userId, "pattern-recognition");
   const difficulty = parseInt(req.body.difficulty) || 2;
 
   // Cache holds English items only; non-English users generate fresh (Phase 1.3).
@@ -1722,6 +1753,7 @@ function trimBeliefMemory(userId) {
 
 app.post("/api/call/start", aiLimiter, authMiddleware, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
+  recordSessionStart(req.userId, "sales-call");
   const { scenario, customDescription, section, personality, prospectName, language } = req.body;
 
   const sectionContext = section
@@ -2090,6 +2122,7 @@ ${body}
 
 app.post("/api/setter/start", aiLimiter, authMiddleware, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
+  recordSessionStart(req.userId, "setter");
   const { offer, customDescription, personality, prospectName, language } = req.body;
   const offerText = setterOfferText(offer, customDescription);
 
@@ -3165,6 +3198,111 @@ app.post("/api/stripe/portal", authMiddleware, async (req, res) => {
 // Returns 503 when the database is configured but unreachable; the response
 // body keeps its shape either way, because four client pages read it for
 // `googleClientId` and `aiConfigured` without checking the status code.
+// ---------------------------------------------------------------------
+// Funnel. Everything here is answered from our own tables — no third-party
+// analytics, nothing added to the processor list in the privacy notice.
+//
+// The number that matters is first-rep completion: of the people who start
+// their very first rep, what fraction reach the grading. The debrief is
+// where this product proves itself, so someone who quits before it never
+// had a reason to come back. A low number means more traffic just burns
+// money faster.
+// ---------------------------------------------------------------------
+
+async function adminOnly(req, res, next) {
+  if (!db) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const row = await db.query("SELECT email FROM users WHERE id=$1", [req.userId]);
+    if (!row.rows.length || !ADMIN_EMAILS.includes(row.rows[0].email)) {
+      return res.status(403).json({ error: "Not authorised" });
+    }
+    next();
+  } catch (e) {
+    console.error("adminOnly error:", e.message);
+    res.status(500).json({ error: "Could not verify access" });
+  }
+}
+
+// A start counts as completed if a graded rep in the SAME mode lands within
+// two hours of it. Matching on mode and a window rather than an id keeps
+// this out of the request path entirely — no session id to thread through
+// the client and no way for a metric to break a call.
+const COMPLETION_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+app.get("/api/admin/funnel", authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const [totals, firstRep, byMode, recent] = await Promise.all([
+      db.query(`
+        SELECT
+          (SELECT COUNT(*) FROM users)                       AS accounts,
+          (SELECT COUNT(DISTINCT user_id) FROM session_starts) AS started_any,
+          (SELECT COUNT(DISTINCT user_id) FROM scores)         AS completed_any
+      `),
+      // One row per user: their first start, and whether a graded rep of the
+      // same mode followed it inside the window.
+      db.query(`
+        WITH first_start AS (
+          SELECT DISTINCT ON (user_id) user_id, mode, created_at
+          FROM session_starts
+          ORDER BY user_id, created_at ASC
+        )
+        SELECT
+          COUNT(*)                                   AS cohort,
+          COUNT(*) FILTER (WHERE s.hit IS NOT NULL)  AS completed
+        FROM first_start f
+        LEFT JOIN LATERAL (
+          SELECT 1 AS hit FROM scores
+          WHERE scores.user_id = f.user_id
+            AND scores.mode = f.mode
+            AND scores.created_at BETWEEN f.created_at AND f.created_at + $1::bigint
+          LIMIT 1
+        ) s ON TRUE
+      `, [COMPLETION_WINDOW_MS]),
+      db.query(`
+        SELECT mode, COUNT(*) AS starts
+        FROM session_starts GROUP BY mode ORDER BY starts DESC
+      `),
+      // Starts and completions side by side for the last 30 days, so the
+      // rate isn't dominated by however long the table has been filling.
+      db.query(`
+        SELECT
+          (SELECT COUNT(*) FROM session_starts WHERE created_at > $1) AS starts,
+          (SELECT COUNT(*) FROM scores         WHERE created_at > $1) AS completions
+      `, [Date.now() - 30 * 24 * 60 * 60 * 1000]),
+    ]);
+
+    const t = totals.rows[0];
+    const f = firstRep.rows[0];
+    const r = recent.rows[0];
+    const pct = (num, den) => (Number(den) > 0 ? Math.round((Number(num) / Number(den)) * 1000) / 10 : null);
+
+    res.json({
+      accounts:        Number(t.accounts),
+      startedAny:      Number(t.started_any),
+      completedAny:    Number(t.completed_any),
+      // Of everyone with an account, how many ever began a rep.
+      activationRate:  pct(t.started_any, t.accounts),
+      firstRep: {
+        cohort:        Number(f.cohort),
+        completed:     Number(f.completed),
+        completionRate: pct(f.completed, f.cohort),
+      },
+      last30Days: {
+        starts:        Number(r.starts),
+        completions:   Number(r.completions),
+        completionRate: pct(r.completions, r.starts),
+      },
+      startsByMode: byMode.rows.map((row) => ({ mode: row.mode, starts: Number(row.starts) })),
+      // session_starts only began recording on the deploy that added it, so
+      // any figure spanning earlier data is misleading. Say so, don't hide it.
+      note: "session_starts began recording 5 Sep 2026; rates before that date are not meaningful.",
+    });
+  } catch (err) {
+    console.error("admin/funnel error:", err.message);
+    res.status(500).json({ error: "Could not build the funnel." });
+  }
+});
+
 app.get("/api/health", async (req, res) => {
   let dbOk = null;
   if (db) {
