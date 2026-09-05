@@ -73,8 +73,10 @@ revisit if abuse appears.
       a crash. `/api/health` pings the database (3s cap) and returns 503 when it is
       configured but unreachable — the body keeps its shape, because four client
       pages read it without checking the status.
-      **External steps left:** create the Sentry project and put `SENTRY_DSN` in
-      Vercel, then point an uptime monitor at `https://<domain>/api/health`.
+      **External steps — both done.** `SENTRY_DSN` confirmed live in Vercel via
+      `errorReportingConfigured: true` on `/api/health` (5 Sep 2026). An uptime
+      monitor is pinging `sales-games.vercel.app/api/health` every 5 minutes,
+      100% up over its first ~2 hours (confirmed by the user, 5 Sep 2026).
 - [x] **Account deletion + data export.** `GET /api/user/export` returns every row we hold
       as a downloadable JSON file (Stripe ids left out — plumbing, not user data).
       `DELETE /api/user` cancels the Stripe subscription *first* — deleting the account while
