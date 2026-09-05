@@ -91,8 +91,18 @@ revisit if abuse appears.
 
 ## Phase 3 — Launch week and after
 
-- [ ] Meta description, OG/Twitter tags, favicon, robots.txt, sitemap.xml.
-      Shared links currently render as a bare grey URL.
+- [x] **Meta description, OG/Twitter tags, favicon, robots.txt, sitemap.xml.**
+      Pages are now *rendered* rather than `sendFile`'d: each writes
+      `{{ORIGIN}}` and `renderPage` substitutes the real origin per request,
+      because the canonical and `og:` URLs must be absolute and this app
+      answers on three of them (localhost, the Vercel preview URL, the
+      domain). `robots.txt` and `sitemap.xml` are generated for the same
+      reason, and everything behind the auth gate is excluded from both — it
+      renders a sign-in shell to a crawler. The nine app pages carry
+      `noindex`; the four legal pages carry a description and a canonical.
+      Icons (`favicon.svg`, a two-size `.ico`, `apple-touch-icon.png`,
+      `icon-512.png`, `site.webmanifest`) and the 1200×630 `og-image.png`
+      were rendered from the brand mark and the landing headline.
 - [ ] **Transactional email** (Resend/Postmark): welcome, payment failed,
       subscription cancelled, free tier nearly used. There is no way to email
       users today — the single biggest missing system after legal.

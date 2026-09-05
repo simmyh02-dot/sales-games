@@ -736,20 +736,95 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
 
 app.use(express.json({ limit: "1mb" }));
 
-// Explicit page routes (must be before express.static so they take priority)
-app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "landing.html")));
-app.get("/home", (req, res) => res.sendFile(path.join(__dirname, "public", "home.html")));
-app.get("/settings", (req, res) => res.sendFile(path.join(__dirname, "public", "settings.html")));
-app.get("/lessons", (req, res) => res.sendFile(path.join(__dirname, "public", "pages", "lessons.html")));
+// ---------------------------------------------------------------------
+// Page delivery. Pages are rendered rather than sendFile'd, because the
+// canonical link and the Open Graph tags have to carry an absolute URL and
+// this app answers on three origins: localhost, the Vercel preview URL and
+// the real domain. Each page writes {{ORIGIN}} and gets the right one here.
+// File contents are cached; only the substitution runs per request.
+// ---------------------------------------------------------------------
 
-app.get("/previous-calls", (req, res) => res.sendFile(path.join(__dirname, "public", "pages", "previous-calls.html")));
+const PUBLIC_DIR = path.join(__dirname, "public");
+const pageCache  = new Map();
+
+function siteOrigin(req) {
+  const configured = (process.env.APP_URL || "").trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  return `${req.protocol}://${req.get("host")}`;
+}
+
+function renderPage(req, res, file) {
+  let html = pageCache.get(file);
+  if (html === undefined) {
+    try { html = fs.readFileSync(file, "utf8"); }
+    catch { return res.status(404).send("Not found"); }
+    pageCache.set(file, html);
+  }
+  res.type("html").send(html.split("{{ORIGIN}}").join(siteOrigin(req)));
+}
+
+const page = (...segments) => (req, res) => renderPage(req, res, path.join(PUBLIC_DIR, ...segments));
+
+// Explicit page routes (must be before express.static so they take priority)
+app.get("/", page("landing.html"));
+app.get("/home", page("home.html"));
+app.get("/settings", page("settings.html"));
+app.get("/lessons", page("pages", "lessons.html"));
+
+app.get("/previous-calls", page("pages", "previous-calls.html"));
 
 // Legal. Linked from the landing footer and required by Stripe and the GDPR.
 for (const slug of ["terms", "privacy", "refunds", "contact"]) {
-  app.get(`/${slug}`, (req, res) => res.sendFile(path.join(__dirname, "public", "pages", `${slug}.html`)));
+  app.get(`/${slug}`, page("pages", `${slug}.html`));
 }
 
-app.use(express.static(path.join(__dirname, "public")));
+// The in-app links point at /pages/*.html directly, and express.static would
+// hand those over verbatim — placeholder and all. Route every remaining .html
+// through the same renderer so no page can reach a browser unsubstituted.
+app.get(/\.html$/, (req, res, next) => {
+  let rel;
+  try { rel = path.normalize(decodeURIComponent(req.path)).replace(/^[\\/]+/, ""); }
+  catch { return next(); }
+  const file = path.join(PUBLIC_DIR, rel);
+  if (!file.startsWith(PUBLIC_DIR + path.sep) || !fs.existsSync(file)) return next();
+  renderPage(req, res, file);
+});
+
+// robots.txt and the sitemap are generated rather than static, for the same
+// reason as the canonical tags: the Sitemap directive and every <loc> must be
+// absolute, and the origin isn't known until a request arrives. Everything
+// behind the auth gate is excluded — it renders a sign-in shell to a crawler.
+const PUBLIC_ROUTES = ["/", "/terms", "/privacy", "/refunds", "/contact"];
+
+app.get("/robots.txt", (req, res) => {
+  res.type("text/plain").send(
+    [
+      "User-agent: *",
+      "Disallow: /api/",
+      "Disallow: /pages/",
+      "Disallow: /home",
+      "Disallow: /settings",
+      "Disallow: /lessons",
+      "Disallow: /previous-calls",
+      "Disallow: /index.html",
+      "",
+      `Sitemap: ${siteOrigin(req)}/sitemap.xml`,
+      "",
+    ].join("\n")
+  );
+});
+
+app.get("/sitemap.xml", (req, res) => {
+  const origin = siteOrigin(req);
+  const urls = PUBLIC_ROUTES.map(
+    (route) => `  <url><loc>${origin}${route}</loc></url>`
+  ).join("\n");
+  res.type("application/xml").send(
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`
+  );
+});
+
+app.use(express.static(PUBLIC_DIR));
 
 // ---------------------------------------------------------------------
 // Auth routes
