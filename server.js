@@ -273,116 +273,82 @@ if (process.env.ANTHROPIC_API_KEY) {
 // ---------------------------------------------------------------------
 
 let db = null;
+// ---------------------------------------------------------------------
+// Schema. The DDL used to live inline here and ran in full on every cold
+// start, which meant no record of what had been applied, no way to make a
+// change that isn't idempotent, and errors swallowed by a bare .catch().
+// It now lives in migrations/, numbered, applied once and recorded.
+//
+// A failed migration logs at error level (so Sentry sees it) and the app
+// keeps serving. That is deliberate: running on a slightly stale schema is
+// bad, but a solo product that refuses to boot because of a migration is
+// worse. The alert is the point.
+// ---------------------------------------------------------------------
+
+const MIGRATIONS_DIR = path.join(__dirname, "migrations");
+
+// Serverless means several instances can cold-start at once and all reach
+// for the same migration. The advisory lock makes them queue; whoever gets
+// there second finds the work already recorded and does nothing.
+const MIGRATION_LOCK_ID = 4113077;
+
+async function runMigrations(pool) {
+  let files;
+  try {
+    files = fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort();
+  } catch {
+    console.error("Migrations directory missing — schema not verified.");
+    return;
+  }
+  if (!files.length) return;
+
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version    TEXT PRIMARY KEY,
+        applied_at BIGINT
+      );
+    `);
+    await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_ID]);
+    try {
+      const done = new Set(
+        (await client.query("SELECT version FROM schema_migrations")).rows.map((r) => r.version)
+      );
+      const pending = files.filter((f) => !done.has(f));
+      if (!pending.length) return;
+
+      for (const file of pending) {
+        const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
+        // One transaction per migration: a file that fails part way leaves
+        // nothing behind and stays unrecorded, so the next boot retries it.
+        await client.query("BEGIN");
+        try {
+          await client.query(sql);
+          await client.query(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES ($1, $2)",
+            [file, Date.now()]
+          );
+          await client.query("COMMIT");
+          console.log("Migration applied:", file);
+        } catch (e) {
+          await client.query("ROLLBACK").catch(() => {});
+          throw new Error(`migration ${file} failed: ${e.message}`);
+        }
+      }
+    } finally {
+      await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_ID]).catch(() => {});
+    }
+  } finally {
+    client.release();
+  }
+}
+
 if (process.env.DATABASE_URL) {
   db = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
-  db.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      google_id TEXT UNIQUE,
-      email TEXT,
-      name TEXT,
-      picture TEXT,
-      created_at BIGINT
-    );
-    CREATE TABLE IF NOT EXISTS scores (
-      id SERIAL PRIMARY KEY,
-      user_id TEXT,
-      delta INTEGER,
-      mode TEXT,
-      date TEXT,
-      created_at BIGINT
-    );
-    CREATE TABLE IF NOT EXISTS unlocked_skills (
-      user_id TEXT,
-      skill_id TEXT,
-      unlocked_at BIGINT,
-      PRIMARY KEY (user_id, skill_id)
-    );
-    CREATE TABLE IF NOT EXISTS rivals (
-      user_id TEXT,
-      rival_email TEXT,
-      created_at BIGINT,
-      PRIMARY KEY (user_id, rival_email)
-    );
-    CREATE TABLE IF NOT EXISTS lessons (
-      id SERIAL PRIMARY KEY,
-      user_id TEXT,
-      content TEXT,
-      headline TEXT,
-      source TEXT,
-      persona TEXT,
-      call_score INTEGER,
-      language TEXT,
-      reviewed BOOLEAN DEFAULT FALSE,
-      pinned BOOLEAN DEFAULT FALSE,
-      created_at BIGINT
-    );
-    CREATE TABLE IF NOT EXISTS prospect_beliefs (
-      id SERIAL PRIMARY KEY,
-      user_id TEXT,
-      belief TEXT,
-      created_at BIGINT
-    );
-    CREATE TABLE IF NOT EXISTS saved_calls (
-      id SERIAL PRIMARY KEY,
-      user_id TEXT,
-      mode TEXT,
-      label TEXT,
-      persona TEXT,
-      section TEXT,
-      outcome TEXT,
-      score INTEGER,
-      transcript TEXT,
-      analysis TEXT,
-      created_at BIGINT
-    );
-    CREATE TABLE IF NOT EXISTS call_history (
-      id SERIAL PRIMARY KEY,
-      user_id TEXT,
-      mode TEXT,
-      label TEXT,
-      persona TEXT,
-      section TEXT,
-      outcome TEXT,
-      skills TEXT,
-      transcript TEXT,
-      reviewed BOOLEAN DEFAULT FALSE,
-      created_at BIGINT
-    );
-
-    -- Every other table records a rep that FINISHED. A rep someone abandons
-    -- halfway left no trace anywhere, which made the one number worth
-    -- watching — what fraction of people who start a first call reach the
-    -- debrief — impossible to compute. This is the missing half.
-    CREATE TABLE IF NOT EXISTS session_starts (
-      id SERIAL PRIMARY KEY,
-      user_id TEXT,
-      mode TEXT,
-      created_at BIGINT
-    );
-  `).catch((e) => console.error("DB init error:", e.message));
-  db.query(`
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'free';
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
-    ALTER TABLE lessons ADD COLUMN IF NOT EXISTS language TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_status TEXT;
-  `).catch(() => {});
-  // Every table is read by user_id. The scores index matters most: the monthly
-  // session count runs before every session start and grows with total rows.
-  // The stripe_customer_id index is hit by every webhook.
-  db.query(`
-    CREATE INDEX IF NOT EXISTS idx_scores_user_date        ON scores (user_id, date);
-    CREATE INDEX IF NOT EXISTS idx_lessons_user            ON lessons (user_id, pinned DESC, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_call_history_user       ON call_history (user_id, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_unlocked_skills_user    ON unlocked_skills (user_id);
-    CREATE INDEX IF NOT EXISTS idx_users_stripe_customer   ON users (stripe_customer_id);
-    CREATE INDEX IF NOT EXISTS idx_rivals_user             ON rivals (user_id);
-    CREATE INDEX IF NOT EXISTS idx_prospect_beliefs_user   ON prospect_beliefs (user_id, id DESC);
-    CREATE INDEX IF NOT EXISTS idx_saved_calls_user        ON saved_calls (user_id, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_session_starts_user     ON session_starts (user_id, created_at);
-  `).catch((e) => console.error("DB index error:", e.message));
+  // Not awaited: boot must not block on it, and every query path already
+  // handles a database that isn't answering.
+  runMigrations(db).catch((e) => console.error("Migration error:", e));
 }
 
 // ---------------------------------------------------------------------

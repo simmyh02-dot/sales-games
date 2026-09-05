@@ -147,7 +147,34 @@ revisit if abuse appears.
       inline modals on home and Settings, and the one `pricing.js` builds for
       the mode pages). This is what `checkSessionLimit` actually meters, and
       it was nowhere in writing.
-- [ ] Numbered SQL migrations replacing the inline boot-time DDL.
+- [x] **Numbered SQL migrations replacing the inline boot-time DDL.** The DDL
+      ran in full on every cold start, kept no record of what had been
+      applied, could only ever express idempotent changes, and swallowed its
+      errors in a bare `.catch(() => {})`. It now lives in `migrations/`,
+      applied once each and recorded in `schema_migrations`.
+      `001_initial_schema.sql` is the current schema verbatim — every
+      statement `IF NOT EXISTS`, so it is a no-op against production and
+      exists only to give that database a recorded starting point.
+
+      One transaction per file, so a migration that fails part way leaves
+      nothing behind and stays unrecorded — the next boot retries it. A
+      `pg_advisory_lock` serialises concurrent cold starts, which on Vercel is
+      not hypothetical. A failure logs at error level (so Sentry sees it) and
+      the app keeps serving: running on a stale schema is bad, but a solo
+      product that refuses to boot over a migration is worse.
+
+      `migrations/**` added to `includeFiles` in `vercel.json`. The runner
+      uses `readdirSync`, which Vercel's static tracer cannot follow — exactly
+      the failure that dropped the pdfkit fonts from the bundle and broke PDF
+      export in production while it worked locally.
+
+      **Tested end to end** with the real function lifted out of `server.js`
+      and run against PGlite: fresh database applies 001 and nothing else;
+      a second run applies nothing; a newly added file applies only itself;
+      and a deliberately broken file throws, records nothing, and leaves no
+      partial column behind. That last one also surfaced a real constraint —
+      a multi-statement migration only works because node-postgres sends a
+      *parameterless* `query()` over the simple protocol.
 - [x] **`helmet()` + CSP — shipped in Report-Only.** The enforced part is the
       cheap part: `nosniff`, `X-Frame-Options`, COOP/CORP, and no more
       `X-Powered-By: Express`. Helmet's HSTS is switched **off** — Vercel's
