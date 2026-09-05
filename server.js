@@ -32,6 +32,15 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const PDFDocument = require("pdfkit");
+// pdfkit loads standard-font metrics lazily through a wildcard subpath import
+// (`#standard-fonts/*`). Vercel traces the bundle statically and cannot follow
+// a wildcard, so those files were dropped from the deployed function and the
+// first .font("Helvetica") call threw — PDFs built fine locally and failed in
+// production. Requiring the three faces we actually use puts them back in the
+// trace. The values are deliberately unused; the require is the whole point.
+require("pdfkit/standard-fonts/Helvetica");
+require("pdfkit/standard-fonts/HelveticaBold");
+require("pdfkit/standard-fonts/HelveticaOblique");
 const Anthropic = require("@anthropic-ai/sdk");
 const { OAuth2Client } = require("google-auth-library");
 const { Pool } = require("pg");
@@ -2675,7 +2684,7 @@ app.get("/api/calls/saved/:id/pdf", authMiddleware, async (req, res) => {
     renderCallPdf(doc, call, opts);
     doc.end();
   } catch (err) {
-    console.error("calls/saved pdf error:", err.message);
+    console.error("calls/saved pdf error:", err);
     if (!res.headersSent) res.status(500).json({ error: "Could not build the PDF." });
   }
 });
