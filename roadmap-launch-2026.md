@@ -61,7 +61,20 @@ revisit if abuse appears.
       `past_due` keep the plan (Stripe retries for weeks — don't cut off a card
       that is about to succeed), anything else drops to free. Settings shows
       "Your last payment failed" with a link into the portal.
-- [ ] **Sentry** + an uptime ping on `/api/health`.
+- [x] **Sentry** + an uptime ping on `/api/health`. `@sentry/node` initialises
+      before express and pg load, and only when `SENTRY_DSN` is set — no DSN, no
+      SDK, so local dev is untouched. The workhorse is `captureConsoleIntegration`:
+      every route here catches its own errors and `console.error`s them, so they
+      never reach the express error handler; promoting error-level console output
+      is what actually surfaces them. `sendDefaultPii: false` and no tracing —
+      transcripts must never reach a third party. `authMiddleware` tags the scope
+      with the account id (never the email). The error handler now honours a 4xx
+      on the thrown error, so a malformed body answers 400 instead of alerting as
+      a crash. `/api/health` pings the database (3s cap) and returns 503 when it is
+      configured but unreachable — the body keeps its shape, because four client
+      pages read it without checking the status.
+      **External steps left:** create the Sentry project and put `SENTRY_DSN` in
+      Vercel, then point an uptime monitor at `https://<domain>/api/health`.
 - [x] **Account deletion + data export.** `GET /api/user/export` returns every row we hold
       as a downloadable JSON file (Stripe ids left out — plumbing, not user data).
       `DELETE /api/user` cancels the Stripe subscription *first* — deleting the account while

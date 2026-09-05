@@ -1,4 +1,33 @@
 require("dotenv").config();
+
+// ---------------------------------------------------------------------
+// Error reporting. This block runs before express and pg are required,
+// because the SDK instruments those modules as they load. Without a
+// SENTRY_DSN nothing initialises and every call below is a no-op, so local
+// dev and the tests are unaffected.
+//
+// captureConsoleIntegration is doing most of the work: every route in this
+// file catches its own errors and console.error()s them, so those never
+// reach the express error handler. Promoting error-level console output to
+// Sentry events is what actually gets those in front of us.
+// ---------------------------------------------------------------------
+const Sentry = require("@sentry/node");
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || "development",
+    release: process.env.VERCEL_GIT_COMMIT_SHA || undefined,
+    // Errors only. Tracing would sample every AI call, and those are long.
+    tracesSampleRate: 0,
+    // Transcripts are the whole product and they are personal. Never let the
+    // SDK attach request bodies, headers or IPs on its own.
+    sendDefaultPii: false,
+    maxValueLength: 2000,
+    integrations: [Sentry.captureConsoleIntegration({ levels: ["error"] })],
+  });
+  console.log("Sentry error reporting enabled.");
+}
+
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
@@ -19,6 +48,17 @@ const PORT = process.env.PORT || 3000;
 // Behind Vercel's proxy, so the client IP lives in x-forwarded-for. Without
 // this every request looks like one address and rate limiting is meaningless.
 app.set("trust proxy", 1);
+
+// Vercel freezes the function the moment a response ends, so a queued Sentry
+// event can sit unsent until the next invocation — or be lost with the
+// instance. Flushing on finish costs the client nothing: the response has
+// already gone out by the time this runs.
+if (process.env.SENTRY_DSN) {
+  app.use((req, res, next) => {
+    res.on("finish", () => { Sentry.flush(2000).catch(() => {}); });
+    next();
+  });
+}
 
 // ---------------------------------------------------------------------
 // Fail fast on missing production config. A missing JWT_SECRET used to fall
@@ -237,6 +277,10 @@ function authMiddleware(req, res, next) {
   const payload = verifyToken(token);
   if (!payload) return res.status(401).json({ error: "Invalid or expired token" });
   req.userId = payload.sub;
+  // Ties any error raised while serving this request to an account id, so a
+  // report is actionable ("this user, this call") without carrying an email
+  // or a transcript into Sentry. No-op when SENTRY_DSN is unset.
+  Sentry.setUser({ id: payload.sub });
   next();
 }
 
@@ -2908,9 +2952,32 @@ app.post("/api/stripe/portal", authMiddleware, async (req, res) => {
 // Health + config info
 // ---------------------------------------------------------------------
 
-app.get("/api/health", (req, res) => {
-  res.json({
-    ok: true,
+// Doubles as the uptime monitor's target, so it has to actually exercise the
+// database rather than report that a DATABASE_URL string exists. A dead Neon
+// branch is the failure most likely to take the product down while the process
+// itself keeps answering, and that is precisely what a monitor should catch.
+// Returns 503 when the database is configured but unreachable; the response
+// body keeps its shape either way, because four client pages read it for
+// `googleClientId` and `aiConfigured` without checking the status code.
+app.get("/api/health", async (req, res) => {
+  let dbOk = null;
+  if (db) {
+    try {
+      // Bounded: a hung connection must not hold the monitor open until its
+      // own timeout fires, or every check reads as a timeout instead of a 503.
+      await Promise.race([
+        db.query("SELECT 1"),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("db ping timed out")), 3000)),
+      ]);
+      dbOk = true;
+    } catch (err) {
+      dbOk = false;
+      console.error("health: database unreachable:", err.message);
+    }
+  }
+  res.status(dbOk === false ? 503 : 200).json({
+    ok: dbOk !== false,
+    dbOk,
     aiConfigured: !!anthropic,
     authConfigured: !!(googleClient && db),
     googleClientId: process.env.GOOGLE_CLIENT_ID || null,
@@ -2975,7 +3042,25 @@ app.use((req, res) => {
 // stay even though it is unused.
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err && err.stack ? err.stack : err);
+  // Body-parser and friends set a 4xx on the error they throw — a malformed
+  // JSON body is a bad request, not a crash. Answer with the status they
+  // chose and keep it out of the log, or every junk request becomes an alert.
+  const status = (err && (err.status || err.statusCode)) || 500;
+  if (status >= 400 && status < 500) {
+    if (res.headersSent) return;
+    if (req.path.startsWith("/api/")) return res.status(status).json({ error: "Bad request." });
+    return res.status(status).type("html").send(
+      errorPage(status, "That request didn't make sense.", "Something about the request was malformed. Try again from the page you came from.")
+    );
+  }
+
+  // Passing the Error itself (not err.stack) matters twice over: node prints
+  // the full stack to the Vercel log, and Sentry's console integration sees
+  // an Error argument and reports it as a real exception rather than a
+  // flattened string, so crashes group properly.
+  console.error("Unhandled error:", err);
+  // Logged first: a crash that happens after the response has started is
+  // exactly the kind we most need to see, even though we can no longer answer.
   if (res.headersSent) return;
   if (req.path.startsWith("/api/")) return res.status(500).json({ error: "Something went wrong on our end." });
   res.status(500).type("html").send(
