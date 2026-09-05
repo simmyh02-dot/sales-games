@@ -312,6 +312,18 @@
       token ? (window.location.href = '/home') : showSigninOverlay();
     });
 
+    // Landing after an account deletion. The account is gone, so there is no
+    // page left to say this on — the landing page is the only place it fits.
+    if (new URLSearchParams(location.search).get('deleted') === '1') {
+      document.addEventListener('DOMContentLoaded', () => {
+        const bar = document.createElement('div');
+        bar.className = 'deleted-banner';
+        bar.textContent = 'Your account and all of its data have been deleted. Thanks for training with us.';
+        document.body.prepend(bar);
+        history.replaceState(null, '', '/');
+      });
+    }
+
     // Show nav buttons once DOM is ready
     document.addEventListener('DOMContentLoaded', () => {
       const token = localStorage.getItem('scg_auth_token');

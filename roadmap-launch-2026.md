@@ -62,7 +62,15 @@ revisit if abuse appears.
       that is about to succeed), anything else drops to free. Settings shows
       "Your last payment failed" with a link into the portal.
 - [ ] **Sentry** + an uptime ping on `/api/health`.
-- [ ] **Account deletion + data export** (`DELETE /api/user`, `GET /api/user/export`).
+- [x] **Account deletion + data export.** `GET /api/user/export` returns every row we hold
+      as a downloadable JSON file (Stripe ids left out — plumbing, not user data).
+      `DELETE /api/user` cancels the Stripe subscription *first* — deleting the account while
+      a subscription still bills would be the worst possible failure — then wipes all eight
+      tables in one transaction. The Stripe customer record survives, because paid invoices are
+      accounting records Swedish law keeps for seven years. Both live in a fenced-off
+      **Your data** section in Settings; deletion needs the word DELETE typed, then lands on
+      the landing page with a confirmation banner. Privacy policy rewritten to point at the
+      self-serve route instead of promising deletion by email.
 - [x] **Branded 404 + global error handler.** `/api/*` gets JSON, everything else
       an inline-styled page (no stylesheet dependency — an error page shouldn't be
       able to fail the same way twice). The error handler logs the stack and

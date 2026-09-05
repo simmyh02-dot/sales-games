@@ -133,6 +133,35 @@
       <div id="leaderboard" class="leaderboard"></div>
     </section>
 
+    <!-- YOUR DATA -->
+    <section class="settings-section" id="data">
+      <div class="settings-section-head">
+        <h2>Your data</h2>
+        <span class="settings-hint">Download everything we hold, or close your account for good.</span>
+      </div>
+      <div class="plan-actions">
+        <button class="btn btn-secondary" id="data-export-btn">Download my data</button>
+      </div>
+      <div class="settings-msg" id="data-msg"></div>
+
+      <div class="danger-zone">
+        <h3>Delete account</h3>
+        <p>This erases your profile, points, lessons, saved calls and call history. It cannot be
+          undone, and any active subscription is cancelled at the same time. Paid invoices stay
+          with Stripe because Swedish accounting law requires it.</p>
+        <button class="btn btn-ghost danger-btn" id="delete-open-btn">Delete my account</button>
+        <div id="delete-confirm" style="display:none;">
+          <label class="danger-label" for="delete-confirm-input">Type <strong>DELETE</strong> to confirm.</label>
+          <div class="add-friend-form">
+            <input type="text" id="delete-confirm-input" class="settings-input" placeholder="DELETE" autocomplete="off" />
+            <button class="btn btn-ghost danger-btn" id="delete-confirm-btn">Delete forever</button>
+            <button class="btn btn-ghost" id="delete-cancel-btn">Cancel</button>
+          </div>
+          <div class="settings-msg" id="delete-msg"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- PLAN -->
     <section class="settings-section" id="plan">
       <div class="settings-section-head">

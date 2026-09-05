@@ -2740,6 +2740,113 @@ app.put("/api/user/language", authMiddleware, async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------
+// GDPR: export + delete. The privacy notice promises both; until now they
+// were manual, done by email. These make them self-serve.
+// ---------------------------------------------------------------------
+
+// Everything we hold about one account, in one JSON file. Ordered oldest-first
+// inside each table so the file reads like a history rather than a dump.
+app.get("/api/user/export", authMiddleware, async (req, res) => {
+  if (!db) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const me = await db.query(
+      `SELECT id, email, name, picture, created_at, tier, language, payment_status
+         FROM users WHERE id=$1`,
+      [req.userId]
+    );
+    if (!me.rows.length) return res.status(404).json({ error: "User not found" });
+
+    // The Stripe ids are deliberately left out — they are our billing plumbing,
+    // not the user's data, and the invoices themselves live in Stripe's portal.
+    const grab = (sql) => db.query(sql, [req.userId]).then((r) => r.rows);
+    const [scores, skills, rivals, lessons, beliefs, savedCalls, callHistory] = await Promise.all([
+      grab("SELECT delta, mode, date, created_at FROM scores WHERE user_id=$1 ORDER BY id"),
+      grab("SELECT skill_id, unlocked_at FROM unlocked_skills WHERE user_id=$1 ORDER BY unlocked_at"),
+      grab("SELECT rival_email, created_at FROM rivals WHERE user_id=$1 ORDER BY created_at"),
+      grab("SELECT headline, content, source, persona, call_score, language, reviewed, pinned, created_at FROM lessons WHERE user_id=$1 ORDER BY id"),
+      grab("SELECT belief, created_at FROM prospect_beliefs WHERE user_id=$1 ORDER BY id"),
+      grab("SELECT mode, label, persona, section, outcome, score, transcript, analysis, created_at FROM saved_calls WHERE user_id=$1 ORDER BY id"),
+      grab("SELECT mode, label, persona, section, outcome, skills, transcript, reviewed, created_at FROM call_history WHERE user_id=$1 ORDER BY id"),
+    ]);
+
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      service: "Sales Camp AI",
+      note: "Everything Sales Camp AI holds about this account. Timestamps are Unix milliseconds.",
+      account: me.rows[0],
+      scores,
+      unlockedSkills: skills,
+      competitors: rivals,
+      lessons,
+      prospectBeliefs: beliefs,
+      savedCalls,
+      callHistory,
+    };
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="sales-camp-ai-export-${stamp}.json"`);
+    res.send(JSON.stringify(payload, null, 2));
+  } catch (err) {
+    console.error("user/export error:", err.message);
+    res.status(500).json({ error: "Could not build your export. Please try again." });
+  }
+});
+
+// Irreversible. Cancels the Stripe subscription first — deleting the account
+// while a subscription still bills would be the worst possible failure — then
+// removes every row we hold. The Stripe *customer* record stays: paid invoices
+// are accounting records Swedish law makes us keep for seven years, and the
+// privacy notice says exactly that.
+app.delete("/api/user", authMiddleware, async (req, res) => {
+  if (!db) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const row = await db.query(
+      "SELECT stripe_subscription_id FROM users WHERE id=$1",
+      [req.userId]
+    );
+    if (!row.rows.length) return res.status(404).json({ error: "User not found" });
+
+    const subId = row.rows[0].stripe_subscription_id;
+    if (subId && stripe) {
+      try {
+        await stripe.subscriptions.cancel(subId);
+      } catch (err) {
+        // Already cancelled at Stripe's end is fine; anything else must stop the
+        // deletion, because we cannot leave a live subscription with no account.
+        const code = err && err.code;
+        if (code !== "resource_missing") {
+          console.error("user delete: subscription cancel failed:", err.message);
+          return res.status(502).json({
+            error: "We could not cancel your subscription with Stripe, so nothing was deleted. Please try again or contact support.",
+          });
+        }
+      }
+    }
+
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      for (const table of ["scores", "unlocked_skills", "rivals", "lessons", "prospect_beliefs", "saved_calls", "call_history"]) {
+        await client.query(`DELETE FROM ${table} WHERE user_id=$1`, [req.userId]);
+      }
+      await client.query("DELETE FROM users WHERE id=$1", [req.userId]);
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    console.log(`Account deleted: ${req.userId}`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("user delete error:", err.message);
+    res.status(500).json({ error: "Could not delete your account. Please try again or contact support." });
+  }
+});
+
 app.post("/api/stripe/create-checkout", authMiddleware, async (req, res) => {
   if (!stripe) return res.status(503).json({ error: "Stripe not configured. Add STRIPE_SECRET_KEY to .env" });
   if (!db)     return res.status(503).json({ error: "Database not configured" });

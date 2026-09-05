@@ -149,12 +149,88 @@
     }
   }
 
+  /* ---- Your data: export + account deletion ---- */
+  function setDataMsg(id, text, isError) {
+    const el = $(id);
+    el.textContent = text || "";
+    el.className = "settings-msg" + (isError ? " error" : "");
+  }
+
+  // Same trick as the saved-call PDF: the route needs the bearer token, so a
+  // plain <a href> can't fetch it. Pull the blob, click a temporary link.
+  async function exportData(btn) {
+    btn.disabled = true;
+    setDataMsg("data-msg", "Building your export…");
+    try {
+      const res = await authFetch("/api/user/export");
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => ({})) : {};
+        throw new Error(body.error || "Could not build your export.");
+      }
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = /filename="([^"]+)"/.exec(disposition);
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = match ? match[1] : "sales-camp-ai-export.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      setDataMsg("data-msg", "Downloaded.");
+    } catch (err) {
+      setDataMsg("data-msg", err.message, true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function deleteAccount(btn) {
+    if (($("delete-confirm-input").value || "").trim().toUpperCase() !== "DELETE") {
+      return setDataMsg("delete-msg", "Type DELETE to confirm.", true);
+    }
+    btn.disabled = true;
+    setDataMsg("delete-msg", "Deleting…");
+    try {
+      const res = await authFetch("/api/user", { method: "DELETE" });
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => ({})) : {};
+        throw new Error(body.error || "Could not delete your account.");
+      }
+      // The token now points at a user that no longer exists — clear it before
+      // anything else on the page tries to use it.
+      if (typeof SCG_AUTH !== "undefined") SCG_AUTH.signOut();
+      try { localStorage.clear(); } catch {}
+      window.location.href = "/?deleted=1";
+    } catch (err) {
+      setDataMsg("delete-msg", err.message, true);
+      btn.disabled = false;
+    }
+  }
+
+  function wireDataSection() {
+    $("data-export-btn").addEventListener("click", (e) => exportData(e.currentTarget));
+    $("delete-open-btn").addEventListener("click", () => {
+      $("delete-open-btn").style.display = "none";
+      $("delete-confirm").style.display = "";
+      $("delete-confirm-input").focus();
+    });
+    $("delete-cancel-btn").addEventListener("click", () => {
+      $("delete-confirm").style.display = "none";
+      $("delete-open-btn").style.display = "";
+      $("delete-confirm-input").value = "";
+      setDataMsg("delete-msg", "");
+    });
+    $("delete-confirm-btn").addEventListener("click", (e) => deleteAccount(e.currentTarget));
+  }
+
   /* ---- Boot ---- */
   async function init() {
     // Appearance toggle + language selector
     if (typeof SCG_THEME !== "undefined") SCG_THEME.mountToggle($("theme-toggle-host"));
     if (typeof SCG_LANG !== "undefined") SCG_LANG.mountSelect($("lang-select-host"));
     if (typeof SCG_SAVED !== "undefined") wireDownloadPrefs();
+    wireDataSection();
 
     // Friends form
     $("add-friend-form").addEventListener("submit", (e) => {
