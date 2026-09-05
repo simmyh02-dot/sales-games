@@ -107,8 +107,22 @@ revisit if abuse appears.
       subscription cancelled, free tier nearly used. There is no way to email
       users today — the single biggest missing system after legal.
 - [ ] Analytics; track first-call completion rate as the leading indicator.
-- [ ] Visible session counter ("3 of 5 used this month") + a plain-English
-      definition of a session on the pricing table.
+- [x] **Visible session counter + a plain-English definition of a session.**
+      A meter in the app bar on every signed-in page, from `/api/user/status`
+      (which already returned the numbers — nothing outside Settings read
+      them). Quiet by default, amber on the last fifth of the allowance, red
+      at zero — `--bad` rather than `--accent`, which is on a 24s hue loop and
+      shouldn't carry a warning. Hidden entirely on an unlimited plan. It
+      refreshes after every `POST /api/scores`, because that request *is* what
+      the allowance counts. Settings gained a bar and lost the duplicate count
+      that sat in the profile row.
+
+      The definition — "one graded rep: a full call simulation, one objection
+      round or one pattern round; a rep you leave before it's graded doesn't
+      count" — now sits under all four pricing surfaces (landing grid, the
+      inline modals on home and Settings, and the one `pricing.js` builds for
+      the mode pages). This is what `checkSessionLimit` actually meters, and
+      it was nowhere in writing.
 - [ ] Numbered SQL migrations replacing the inline boot-time DDL.
 - [ ] `helmet()` + CSP (allow `accounts.google.com`, `fonts.googleapis.com`,
       `fonts.gstatic.com`; re-test Google sign-in immediately after).

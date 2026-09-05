@@ -3,7 +3,8 @@
    Included on every protected page (home, the game modes, skill tree,
    lessons, settings). It owns the persistent chrome:
      - brand → /home
-     - a points / level chip (from /api/scores/summary)
+     - a session meter (from /api/user/status) and a points / level chip
+       (from /api/scores/summary)
      - an avatar button that opens a dropdown menu:
          Train  (Sales Call · Objection Battle · Pattern Recognition)
          Progress (Skill Tree · Lessons)
@@ -71,6 +72,10 @@ const SCG_SHELL = (() => {
       </a>
 
       <div class="app-bar-right">
+        <a class="usage-chip" id="usage-chip" href="/settings#plan" style="display:none;">
+          <span class="uc-count">0/5</span><span class="uc-label">sessions</span>
+        </a>
+
         <a class="points-chip" id="points-chip" href="/settings#progress" title="Your total points" style="display:none;">
           <span class="pc-total">0</span><span class="pc-sep">·</span><span class="pc-level">Lv 1</span>
         </a>
@@ -146,12 +151,15 @@ const SCG_SHELL = (() => {
       trigger.style.display = "inline-flex";
       if (widget) widget.style.display = "none";
       refreshPoints();
+      refreshUsage();
     } else {
       trigger.style.display = "none";
       trigger.innerHTML = "";
       if (widget) widget.style.display = "";
-      const chip = document.getElementById("points-chip");
-      if (chip) chip.style.display = "none";
+      for (const id of ["points-chip", "usage-chip"]) {
+        const chip = document.getElementById(id);
+        if (chip) chip.style.display = "none";
+      }
       closeMenu();
     }
   }
@@ -172,11 +180,39 @@ const SCG_SHELL = (() => {
     } catch { chip.style.display = "none"; }
   }
 
+  // The session meter. Until now the only way to discover you had run out was
+  // to start a rep and be refused — the count was server-side and invisible.
+  // Nothing to show on an unlimited plan, so the chip stays out of the bar.
+  async function refreshUsage() {
+    const chip = document.getElementById("usage-chip");
+    if (!chip || typeof SCG_AUTH === "undefined") return;
+    const token = SCG_AUTH.getToken();
+    if (!token) { chip.style.display = "none"; return; }
+    try {
+      const res = await fetch("/api/user/status", { headers: { "Authorization": `Bearer ${token}` } });
+      if (!res.ok) { chip.style.display = "none"; return; }
+      const data = await res.json();
+      const limit = data.sessionsLimit;
+      if (limit == null) { chip.style.display = "none"; return; }
+      const used = Math.max(0, Number(data.sessionsUsed) || 0);
+      const left = Math.max(0, limit - used);
+      chip.querySelector(".uc-count").textContent = `${used}/${limit}`;
+      chip.title = left === 0
+        ? "You've used every session on this plan this month. Upgrade to keep training."
+        : `${left} of your ${limit} sessions left this month. The count resets on the 1st.`;
+      // Warn on the last fifth of the allowance, and at least on the last one.
+      const warnAt = Math.max(1, Math.round(limit * 0.2));
+      chip.classList.toggle("low",   left > 0 && left <= warnAt);
+      chip.classList.toggle("spent", left === 0);
+      chip.style.display = "inline-flex";
+    } catch { chip.style.display = "none"; }
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", build);
   } else {
     build();
   }
 
-  return { build, setUser, refreshPoints, closeMenu };
+  return { build, setUser, refreshPoints, refreshUsage, closeMenu };
 })();

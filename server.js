@@ -3064,6 +3064,11 @@ app.get("/api/health", async (req, res) => {
     dbOk,
     aiConfigured: !!anthropic,
     authConfigured: !!(googleClient && db),
+    // Whether SENTRY_DSN reached this environment — a boolean, never the DSN.
+    // "Did the env var actually land in Vercel?" was otherwise unanswerable
+    // from outside: a missing DSN silently disables the SDK and looks
+    // identical to a healthy deploy with no errors.
+    errorReportingConfigured: !!process.env.SENTRY_DSN,
     googleClientId: process.env.GOOGLE_CLIENT_ID || null,
     model: SONNET,
   });

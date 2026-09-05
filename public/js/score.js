@@ -23,8 +23,13 @@ const SCG = (() => {
         },
         body: JSON.stringify({ delta: points, mode: mode || "unknown" }),
       });
-      // Keep the app-bar points/level chip in sync with what was just earned.
-      if (typeof SCG_SHELL !== "undefined") SCG_SHELL.refreshPoints();
+      // Keep the app-bar chips in sync: the points just earned, and the session
+      // meter — this POST is what the monthly allowance actually counts, so the
+      // number is stale the moment it lands.
+      if (typeof SCG_SHELL !== "undefined") {
+        SCG_SHELL.refreshPoints();
+        SCG_SHELL.refreshUsage();
+      }
     } catch { /* fire-and-forget, silent fail */ }
   }
 

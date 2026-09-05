@@ -40,7 +40,6 @@
         </div>
         <div class="profile-plan">
           <span class="plan-badge" id="profile-plan-badge">Free</span>
-          <div class="plan-sessions" id="profile-sessions"></div>
         </div>
       </div>
     </section>
@@ -176,6 +175,17 @@
         <h2>Plan</h2>
         <span class="settings-hint" id="plan-current"></span>
       </div>
+      <div class="plan-usage" id="plan-usage" style="display:none;">
+        <div class="plan-usage-head">
+          <span id="plan-usage-count"></span>
+          <span class="plan-usage-reset">Resets on the 1st</span>
+        </div>
+        <div class="plan-usage-bar"><span id="plan-usage-fill"></span></div>
+      </div>
+      <p class="settings-hint plan-session-note">
+        A session is one graded rep &mdash; a full call simulation, one objection round
+        or one pattern round. A rep you leave before it&rsquo;s graded doesn&rsquo;t count.
+      </p>
       <div class="plan-warning" id="plan-warning" style="display:none;"></div>
       <div class="plan-actions">
         <button class="btn btn-primary" id="plan-pro-btn" onclick="SCG_PRICING.checkout('pro')">Upgrade to Pro — $15/mo</button>
@@ -213,6 +223,11 @@
           <button class="btn btn-secondary" onclick="SCG_PRICING.checkout('power')">Go Power</button>
         </div>
       </div>
+      <p class="pricing-session-note">
+        One session = one graded rep: a full call simulation, one objection round
+        or one pattern round. A rep you leave before it&rsquo;s graded doesn&rsquo;t count,
+        and the allowance resets on the 1st.
+      </p>
       <button class="pricing-close" onclick="SCG_PRICING.hideModal()">Maybe later</button>
     </div>
   </div>

@@ -2141,6 +2141,14 @@ input.custom-input:focus {
   margin: 0 0 48px;
 }
 
+.landing-pricing-note {
+  margin: 28px auto 0;
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-1);
+}
+
 .landing-pricing-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -2431,6 +2439,20 @@ input.custom-input:focus {
 }
 
 .pricing-close:hover { color: var(--text-1); }
+
+/* "Sessions" is the unit we bill in, so it has to be defined wherever a
+   price is shown — not buried in the terms. */
+.pricing-session-note {
+  margin: 4px 0 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  /* text-2 lands at ~3:1 on the dark ground. This is pricing copy people are
+     entitled to read, so it takes the one step up to text-1 (~5.8:1). */
+  color: var(--text-1);
+  text-align: center;
+  max-width: 60ch;
+  margin-inline: auto;
+}
 
 /* --- Upgrade toast --- */
 
@@ -2936,6 +2958,45 @@ input.custom-input:focus {
 .points-chip .pc-sep { color: var(--text-2); }
 .points-chip .pc-level { color: var(--accent); }
 
+/* Session meter. Deliberately quieter than the points chip — it's a budget,
+   not an achievement — until the allowance is nearly gone. */
+.usage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  clip-path: var(--clip-cut);
+  text-decoration: none;
+  transition: border-color var(--transition), background var(--transition), color var(--transition);
+}
+.usage-chip:hover { border-color: var(--panel-border-hover); color: var(--text-1); }
+.usage-chip .uc-count { font-weight: 600; color: var(--text-0); }
+.usage-chip.low {
+  color: var(--accent-2);
+  border-color: color-mix(in srgb, var(--accent-2) 45%, transparent);
+  background: var(--accent-2-dim);
+}
+.usage-chip.low .uc-count { color: var(--accent-2); }
+/* --bad, not --accent: --accent is on a 24s hue loop, and "you have no
+   sessions left" is not a message that should drift through purple. */
+.usage-chip.spent {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+.usage-chip.spent .uc-count { color: var(--bad); }
+
+@media (max-width: 620px) {
+  /* The bar gets tight; the number is the part that matters. */
+  .usage-chip .uc-label { display: none; }
+}
+
 /* User menu */
 .user-menu { position: relative; }
 .user-menu-trigger {
@@ -3134,7 +3195,6 @@ input.custom-input:focus {
   padding: 4px 10px;
   clip-path: var(--clip-cut);
 }
-.plan-sessions { font-size: 12px; color: var(--text-2); margin-top: 6px; }
 
 /* Progress stats */
 .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--panel-border); border: 1px solid var(--panel-border); }
@@ -3308,6 +3368,34 @@ input.custom-input:focus {
   line-height: 1.5;
   margin-bottom: 14px;
 }
+/* Session allowance: the number, then the same number as a bar. */
+.plan-usage { margin-bottom: 10px; }
+.plan-usage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-0);
+  margin-bottom: 8px;
+}
+.plan-usage-reset { font-size: 12px; color: var(--text-1); }
+.plan-usage-bar {
+  height: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--panel-border);
+  overflow: hidden;
+}
+.plan-usage-bar span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width var(--transition);
+}
+.plan-session-note { display: block; margin: 0 0 14px; max-width: 62ch; line-height: 1.55; }
+
 .settings-signout { margin-top: 6px; }
 /* A button that reads as a sentence, not an action. The data export exists
    because the GDPR says it must; giving it a real button would advertise it

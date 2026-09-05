@@ -33,10 +33,8 @@
     $("profile-plan-badge").textContent = tier.charAt(0).toUpperCase() + tier.slice(1);
     $("profile-plan-badge").dataset.tier = tier;
 
-    if (status && typeof status.sessionsUsed === "number") {
-      const limit = status.sessionsLimit == null ? "∞" : status.sessionsLimit;
-      $("profile-sessions").textContent = `${status.sessionsUsed} / ${limit} sessions this month`;
-    }
+    // The session count used to sit here as well. One page, one authoritative
+    // number: the Plan section owns it now, with the bar and the definition.
   }
 
   /* ---- Progress / points ---- */
@@ -137,6 +135,15 @@
     $("plan-current").textContent = label;
     if (tier === "power") { $("plan-pro-btn").style.display = "none"; $("plan-power-btn").style.display = "none"; }
     else if (tier === "pro") { $("plan-pro-btn").style.display = "none"; }
+
+    // What's left of the month's allowance. Unlimited plans have no bar to draw.
+    const limit = status && status.sessionsLimit;
+    if (limit != null) {
+      const used = Math.max(0, Number(status.sessionsUsed) || 0);
+      $("plan-usage-count").textContent = `${used} of ${limit} sessions used this month`;
+      $("plan-usage-fill").style.width = `${Math.min(100, (used / limit) * 100)}%`;
+      $("plan-usage").style.display = "";
+    }
 
     // Anyone who has ever paid gets the portal — cancelling has to stay reachable
     // after a downgrade, not just while the subscription is live.
