@@ -103,9 +103,8 @@ revisit if abuse appears.
       Icons (`favicon.svg`, a two-size `.ico`, `apple-touch-icon.png`,
       `icon-512.png`, `site.webmanifest`) and the 1200×630 `og-image.png`
       were rendered from the brand mark and the landing headline.
-- [ ] **Transactional email** (Resend/Postmark): welcome, payment failed,
-      subscription cancelled, free tier nearly used. There is no way to email
-      users today — the single biggest missing system after legal.
+- [ ] **Transactional email** — *deferred by decision, 5 Sep 2026. See
+      "Last steps before launch" at the bottom of this file.*
 - [ ] Analytics; track first-call completion rate as the leading indicator.
 - [x] **Visible session counter + a plain-English definition of a session.**
       A meter in the app bar on every signed-in page, from `/api/user/status`
@@ -163,6 +162,32 @@ revisit if abuse appears.
 - [ ] Accessibility pass on the custom buttons, dropdown menu and live chat.
 - [ ] Magic-link email sign-in as a second auth method (Google is the only way
       in today, and it stands between you and 100% of revenue).
+
+---
+
+## Last steps before launch
+
+Things deliberately deferred, to be done immediately before going public
+rather than now. Each is flagged here so it cannot quietly fall off.
+
+- [ ] **Transactional email.** *Deferred 5 Sep 2026 by decision — build it as
+      one of the last steps.* Provider undecided (Resend is the cheap default;
+      Postmark if deliverability of the payment-failed mail is worth paying
+      for). Whichever it is, gate it on the API key the way Sentry is gated on
+      `SENTRY_DSN`, so local dev stays untouched.
+
+      Four messages, in order of what it costs to not have them:
+      **payment failed** (Stripe retries for weeks and then silently drops the
+      user to free — today they find out by losing access), **subscription
+      cancelled** (a receipt for an action that takes money off you, and the
+      one users complain loudest about not getting), **welcome** (the first
+      thing a new account sees, and where the "what is a session" explanation
+      belongs), **free tier nearly used** (the only upgrade prompt that
+      arrives when they are not already blocked).
+
+      Prerequisite that takes real-world time: a **verified sending domain**
+      with SPF/DKIM records. Start that before you need it — DNS propagation
+      and provider review are not instant.
 
 ---
 
