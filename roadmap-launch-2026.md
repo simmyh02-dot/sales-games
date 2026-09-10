@@ -205,12 +205,13 @@ revisit if abuse appears.
       allow inline styles regardless because the client sets `style=""`
       everywhere. Scripts keep the nonce, which is where it counts.
 
-      **Next step, outside the code:** let reports accumulate for a few days,
-      confirm the only entries are ones you understand, then set
-      `CSP_ENFORCE=1` in Vercel and re-test Google sign-in immediately.
-      Remaining known gap: `script-src-attr 'unsafe-inline'`, needed by the
-      `onclick=` handlers on the pricing and Settings buttons. Rewriting those
-      as listeners is what removes it.
+      **`CSP_ENFORCE=1` flipped on 10 Sep 2026** via `vercel.json`'s `env`
+      block, after 14 days of zero CSP hits in both Sentry and Vercel logs.
+      Enforcement is live — re-test Google sign-in after every deploy that
+      touches `script-src`/`style-src`. Remaining known gap:
+      `script-src-attr 'unsafe-inline'`, needed by the `onclick=` handlers on
+      the pricing and Settings buttons. Rewriting those as listeners is what
+      removes it.
 - [ ] One real Neon restore into a scratch branch, steps written down.
 - [ ] `token_version` column for session revocation.
 - [ ] Accessibility pass on the custom buttons, dropdown menu and live chat.
