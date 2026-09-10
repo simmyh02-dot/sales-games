@@ -154,11 +154,11 @@ app.use(helmet({
       "default-src": ["'self'"],
       // d3 backs the skill tree; GSI is the sign-in widget.
       "script-src": ["'self'", nonce, GSI, "https://d3js.org"],
-      // The pricing and Settings buttons still use onclick attributes, which
-      // no nonce can cover. script-src-attr is scoped to event-handler
-      // attributes alone, so the exposure stops there — rewriting those as
-      // listeners is what removes it.
-      "script-src-attr": ["'unsafe-inline'"],
+      // 'none': the pricing, Settings and sign-out buttons were rewritten from
+      // onclick attributes to delegated listeners, so nothing needs inline
+      // event handlers any more. An injected onclick= is now inert rather than
+      // merely unlikely.
+      "script-src-attr": ["'none'"],
       // Styles get 'unsafe-inline' and no nonce, which is a deliberate
       // downgrade from the original plan. The GSI library injects a ~10 KB
       // <style> element of its own at runtime and does not carry our nonce

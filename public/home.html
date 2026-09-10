@@ -166,13 +166,13 @@
           <div class="pricing-tier">Pro</div>
           <div class="pricing-amount">$15<span>/mo</span></div>
           <div class="pricing-sessions">60 sessions / month</div>
-          <button class="btn btn-primary" onclick="SCG_PRICING.checkout('pro')">Upgrade to Pro</button>
+          <button class="btn btn-primary" data-pricing="checkout" data-tier="pro">Upgrade to Pro</button>
         </div>
         <div class="pricing-card">
           <div class="pricing-tier">Power</div>
           <div class="pricing-amount">$29<span>/mo</span></div>
           <div class="pricing-sessions">Unlimited sessions</div>
-          <button class="btn btn-secondary" onclick="SCG_PRICING.checkout('power')">Go Power</button>
+          <button class="btn btn-secondary" data-pricing="checkout" data-tier="power">Go Power</button>
         </div>
       </div>
       <p class="pricing-session-note">
@@ -180,7 +180,7 @@
         or one pattern round. A rep you leave before it&rsquo;s graded doesn&rsquo;t count,
         and the allowance resets on the 1st.
       </p>
-      <button class="pricing-close" onclick="SCG_PRICING.hideModal()">Maybe later</button>
+      <button class="pricing-close" data-pricing="close">Maybe later</button>
     </div>
   </div>
 

@@ -112,7 +112,7 @@ const SCG_AUTH = (() => {
             : `<div class="auth-avatar-initials">${escapeHtml((user.name || "?").charAt(0).toUpperCase())}</div>`
           }
           <span class="auth-name">${escapeHtml(user.name || user.email || "You")}</span>
-          <button class="auth-signout-btn" onclick="SCG_AUTH.signOut()">Sign out</button>
+          <button class="auth-signout-btn" data-auth="signout">Sign out</button>
         </div>
       `;
     } else {
@@ -171,6 +171,13 @@ const SCG_AUTH = (() => {
   }
 
   document.addEventListener("DOMContentLoaded", init);
+
+  // Delegated because the widget is re-rendered on every auth change, and
+  // because an onclick= attribute is what kept `script-src-attr 'unsafe-inline'`
+  // in the CSP.
+  document.addEventListener("click", (e) => {
+    if (e.target.closest('[data-auth="signout"]')) signOut();
+  });
 
   return { getToken, getUser, authFetch, signOut, replaceToken, onGoogleCredential, validateSession };
 })();

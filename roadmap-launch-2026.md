@@ -208,10 +208,17 @@ revisit if abuse appears.
       **`CSP_ENFORCE=1` flipped on 10 Sep 2026** via `vercel.json`'s `env`
       block, after 14 days of zero CSP hits in both Sentry and Vercel logs.
       Enforcement is live — re-test Google sign-in after every deploy that
-      touches `script-src`/`style-src`. Remaining known gap:
-      `script-src-attr 'unsafe-inline'`, needed by the `onclick=` handlers on
-      the pricing and Settings buttons. Rewriting those as listeners is what
-      removes it.
+      touches `script-src`/`style-src`.
+
+      **`script-src-attr` is now `'none'` (10 Sep 2026).** All thirteen
+      `onclick=` attributes — pricing cards, Settings plan buttons, the modal
+      close and the sign-out button — became two delegated listeners, one in
+      `pricing.js` keyed on `data-pricing`, one in `auth.js` on `data-auth`.
+      Delegation was the right shape anyway: the pricing modal and the auth
+      widget are both injected after load, which is exactly what an inline
+      handler was papering over. An injected `onclick=` is now inert rather
+      than merely unlikely. `style-src-attr` still needs `'unsafe-inline'` and
+      always will — the client sets `style=""` in too many places to unpick.
 - [ ] One real Neon restore into a scratch branch, steps written down.
 - [x] **`token_version` column for session revocation.** *Done 10 Sep 2026.*
       Tokens last 30 days and nothing could shorten that — one copied off a
