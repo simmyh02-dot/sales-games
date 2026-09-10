@@ -304,6 +304,13 @@ const MIGRATIONS_DIR = path.join(__dirname, "migrations");
 // there second finds the work already recorded and does nothing.
 const MIGRATION_LOCK_ID = 4113077;
 
+// What the runner last saw, reported by /api/health. "Did the migration
+// actually land?" was unanswerable from outside the box, and the failure it
+// hides is quiet by nature: a route reading a table that is not there yet
+// looks exactly like a feature that is switched off. Null means this instance
+// has not finished its run.
+let schemaState = null;
+
 async function runMigrations(pool) {
   let files;
   try {
@@ -332,6 +339,7 @@ async function runMigrations(pool) {
       // runner whose files never made it into the bundle look identical in a
       // log, and that is the one failure worth being able to rule out.
       if (!pending.length) {
+        schemaState = { applied: done.size, latest: files[files.length - 1], pending: 0 };
         console.log(`Schema up to date (${done.size} migration(s) recorded).`);
         return;
       }
@@ -348,6 +356,8 @@ async function runMigrations(pool) {
             [file, Date.now()]
           );
           await client.query("COMMIT");
+          done.add(file);
+          schemaState = { applied: done.size, latest: file, pending: files.length - done.size };
           console.log("Migration applied:", file);
         } catch (e) {
           await client.query("ROLLBACK").catch(() => {});
@@ -3346,25 +3356,41 @@ const FEEDBACK_STATE_OFF = {
 
 app.get("/api/feedback/state", authMiddleware, async (req, res) => {
   if (!db) return res.json(FEEDBACK_STATE_OFF);
-  try {
-    const [promptEnabled, letterboxEnabled, reps, state] = await Promise.all([
-      featureEnabled(FEEDBACK_SETTINGS.prompt),
-      featureEnabled(FEEDBACK_SETTINGS.letterbox),
-      repCount(req.userId),
-      promptStateFor(req.userId),
-    ]);
-    res.json({
-      promptEnabled,
-      letterboxEnabled,
-      shouldPrompt: promptEnabled && promptIsDue(state, reps),
-      reps,
-    });
-  } catch (err) {
-    console.error("feedback/state error:", err.message);
-    // A feedback check must never break the page that asked. Staying quiet is
-    // the safe answer, so this reports "nothing to show" rather than an error.
-    res.json(FEEDBACK_STATE_OFF);
+  // This route reads the two newest tables in the schema, and the migration
+  // runner is deliberately not awaited at boot. Sign-in used to be the only
+  // route that waited for it — on the reasoning that everything else either
+  // tolerates a missing column or is unreachable without a session. This one
+  // is reachable with a session someone already has and does not tolerate a
+  // missing table, so an already-signed-in visitor could land on an instance
+  // whose migration had not finished. Worse on Vercel, where un-awaited work
+  // is frozen when the instance goes idle: nobody signing in means nothing
+  // ever waits, and the migration can stay unfinished indefinitely. Awaiting
+  // here is what lets it complete, and costs nothing once it has.
+  await migrationsSettled;
+
+  // The two switches answer for themselves: featureEnabled falls back to "on"
+  // when it cannot read the table, because a feature ships on.
+  const [promptEnabled, letterboxEnabled] = await Promise.all([
+    featureEnabled(FEEDBACK_SETTINGS.prompt),
+    featureEnabled(FEEDBACK_SETTINGS.letterbox),
+  ]);
+
+  // The letterbox needs none of the pop-up's bookkeeping, so it must not
+  // inherit its failures. Two independent channels sharing one catch is what
+  // turned "feedback_prompt_state is not there yet" into "the box in Settings
+  // does not exist" — a silence with no way to tell it from being switched off.
+  let shouldPrompt = false;
+  let reps = 0;
+  if (promptEnabled) {
+    try {
+      reps = await repCount(req.userId);
+      shouldPrompt = promptIsDue(await promptStateFor(req.userId), reps);
+    } catch (err) {
+      console.error("feedback/state: prompt check failed:", err.message);
+    }
   }
+
+  res.json({ promptEnabled, letterboxEnabled, shouldPrompt, reps });
 });
 
 // Recorded when the pop-up is actually on screen, not when the check says it
@@ -3372,6 +3398,7 @@ app.get("/api/feedback/state", authMiddleware, async (req, res) => {
 // one of the three asks without anyone ever seeing it.
 app.post("/api/feedback/prompt/shown", authMiddleware, async (req, res) => {
   if (!db) return res.json({ ok: true, dbDisabled: true });
+  await migrationsSettled;   // writes a table migration 004 creates
   try {
     const reps = await repCount(req.userId);
     await db.query(`
@@ -3391,6 +3418,7 @@ app.post("/api/feedback/prompt/shown", authMiddleware, async (req, res) => {
 
 app.post("/api/feedback/prompt/dismiss", authMiddleware, async (req, res) => {
   if (!db) return res.json({ ok: true, dbDisabled: true });
+  await migrationsSettled;
   try {
     await db.query(`
       INSERT INTO feedback_prompt_state (user_id, dismissals, updated_at)
@@ -3408,6 +3436,7 @@ app.post("/api/feedback/prompt/dismiss", authMiddleware, async (req, res) => {
 
 app.post("/api/feedback", feedbackLimiter, authMiddleware, async (req, res) => {
   if (!db) return res.status(503).json({ error: "Database not configured" });
+  await migrationsSettled;
   const body = req.body || {};
   const kind = body.kind === "letter" ? "letter" : "rep";
 
@@ -3582,6 +3611,7 @@ const FEEDBACK_PAGE_SIZE = 200;
 
 app.get("/api/admin/feedback", authMiddleware, adminOnly, async (req, res) => {
   const includeArchived = req.query.archived === "1";
+  await migrationsSettled;
   try {
     const [posts, byRating, totals, prompts, settings] = await Promise.all([
       // The author is joined rather than copied onto the row, so deleting an
@@ -3690,6 +3720,7 @@ app.patch("/api/admin/feedback/:id", authMiddleware, adminOnly, async (req, res)
 });
 
 app.put("/api/admin/settings", authMiddleware, adminOnly, async (req, res) => {
+  await migrationsSettled;
   const key = req.body && req.body.key;
   // An allowlist, not a free-form key/value store. This route is one typo in
   // a client away from writing settings nothing reads.
@@ -3736,6 +3767,10 @@ app.get("/api/health", async (req, res) => {
     // from outside: a missing DSN silently disables the SDK and looks
     // identical to a healthy deploy with no errors.
     errorReportingConfigured: !!process.env.SENTRY_DSN,
+    // Which migrations this instance has confirmed applied. Null while the
+    // runner is still going (or if it never got to finish), which is itself
+    // the answer when a table-backed feature is mysteriously absent.
+    schema: schemaState,
     googleClientId: process.env.GOOGLE_CLIENT_ID || null,
     model: SONNET,
   });
