@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "env": {
+    "CSP_ENFORCE": "1"
+  },
   "builds": [
     {
       "src": "server.js",
