@@ -304,22 +304,25 @@ const MIGRATIONS_DIR = path.join(__dirname, "migrations");
 // there second finds the work already recorded and does nothing.
 const MIGRATION_LOCK_ID = 4113077;
 
-// What the runner last saw, reported by /api/health. "Did the migration
-// actually land?" was unanswerable from outside the box, and the failure it
-// hides is quiet by nature: a route reading a table that is not there yet
-// looks exactly like a feature that is switched off. Null means this instance
-// has not finished its run.
-let schemaState = null;
+// The migration files that made it into this bundle, read once at boot. This
+// list is half of the answer to "did the migration actually land?" — the other
+// half is what the database has recorded, and /api/health reports both. An
+// instance-local "did my own run finish" flag cannot answer it: the runner is
+// fire-and-forget, so it is still going when the request that asks returns,
+// and the honest answer is almost always "not yet" no matter how healthy the
+// deploy is. It also catches a serverless build shipping without migrations/
+// at all, which includeFiles makes easy to get wrong and impossible to see.
+const MIGRATION_FILES = (() => {
+  try { return fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort(); }
+  catch { return []; }
+})();
 
 async function runMigrations(pool) {
-  let files;
-  try {
-    files = fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort();
-  } catch {
-    console.error("Migrations directory missing — schema not verified.");
+  const files = MIGRATION_FILES;
+  if (!files.length) {
+    console.error("No migration files in this bundle — schema not verified.");
     return;
   }
-  if (!files.length) return;
 
   const client = await pool.connect();
   try {
@@ -329,6 +332,12 @@ async function runMigrations(pool) {
         applied_at BIGINT
       );
     `);
+    // Bound the wait for the lock. A serverless instance can be frozen between
+    // taking it and reaching the unlock in the finally below, and every later
+    // run would then queue on it with no timeout of its own — one interrupted
+    // boot stalling the schema indefinitely. A run that gives up here is
+    // retried by the next boot, which is the cheap outcome.
+    await client.query("SET lock_timeout = '8s'");
     await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_ID]);
     try {
       const done = new Set(
@@ -339,7 +348,6 @@ async function runMigrations(pool) {
       // runner whose files never made it into the bundle look identical in a
       // log, and that is the one failure worth being able to rule out.
       if (!pending.length) {
-        schemaState = { applied: done.size, latest: files[files.length - 1], pending: 0 };
         console.log(`Schema up to date (${done.size} migration(s) recorded).`);
         return;
       }
@@ -356,8 +364,6 @@ async function runMigrations(pool) {
             [file, Date.now()]
           );
           await client.query("COMMIT");
-          done.add(file);
-          schemaState = { applied: done.size, latest: file, pending: files.length - done.size };
           console.log("Migration applied:", file);
         } catch (e) {
           await client.query("ROLLBACK").catch(() => {});
@@ -378,6 +384,21 @@ async function runMigrations(pool) {
 // second between boot and the last migration would fail on a column that is
 // about to exist — and sign-in is the only door into the product.
 let migrationsSettled = Promise.resolve();
+
+// Wait for the schema, but never longer than this. Awaiting the runner from a
+// request is what lets an interrupted run finish — a serverless instance is
+// frozen when it goes idle, so fire-and-forget work only makes progress while
+// some request is holding the instance open. The bound is the other half: a
+// run that is stuck must not take the request with it. Four seconds covers a
+// normal run against a waking Neon compute; past that the caller proceeds and
+// fails honestly rather than hanging.
+const SCHEMA_WAIT_MS = 4000;
+function schemaReady() {
+  return Promise.race([
+    migrationsSettled,
+    new Promise((resolve) => setTimeout(resolve, SCHEMA_WAIT_MS)),
+  ]);
+}
 
 if (process.env.DATABASE_URL) {
   db = new Pool({
@@ -673,7 +694,7 @@ async function loadCaches() {
     try {
       // The table is a migration's now, so wait for the runner rather than
       // querying a table it may still be creating on a brand-new database.
-      await migrationsSettled;
+      await schemaReady();
       const objRows = await db.query(
         `SELECT payload FROM generated_cache WHERE kind = 'objection' ORDER BY id DESC LIMIT $1`,
         [CACHE_LOAD_LIMIT]
@@ -1056,7 +1077,7 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
 
     // On a cold start this is already settled; on the very first boot after a
     // schema change it is the difference between a sign-in and a 401.
-    await migrationsSettled;
+    await schemaReady();
 
     // RETURNING covers both branches, so a returning user's current
     // token_version comes back without a second round trip.
@@ -3366,7 +3387,7 @@ app.get("/api/feedback/state", authMiddleware, async (req, res) => {
   // is frozen when the instance goes idle: nobody signing in means nothing
   // ever waits, and the migration can stay unfinished indefinitely. Awaiting
   // here is what lets it complete, and costs nothing once it has.
-  await migrationsSettled;
+  await schemaReady();
 
   // The two switches answer for themselves: featureEnabled falls back to "on"
   // when it cannot read the table, because a feature ships on.
@@ -3398,7 +3419,7 @@ app.get("/api/feedback/state", authMiddleware, async (req, res) => {
 // one of the three asks without anyone ever seeing it.
 app.post("/api/feedback/prompt/shown", authMiddleware, async (req, res) => {
   if (!db) return res.json({ ok: true, dbDisabled: true });
-  await migrationsSettled;   // writes a table migration 004 creates
+  await schemaReady();   // writes a table migration 004 creates
   try {
     const reps = await repCount(req.userId);
     await db.query(`
@@ -3418,7 +3439,7 @@ app.post("/api/feedback/prompt/shown", authMiddleware, async (req, res) => {
 
 app.post("/api/feedback/prompt/dismiss", authMiddleware, async (req, res) => {
   if (!db) return res.json({ ok: true, dbDisabled: true });
-  await migrationsSettled;
+  await schemaReady();
   try {
     await db.query(`
       INSERT INTO feedback_prompt_state (user_id, dismissals, updated_at)
@@ -3436,7 +3457,7 @@ app.post("/api/feedback/prompt/dismiss", authMiddleware, async (req, res) => {
 
 app.post("/api/feedback", feedbackLimiter, authMiddleware, async (req, res) => {
   if (!db) return res.status(503).json({ error: "Database not configured" });
-  await migrationsSettled;
+  await schemaReady();
   const body = req.body || {};
   const kind = body.kind === "letter" ? "letter" : "rep";
 
@@ -3611,7 +3632,7 @@ const FEEDBACK_PAGE_SIZE = 200;
 
 app.get("/api/admin/feedback", authMiddleware, adminOnly, async (req, res) => {
   const includeArchived = req.query.archived === "1";
-  await migrationsSettled;
+  await schemaReady();
   try {
     const [posts, byRating, totals, prompts, settings] = await Promise.all([
       // The author is joined rather than copied onto the row, so deleting an
@@ -3720,7 +3741,7 @@ app.patch("/api/admin/feedback/:id", authMiddleware, adminOnly, async (req, res)
 });
 
 app.put("/api/admin/settings", authMiddleware, adminOnly, async (req, res) => {
-  await migrationsSettled;
+  await schemaReady();
   const key = req.body && req.body.key;
   // An allowlist, not a free-form key/value store. This route is one typo in
   // a client away from writing settings nothing reads.
@@ -3743,6 +3764,7 @@ app.put("/api/admin/settings", authMiddleware, adminOnly, async (req, res) => {
 
 app.get("/api/health", async (req, res) => {
   let dbOk = null;
+  let schema = MIGRATION_FILES.length ? { bundled: MIGRATION_FILES.length, applied: null } : { bundled: 0, error: "migrations/ missing from this bundle" };
   if (db) {
     try {
       // Bounded: a hung connection must not hold the monitor open until its
@@ -3752,6 +3774,27 @@ app.get("/api/health", async (req, res) => {
         new Promise((_, reject) => setTimeout(() => reject(new Error("db ping timed out")), 3000)),
       ]);
       dbOk = true;
+      // What the database has actually recorded, next to what this bundle
+      // actually shipped. Those two numbers together are the whole answer to
+      // "did the migration land?", and they are the same answer from every
+      // instance — unlike anything this process could remember about its own
+      // boot. A feature backed by a table that is not there yet looks exactly
+      // like a feature someone switched off, so this is the difference between
+      // diagnosing that in one request and guessing at it.
+      try {
+        const r = await db.query(
+          "SELECT COUNT(*)::int AS applied, MAX(version) AS latest FROM schema_migrations"
+        );
+        schema = {
+          bundled: MIGRATION_FILES.length,
+          applied: r.rows[0].applied,
+          latest:  r.rows[0].latest,
+        };
+      } catch (err) {
+        // schema_migrations itself missing is worth saying out loud rather
+        // than reporting as a null that reads like "still working on it".
+        schema = { bundled: MIGRATION_FILES.length, applied: null, error: err.message.slice(0, 100) };
+      }
     } catch (err) {
       dbOk = false;
       console.error("health: database unreachable:", err.message);
@@ -3767,10 +3810,7 @@ app.get("/api/health", async (req, res) => {
     // from outside: a missing DSN silently disables the SDK and looks
     // identical to a healthy deploy with no errors.
     errorReportingConfigured: !!process.env.SENTRY_DSN,
-    // Which migrations this instance has confirmed applied. Null while the
-    // runner is still going (or if it never got to finish), which is itself
-    // the answer when a table-backed feature is mysteriously absent.
-    schema: schemaState,
+    schema,
     googleClientId: process.env.GOOGLE_CLIENT_ID || null,
     model: SONNET,
   });
