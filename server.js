@@ -358,7 +358,36 @@ async function runMigrations(pool) {
 let migrationsSettled = Promise.resolve();
 
 if (process.env.DATABASE_URL) {
-  db = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  db = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+    // Neon suspends an idle compute and terminates its connections when it
+    // does. Dropping our own idle connections first means we are never
+    // holding one at the moment it gets killed — which is the event that
+    // used to take the process down. Comfortably under Neon's 5-minute
+    // default so we always let go first.
+    idleTimeoutMillis: 30_000,
+    // A suspended compute takes a few seconds to wake. Wait for it, but not
+    // forever: the default of 0 means a request can hang indefinitely.
+    connectionTimeoutMillis: 10_000,
+    // One Vercel instance serves few concurrent requests; the default of 10
+    // per instance multiplies badly across instances against Neon's limit.
+    max: 5,
+  });
+
+  // node-postgres emits 'error' on the POOL when an idle client's connection
+  // breaks — and an unhandled 'error' event on an EventEmitter takes the whole
+  // process down. Neon's autosuspend does exactly that, sending 57P01
+  // ("terminating connection due to administrator command"), so without this
+  // listener a routine idle-scaledown crashed the instance and every error
+  // after it was really just the cold start that followed.
+  //
+  // There is nothing to do about it beyond not dying: the client is already
+  // discarded, and the next query checks out a fresh one.
+  db.on("error", (err) => {
+    console.error("Idle database client error (connection dropped):", err.message);
+  });
+
   // Not awaited at boot: startup must not block on it, and every query path
   // already handles a database that isn't answering.
   migrationsSettled = runMigrations(db).catch((e) => console.error("Migration error:", e));
@@ -613,20 +642,16 @@ const recentlyServedObjections = [];
 const recentlyServedPatterns   = [];
 const RECENT_WINDOW = 5;
 
-if (db) {
-  db.query(`
-    CREATE TABLE IF NOT EXISTS generated_cache (
-      id SERIAL PRIMARY KEY,
-      kind TEXT,
-      payload JSONB,
-      created_at BIGINT
-    );
-  `).catch((e) => console.error("DB init error (generated_cache):", e.message));
-}
+// generated_cache is created by 003_generated_cache.sql. It used to be a
+// CREATE TABLE IF NOT EXISTS fired here on every boot, which opened a second
+// connection to do nothing and raced the migration runner for a waking compute.
 
 async function loadCaches() {
   if (db) {
     try {
+      // The table is a migration's now, so wait for the runner rather than
+      // querying a table it may still be creating on a brand-new database.
+      await migrationsSettled;
       const objRows = await db.query(
         `SELECT payload FROM generated_cache WHERE kind = 'objection' ORDER BY id DESC LIMIT $1`,
         [CACHE_LOAD_LIMIT]

@@ -219,6 +219,28 @@ revisit if abuse appears.
       handler was papering over. An injected `onclick=` is now inert rather
       than merely unlikely. `style-src-attr` still needs `'unsafe-inline'` and
       always will — the client sets `style=""` in too many places to unpick.
+- [x] **Stop Neon's autosuspend from crashing the server.** *Unplanned, found
+      10 Sep 2026 while reading Sentry.* The top issue was "terminating
+      connection due to administrator command", marked **Unhandled**, 19 events
+      in 5 days. That is Postgres `57P01` — what Neon sends when it suspends an
+      idle compute — arriving on an **idle pooled client**. node-postgres emits
+      that on the Pool, and an unhandled `'error'` event ends the process, so a
+      routine idle scaledown was killing the instance.
+
+      Every other database error in Sentry was downstream of that: the cold
+      start that followed fired `runMigrations`, the `generated_cache` DDL and
+      the cache loader at a compute that was still waking, which is what
+      "Client network socket disconnected before secure TLS connection was
+      established", "read ECONNRESET" and "Authentication timed out" are. The
+      `/api/health` failure the uptime monitor caught was the same window.
+
+      Fixed in three parts: a `db.on("error")` listener (the actual bug — there
+      is nothing to do but not die, the client is already discarded);
+      `idleTimeoutMillis: 30s` so we release idle connections well before
+      Neon's 5-minute suspend reaches them, plus a bounded `max` and a real
+      `connectionTimeoutMillis` instead of the default infinite wait; and the
+      `generated_cache` DDL moved into `003_generated_cache.sql` so a cold
+      start no longer opens a connection to create a table that exists.
 - [ ] One real Neon restore into a scratch branch, steps written down.
 - [x] **`token_version` column for session revocation.** *Done 10 Sep 2026.*
       Tokens last 30 days and nothing could shorten that — one copied off a
