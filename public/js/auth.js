@@ -27,6 +27,13 @@ const SCG_AUTH = (() => {
     localStorage.removeItem(USER_KEY);
   }
 
+  // "Sign out everywhere" invalidates the token this tab is holding and hands
+  // back a replacement, so the identity stays but the credential changes.
+  function replaceToken(token) {
+    _token = token;
+    localStorage.setItem(TOKEN_KEY, token);
+  }
+
   // Authenticated fetch — adds Bearer token
   async function authFetch(url, opts = {}) {
     const token = getToken();
@@ -165,5 +172,5 @@ const SCG_AUTH = (() => {
 
   document.addEventListener("DOMContentLoaded", init);
 
-  return { getToken, getUser, authFetch, signOut, onGoogleCredential, validateSession };
+  return { getToken, getUser, authFetch, signOut, replaceToken, onGoogleCredential, validateSession };
 })();

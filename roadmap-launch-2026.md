@@ -213,7 +213,20 @@ revisit if abuse appears.
       the pricing and Settings buttons. Rewriting those as listeners is what
       removes it.
 - [ ] One real Neon restore into a scratch branch, steps written down.
-- [ ] `token_version` column for session revocation.
+- [x] **`token_version` column for session revocation.** *Done 10 Sep 2026.*
+      Tokens last 30 days and nothing could shorten that — one copied off a
+      shared laptop stayed valid for a month. Every token now carries a `tv`
+      claim; `authMiddleware` compares it to `users.token_version` and 401s on a
+      mismatch. That costs one primary-key lookup per authenticated request and
+      **fails open on a database error**, the same call `checkSessionLimit`
+      makes: a Neon blip must not sign out everyone holding a good token.
+      `/api/auth/me` folds the comparison into the query it already runs, which
+      is what makes `auth-guard.js` bounce a revoked session on the next page
+      load. `POST /api/user/sign-out-everywhere` bumps the column and returns a
+      replacement token, so the device asking is the one device that stays —
+      wired to "Sign out on all other devices" in Settings → Profile.
+      Tokens signed before this shipped carry no `tv` and read as 0, matching
+      the column default, so the deploy signed nobody out.
 - [ ] Accessibility pass on the custom buttons, dropdown menu and live chat.
 - [ ] Magic-link email sign-in as a second auth method (Google is the only way
       in today, and it stands between you and 100% of revenue).

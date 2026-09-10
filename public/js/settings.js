@@ -192,6 +192,27 @@
     }
   }
 
+  async function signOutEverywhere(btn) {
+    btn.disabled = true;
+    setDataMsg("signout-everywhere-msg", "Ending your other sessions…");
+    try {
+      const res = await authFetch("/api/user/sign-out-everywhere", { method: "POST" });
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => ({})) : {};
+        throw new Error(body.error || "Could not sign out your other devices.");
+      }
+      // The token this tab is holding was just invalidated along with all the
+      // others. Swap in the replacement before the next request goes out.
+      const { token } = await res.json();
+      if (typeof SCG_AUTH !== "undefined") SCG_AUTH.replaceToken(token);
+      setDataMsg("signout-everywhere-msg", "Done. Every other device has been signed out.");
+    } catch (err) {
+      setDataMsg("signout-everywhere-msg", err.message, true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   async function deleteAccount(btn) {
     if (($("delete-confirm-input").value || "").trim().toUpperCase() !== "DELETE") {
       return setDataMsg("delete-msg", "Type DELETE to confirm.", true);
@@ -216,6 +237,7 @@
   }
 
   function wireDataSection() {
+    $("signout-everywhere-btn").addEventListener("click", (e) => signOutEverywhere(e.currentTarget));
     $("data-export-btn").addEventListener("click", (e) => exportData(e.currentTarget));
     $("delete-open-btn").addEventListener("click", () => {
       // Fold the consequences back open at the moment they matter. Collapsed is

@@ -367,8 +367,10 @@ const googleClient = process.env.GOOGLE_CLIENT_ID
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 
-function signToken(userId) {
-  return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: "30d" });
+// `tv` is the account's token_version at signing time. Bumping the column
+// invalidates every token issued before the bump — see 002_token_version.sql.
+function signToken(userId, tokenVersion = 0) {
+  return jwt.sign({ sub: userId, tv: tokenVersion }, JWT_SECRET, { expiresIn: "30d" });
 }
 
 function verifyToken(token) {
@@ -379,12 +381,37 @@ function verifyToken(token) {
   }
 }
 
-function authMiddleware(req, res, next) {
+// Tokens signed before token_version existed carry no `tv`, and the column
+// defaults to 0, so the two agree and nobody is signed out by the upgrade.
+function tokenVersionOf(payload) {
+  return typeof payload.tv === "number" ? payload.tv : 0;
+}
+
+// A revoked token is still cryptographically valid, so this costs one
+// primary-key lookup per authenticated request. It fails OPEN on a database
+// error, matching checkSessionLimit: a Neon blip should not sign out everyone
+// holding a legitimate token.
+async function tokenIsRevoked(payload) {
+  if (!db) return false;
+  try {
+    const r = await db.query("SELECT token_version FROM users WHERE id=$1", [payload.sub]);
+    if (!r.rows.length) return false;
+    return r.rows[0].token_version !== tokenVersionOf(payload);
+  } catch (err) {
+    console.error("token_version check failed:", err.message);
+    return false;
+  }
+}
+
+async function authMiddleware(req, res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: "Not authenticated" });
   const payload = verifyToken(token);
   if (!payload) return res.status(401).json({ error: "Invalid or expired token" });
+  if (await tokenIsRevoked(payload)) {
+    return res.status(401).json({ error: "Session ended. Please sign in again." });
+  }
   req.userId = payload.sub;
   // Ties any error raised while serving this request to an account id, so a
   // report is actionable ("this user, this call") without carrying an email
@@ -972,14 +999,17 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
     const picture  = payload.picture;
     const userId   = `g_${googleId}`;
 
-    await db.query(
+    // RETURNING covers both branches, so a returning user's current
+    // token_version comes back without a second round trip.
+    const saved = await db.query(
       `INSERT INTO users (id, google_id, email, name, picture, created_at)
        VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (google_id) DO UPDATE SET name=$4, picture=$5`,
+       ON CONFLICT (google_id) DO UPDATE SET name=$4, picture=$5
+       RETURNING token_version`,
       [userId, googleId, email, name, picture, Date.now()]
     );
 
-    const token = signToken(userId);
+    const token = signToken(userId, saved.rows[0].token_version);
     res.json({ token, user: { id: userId, name, email, picture } });
   } catch (err) {
     console.error("Google auth error:", err.message);
@@ -998,9 +1028,19 @@ app.get("/api/auth/me", async (req, res) => {
   if (!db) return res.json({ id: payload.sub, name: "User", email: "", picture: "" });
 
   try {
-    const result = await db.query("SELECT id, name, email, picture, language FROM users WHERE id=$1", [payload.sub]);
+    const result = await db.query(
+      "SELECT id, name, email, picture, language, token_version FROM users WHERE id=$1",
+      [payload.sub]
+    );
     if (!result.rows.length) return res.status(404).json({ error: "User not found" });
-    res.json(result.rows[0]);
+    // This route is what auth-guard.js polls on every app page load, so it is
+    // where a revoked session actually bounces someone out. The comparison
+    // rides along on the query already being made.
+    const { token_version, ...user } = result.rows[0];
+    if (token_version !== tokenVersionOf(payload)) {
+      return res.status(401).json({ error: "Session ended. Please sign in again." });
+    }
+    res.json(user);
   } catch (err) {
     console.error("Auth me error:", err.message);
     res.status(500).json({ error: "Database error" });
@@ -2992,6 +3032,24 @@ app.put("/api/user/language", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("user/language error:", err.message);
     res.status(500).json({ error: "Failed to save language." });
+  }
+});
+
+// Kill every other session on the account. Bumping token_version invalidates
+// every token ever signed under the old one; the caller gets a fresh token in
+// the response so the device asking to do this is the one device that stays.
+app.post("/api/user/sign-out-everywhere", authMiddleware, async (req, res) => {
+  if (!db) return res.status(503).json({ error: "Database not configured" });
+  try {
+    const r = await db.query(
+      "UPDATE users SET token_version = token_version + 1 WHERE id=$1 RETURNING token_version",
+      [req.userId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "User not found" });
+    res.json({ ok: true, token: signToken(req.userId, r.rows[0].token_version) });
+  } catch (err) {
+    console.error("user/sign-out-everywhere error:", err.message);
+    res.status(500).json({ error: "Could not sign out your other devices." });
   }
 });
 
