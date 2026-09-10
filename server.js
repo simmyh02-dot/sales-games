@@ -350,11 +350,18 @@ async function runMigrations(pool) {
   }
 }
 
+// Resolves once the migration runner has finished (or given up). Sign-in is
+// the one route that awaits it: everything else either tolerates a missing
+// column or is unreachable without a session, but a sign-in landing in the
+// second between boot and the last migration would fail on a column that is
+// about to exist — and sign-in is the only door into the product.
+let migrationsSettled = Promise.resolve();
+
 if (process.env.DATABASE_URL) {
   db = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
-  // Not awaited: boot must not block on it, and every query path already
-  // handles a database that isn't answering.
-  runMigrations(db).catch((e) => console.error("Migration error:", e));
+  // Not awaited at boot: startup must not block on it, and every query path
+  // already handles a database that isn't answering.
+  migrationsSettled = runMigrations(db).catch((e) => console.error("Migration error:", e));
 }
 
 // ---------------------------------------------------------------------
@@ -998,6 +1005,10 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
     const name     = payload.name;
     const picture  = payload.picture;
     const userId   = `g_${googleId}`;
+
+    // On a cold start this is already settled; on the very first boot after a
+    // schema change it is the difference between a sign-in and a 401.
+    await migrationsSettled;
 
     // RETURNING covers both branches, so a returning user's current
     // token_version comes back without a second round trip.
