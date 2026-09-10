@@ -265,6 +265,11 @@
     if (typeof SCG_SAVED !== "undefined") wireDownloadPrefs();
     wireDataSection();
 
+    // The feedback box shows itself only if the channel is open — feedback.js
+    // asks the server and unhides the section, so an admin switching it off
+    // takes it off the page rather than leaving a dead form behind.
+    if (typeof SCG_FEEDBACK !== "undefined") SCG_FEEDBACK.mountLetterbox($("feedback"));
+
     // Friends form
     $("add-friend-form").addEventListener("submit", (e) => {
       e.preventDefault();

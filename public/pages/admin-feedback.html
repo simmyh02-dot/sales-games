@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#0a0605" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#fbf6f3" media="(prefers-color-scheme: light)" />
+  <title>Feedback — Sales Camp AI</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script src="/js/theme.js"></script>
+  <script src="/js/lang.js"></script>
+  <script src="/js/auth-guard.js"></script>
+  <script src="https://accounts.google.com/gsi/client" nonce="{{NONCE}}" async></script>
+</head>
+<body>
+  <div class="bg-canvas"></div>
+
+  <div class="shell">
+    <div class="page-header">
+      <div class="mode-tag">Admin &middot; What people say</div>
+      <h1>Feedback</h1>
+      <p>
+        Everything people have told us, newest first &mdash; the 1&ndash;5 ratings
+        from the pop-up and the letters from Settings, in one thread. The
+        switches decide whether either channel is open; nothing here is cached,
+        so flipping one takes effect on the next page someone loads.
+      </p>
+    </div>
+
+    <nav class="admin-nav" aria-label="Admin sections">
+      <a class="admin-nav-link" href="/admin">Funnel</a>
+      <a class="admin-nav-link active" href="/admin/feedback" aria-current="page">Feedback</a>
+    </nav>
+
+    <div class="settings-msg" id="fb-admin-msg"></div>
+
+    <section class="settings-section fb-admin-section" id="switches" hidden>
+      <div class="settings-section-head">
+        <h2>Switches</h2>
+        <span class="settings-hint">
+          Off removes the thing entirely rather than greying it out. Answers
+          already given stay.
+        </span>
+      </div>
+      <div class="pdf-opt-row">
+        <div class="pdf-opt-label">Pop-up</div>
+        <div class="pdf-opt-group" data-setting="feedback_prompt_enabled">
+          <button class="pdf-opt" data-value="on">On</button>
+          <button class="pdf-opt" data-value="off">Off</button>
+        </div>
+        <span class="settings-hint">Asked after someone finishes their second rep.</span>
+      </div>
+      <div class="pdf-opt-row">
+        <div class="pdf-opt-label">Settings box</div>
+        <div class="pdf-opt-group" data-setting="feedback_letterbox_enabled">
+          <button class="pdf-opt" data-value="on">On</button>
+          <button class="pdf-opt" data-value="off">Off</button>
+        </div>
+        <span class="settings-hint">The write-anything box at the bottom of Settings.</span>
+      </div>
+      <div class="settings-msg" id="fb-switch-msg"></div>
+    </section>
+
+    <section class="settings-section fb-admin-section" id="poll" hidden>
+      <div class="settings-section-head">
+        <h2>The poll</h2>
+        <span class="settings-hint">
+          Read the answer rate next to the average: a 4.8 from one person in
+          twenty is a different number than a 4.8 from twelve.
+        </span>
+      </div>
+      <div class="stat-row">
+        <div class="stat-tile">
+          <div class="stat-value" id="fb-avg">&mdash;</div>
+          <div class="stat-label">Average rating</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-value" id="fb-answered">&mdash;</div>
+          <div class="stat-label">Ratings given</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-value" id="fb-answer-rate">&mdash;</div>
+          <div class="stat-label">Answer rate</div>
+        </div>
+      </div>
+      <div class="fb-bars" id="fb-bars"></div>
+      <p class="settings-hint plan-session-note" id="fb-poll-note"></p>
+    </section>
+
+    <section class="settings-section fb-admin-section" id="posts" hidden>
+      <div class="settings-section-head">
+        <h2>Posts</h2>
+        <div class="pdf-opt-group" id="fb-view">
+          <button class="pdf-opt selected" data-view="open">Open</button>
+          <button class="pdf-opt" data-view="all">Including archived</button>
+        </div>
+      </div>
+      <div class="fb-thread" id="fb-thread"></div>
+      <p class="settings-hint plan-session-note" id="fb-thread-note"></p>
+    </section>
+  </div>
+
+  <script src="/js/app-shell.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/admin-feedback.js"></script>
+</body>
+</html>

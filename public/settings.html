@@ -197,6 +197,25 @@
       </div>
       <button class="btn btn-ghost settings-signout" id="settings-signout">Sign out</button>
     </section>
+
+    <!-- FEEDBACK — hidden until the server says the channel is open -->
+    <section class="settings-section" id="feedback" hidden>
+      <div class="settings-section-head">
+        <h2>Send us feedback</h2>
+        <span class="settings-hint">Read by one person, who is also the one who builds it.</span>
+      </div>
+      <p class="settings-toggle-sub">
+        What is missing, what is broken, what would make this worth paying for.
+        No rating, no form &mdash; just write.
+      </p>
+      <label class="sr-only" for="fb-letter">Your feedback</label>
+      <textarea class="fb-textarea" id="fb-letter" rows="5" maxlength="2000"
+                placeholder="Tell us anything&hellip;"></textarea>
+      <div class="fb-letter-actions">
+        <button class="btn btn-primary" id="fb-letter-send">Send feedback</button>
+      </div>
+      <div class="settings-msg" id="fb-letter-msg"></div>
+    </section>
   </div>
 
   <div id="pricing-modal" class="pricing-modal-overlay" style="display:none;">
@@ -236,6 +255,7 @@
   </div>
 
   <script src="/js/score.js"></script>
+  <script src="/js/feedback.js"></script>
   <script src="/js/app-shell.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/pricing.js"></script>

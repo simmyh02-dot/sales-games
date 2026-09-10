@@ -30,6 +30,11 @@ const SCG = (() => {
         SCG_SHELL.refreshPoints();
         SCG_SHELL.refreshUsage();
       }
+      // A finished rep is the only moment the feedback pop-up is ever asked
+      // for, and this is the one line every mode already runs when one lands.
+      // The server decides whether it is actually due; nothing happens here
+      // if the feature is off, or if this person has already answered.
+      if (typeof SCG_FEEDBACK !== "undefined") SCG_FEEDBACK.maybePrompt(mode || "unknown");
     } catch { /* fire-and-forget, silent fail */ }
   }
 

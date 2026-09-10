@@ -123,6 +123,18 @@ const authLimiter = rateLimit({
   message: { error: "rate_limited", detail: "Too many sign-in attempts. Try again shortly." },
 });
 
+// Feedback is cheap to send and cheap to spam, and unlike a rep it costs
+// nothing to submit. A dozen an hour is far more than anyone with something
+// to say will ever need.
+const feedbackLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 12,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: aiRateKey,
+  message: { error: "rate_limited", detail: "That is plenty of feedback for now — thank you. Try again a little later." },
+});
+
 // ---------------------------------------------------------------------
 // Security headers.
 //
@@ -953,6 +965,7 @@ app.get("/previous-calls", page("pages", "previous-calls.html"));
 // The funnel numbers. Serving the page to anyone is fine — it is a shell with
 // no data in it, and /api/admin/funnel is what actually checks who is asking.
 app.get("/admin", page("pages", "admin.html"));
+app.get("/admin/feedback", page("pages", "admin-feedback.html"));
 
 // Legal. Linked from the landing footer and required by Stripe and the GDPR.
 for (const slug of ["terms", "privacy", "refunds", "contact"]) {
@@ -3109,7 +3122,7 @@ app.get("/api/user/export", authMiddleware, async (req, res) => {
     // The Stripe ids are deliberately left out — they are our billing plumbing,
     // not the user's data, and the invoices themselves live in Stripe's portal.
     const grab = (sql) => db.query(sql, [req.userId]).then((r) => r.rows);
-    const [scores, skills, rivals, lessons, beliefs, savedCalls, callHistory] = await Promise.all([
+    const [scores, skills, rivals, lessons, beliefs, savedCalls, callHistory, feedback] = await Promise.all([
       grab("SELECT delta, mode, date, created_at FROM scores WHERE user_id=$1 ORDER BY id"),
       grab("SELECT skill_id, unlocked_at FROM unlocked_skills WHERE user_id=$1 ORDER BY unlocked_at"),
       grab("SELECT rival_email, created_at FROM rivals WHERE user_id=$1 ORDER BY created_at"),
@@ -3117,6 +3130,7 @@ app.get("/api/user/export", authMiddleware, async (req, res) => {
       grab("SELECT belief, created_at FROM prospect_beliefs WHERE user_id=$1 ORDER BY id"),
       grab("SELECT mode, label, persona, section, outcome, score, transcript, analysis, created_at FROM saved_calls WHERE user_id=$1 ORDER BY id"),
       grab("SELECT mode, label, persona, section, outcome, skills, transcript, reviewed, created_at FROM call_history WHERE user_id=$1 ORDER BY id"),
+      grab("SELECT kind, rating, message, mode, reps, created_at FROM feedback WHERE user_id=$1 ORDER BY id"),
     ]);
 
     const payload = {
@@ -3131,6 +3145,7 @@ app.get("/api/user/export", authMiddleware, async (req, res) => {
       prospectBeliefs: beliefs,
       savedCalls,
       callHistory,
+      feedback,
     };
     const stamp = new Date().toISOString().slice(0, 10);
     res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -3176,7 +3191,10 @@ app.delete("/api/user", authMiddleware, async (req, res) => {
     const client = await db.connect();
     try {
       await client.query("BEGIN");
-      for (const table of ["scores", "unlocked_skills", "rivals", "lessons", "prospect_beliefs", "saved_calls", "call_history"]) {
+      // feedback goes with them: the privacy notice promises deletion erases
+      // what we hold, and a post someone wrote is theirs even when it is
+      // useful to us. The aggregate poll loses that vote — that is the deal.
+      for (const table of ["scores", "unlocked_skills", "rivals", "lessons", "prospect_beliefs", "saved_calls", "call_history", "feedback", "feedback_prompt_state"]) {
         await client.query(`DELETE FROM ${table} WHERE user_id=$1`, [req.userId]);
       }
       await client.query("DELETE FROM users WHERE id=$1", [req.userId]);
@@ -3250,6 +3268,191 @@ app.post("/api/stripe/portal", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("stripe/portal error:", err.message);
     res.status(500).json({ error: "Could not open the billing portal. Please try again." });
+  }
+});
+
+// ---------------------------------------------------------------------
+// Product feedback.
+//
+// Two ways in. A pop-up asks for a 1-5 rating once someone has finished a
+// couple of reps — early enough that the answer is about the product rather
+// than about one bad call — and the box at the bottom of Settings takes a
+// letter at any time. Both land in the same table and read as posts in the
+// admin panel.
+//
+// Both are switchable from admin without a deploy: the pop-up is intrusive
+// by design and the plan is to retire it once launch settles down.
+// ---------------------------------------------------------------------
+
+const FEEDBACK_SETTINGS = {
+  prompt:    "feedback_prompt_enabled",
+  letterbox: "feedback_letterbox_enabled",
+};
+
+// Reps before the pop-up appears. Two is the first point where someone has
+// seen a debrief, chosen to go again, and formed an opinion worth having.
+const FEEDBACK_PROMPT_AFTER_REPS   = 2;
+// "Not now" is an answer too. Ask at most this many times in total, and only
+// after this many further reps, so declining is never punished with a nag.
+const FEEDBACK_PROMPT_MAX_SHOWS    = 3;
+const FEEDBACK_PROMPT_SNOOZE_REPS  = 3;
+
+const FEEDBACK_MAX_MESSAGE = 2000;
+
+// Deliberately uncached. A switch that takes a minute to bite is a switch you
+// cannot trust while watching the thing it controls, and this is one
+// primary-key lookup on a request that already happens once per rep.
+async function featureEnabled(key, fallback = true) {
+  if (!db) return fallback;
+  try {
+    const r = await db.query("SELECT value FROM app_settings WHERE key=$1", [key]);
+    // Never set means never turned off: a feature ships on.
+    if (!r.rows.length) return fallback;
+    return r.rows[0].value === "on";
+  } catch (e) {
+    console.error("app_settings read error:", e.message);
+    return fallback;
+  }
+}
+
+// One graded rep is one scores row — the same thing the monthly allowance
+// counts — so this is the honest "how many reps have you finished".
+async function repCount(userId) {
+  const r = await db.query("SELECT COUNT(*)::int AS n FROM scores WHERE user_id=$1", [userId]);
+  return r.rows[0].n;
+}
+
+async function promptStateFor(userId) {
+  const r = await db.query(
+    "SELECT shows, dismissals, last_reps, answered_at FROM feedback_prompt_state WHERE user_id=$1",
+    [userId]
+  );
+  return r.rows[0] || { shows: 0, dismissals: 0, last_reps: 0, answered_at: null };
+}
+
+function promptIsDue(state, reps) {
+  if (state.answered_at) return false;                       // answered once is enough
+  if (state.shows >= FEEDBACK_PROMPT_MAX_SHOWS) return false;
+  if (reps < FEEDBACK_PROMPT_AFTER_REPS) return false;
+  if (state.shows === 0) return true;
+  return reps >= Number(state.last_reps) + FEEDBACK_PROMPT_SNOOZE_REPS;
+}
+
+// One call answers both clients: the rep screens ask "should I pop up?", and
+// Settings asks "should the box be there?".
+const FEEDBACK_STATE_OFF = {
+  promptEnabled: false, letterboxEnabled: false, shouldPrompt: false, reps: 0,
+};
+
+app.get("/api/feedback/state", authMiddleware, async (req, res) => {
+  if (!db) return res.json(FEEDBACK_STATE_OFF);
+  try {
+    const [promptEnabled, letterboxEnabled, reps, state] = await Promise.all([
+      featureEnabled(FEEDBACK_SETTINGS.prompt),
+      featureEnabled(FEEDBACK_SETTINGS.letterbox),
+      repCount(req.userId),
+      promptStateFor(req.userId),
+    ]);
+    res.json({
+      promptEnabled,
+      letterboxEnabled,
+      shouldPrompt: promptEnabled && promptIsDue(state, reps),
+      reps,
+    });
+  } catch (err) {
+    console.error("feedback/state error:", err.message);
+    // A feedback check must never break the page that asked. Staying quiet is
+    // the safe answer, so this reports "nothing to show" rather than an error.
+    res.json(FEEDBACK_STATE_OFF);
+  }
+});
+
+// Recorded when the pop-up is actually on screen, not when the check says it
+// could be — otherwise a page that asked and then navigated away would burn
+// one of the three asks without anyone ever seeing it.
+app.post("/api/feedback/prompt/shown", authMiddleware, async (req, res) => {
+  if (!db) return res.json({ ok: true, dbDisabled: true });
+  try {
+    const reps = await repCount(req.userId);
+    await db.query(`
+      INSERT INTO feedback_prompt_state (user_id, shows, last_reps, updated_at)
+      VALUES ($1, 1, $2, $3)
+      ON CONFLICT (user_id) DO UPDATE
+        SET shows      = feedback_prompt_state.shows + 1,
+            last_reps  = EXCLUDED.last_reps,
+            updated_at = EXCLUDED.updated_at
+    `, [req.userId, reps, Date.now()]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("feedback/prompt/shown error:", err.message);
+    res.json({ ok: false });
+  }
+});
+
+app.post("/api/feedback/prompt/dismiss", authMiddleware, async (req, res) => {
+  if (!db) return res.json({ ok: true, dbDisabled: true });
+  try {
+    await db.query(`
+      INSERT INTO feedback_prompt_state (user_id, dismissals, updated_at)
+      VALUES ($1, 1, $2)
+      ON CONFLICT (user_id) DO UPDATE
+        SET dismissals = feedback_prompt_state.dismissals + 1,
+            updated_at = EXCLUDED.updated_at
+    `, [req.userId, Date.now()]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("feedback/prompt/dismiss error:", err.message);
+    res.json({ ok: false });
+  }
+});
+
+app.post("/api/feedback", feedbackLimiter, authMiddleware, async (req, res) => {
+  if (!db) return res.status(503).json({ error: "Database not configured" });
+  const body = req.body || {};
+  const kind = body.kind === "letter" ? "letter" : "rep";
+
+  // The switch is enforced here as well as in the UI: the box being hidden is
+  // a rendering decision, and this route is reachable without it.
+  const open = await featureEnabled(
+    kind === "letter" ? FEEDBACK_SETTINGS.letterbox : FEEDBACK_SETTINGS.prompt
+  );
+  if (!open) return res.status(403).json({ error: "Feedback is closed at the moment." });
+
+  const message = String(body.message || "").trim().slice(0, FEEDBACK_MAX_MESSAGE);
+  let rating = null;
+  if (kind === "rep") {
+    rating = Math.round(Number(body.rating));
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+      return res.status(400).json({ error: "Pick a rating from 1 to 5." });
+    }
+  } else if (!message) {
+    return res.status(400).json({ error: "Write something first." });
+  }
+
+  try {
+    const reps = await repCount(req.userId);
+    const mode = kind === "rep" ? (String(body.mode || "").slice(0, 40) || null) : null;
+    await db.query(`
+      INSERT INTO feedback (user_id, kind, rating, message, mode, reps, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [req.userId, kind, rating, message || null, mode, reps, Date.now()]);
+
+    // Rating the product retires the pop-up for good. A letter does not: the
+    // box in Settings is for whenever, and answering there should not quietly
+    // cancel a question they have not been asked yet.
+    if (kind === "rep") {
+      await db.query(`
+        INSERT INTO feedback_prompt_state (user_id, shows, last_reps, answered_at, updated_at)
+        VALUES ($1, 1, $2, $3, $3)
+        ON CONFLICT (user_id) DO UPDATE
+          SET answered_at = EXCLUDED.answered_at,
+              updated_at  = EXCLUDED.updated_at
+      `, [req.userId, reps, Date.now()]);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("feedback submit error:", err.message);
+    res.status(500).json({ error: "Could not send that. Please try again." });
   }
 });
 
@@ -3366,6 +3569,144 @@ app.get("/api/admin/funnel", authMiddleware, adminOnly, async (req, res) => {
   } catch (err) {
     console.error("admin/funnel error:", err.message);
     res.status(500).json({ error: "Could not build the funnel." });
+  }
+});
+
+
+// ---------------------------------------------------------------------
+// Feedback, read side. The posts themselves, the poll they add up to, and
+// the two switches that decide whether either channel is open.
+// ---------------------------------------------------------------------
+
+const FEEDBACK_PAGE_SIZE = 200;
+
+app.get("/api/admin/feedback", authMiddleware, adminOnly, async (req, res) => {
+  const includeArchived = req.query.archived === "1";
+  try {
+    const [posts, byRating, totals, prompts, settings] = await Promise.all([
+      // The author is joined rather than copied onto the row, so deleting an
+      // account takes the name with it even from posts already written.
+      db.query(`
+        SELECT f.id, f.kind, f.rating, f.message, f.mode, f.reps, f.archived, f.created_at,
+               u.name AS author_name, u.email AS author_email, u.tier AS author_tier
+        FROM feedback f
+        LEFT JOIN users u ON u.id = f.user_id
+        WHERE $1::boolean OR f.archived = FALSE
+        ORDER BY f.created_at DESC
+        LIMIT $2
+      `, [includeArchived, FEEDBACK_PAGE_SIZE]),
+      db.query(`
+        SELECT rating, COUNT(*)::int AS n
+        FROM feedback WHERE kind='rep' AND rating IS NOT NULL
+        GROUP BY rating ORDER BY rating
+      `),
+      db.query(`
+        SELECT
+          (COUNT(*) FILTER (WHERE kind='rep'))::int                   AS ratings,
+          (COUNT(*) FILTER (WHERE kind='letter'))::int                AS letters,
+          (COUNT(*) FILTER (WHERE archived = FALSE))::int             AS open_posts,
+          (COUNT(*) FILTER (WHERE kind='rep' AND message IS NOT NULL))::int AS ratings_with_note,
+          AVG(rating) FILTER (WHERE kind='rep')                       AS avg_rating
+        FROM feedback
+      `),
+      // How the pop-up itself is doing — a 5% answer rate and a 4.6 average
+      // is a different story from a 60% answer rate and the same average.
+      db.query(`
+        SELECT
+          (COUNT(*) FILTER (WHERE shows > 0))::int              AS asked,
+          (COUNT(*) FILTER (WHERE answered_at IS NOT NULL))::int AS answered,
+          COALESCE(SUM(dismissals), 0)::int                 AS dismissals
+        FROM feedback_prompt_state
+      `),
+      db.query("SELECT key, value FROM app_settings"),
+    ]);
+
+    const saved = new Map(settings.rows.map((r) => [r.key, r.value]));
+    const flag  = (key) => (saved.has(key) ? saved.get(key) === "on" : true);
+    const t = totals.rows[0];
+    const p = prompts.rows[0];
+
+    // Every rating 1-5 present, including the ones nobody picked — a poll with
+    // holes in it reads as missing data rather than as zero votes.
+    const counts = new Map(byRating.rows.map((r) => [Number(r.rating), r.n]));
+    const distribution = [1, 2, 3, 4, 5].map((r) => ({ rating: r, count: counts.get(r) || 0 }));
+
+    res.json({
+      settings: {
+        promptEnabled:    flag(FEEDBACK_SETTINGS.prompt),
+        letterboxEnabled: flag(FEEDBACK_SETTINGS.letterbox),
+      },
+      poll: {
+        distribution,
+        ratings:         t.ratings,
+        ratingsWithNote: t.ratings_with_note,
+        letters:         t.letters,
+        openPosts:       t.open_posts,
+        average: t.avg_rating == null ? null : Math.round(Number(t.avg_rating) * 100) / 100,
+        asked:      p.asked,
+        answered:   p.answered,
+        dismissals: p.dismissals,
+        answerRate: p.asked > 0 ? Math.round((p.answered / p.asked) * 1000) / 10 : null,
+      },
+      posts: posts.rows.map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        rating: r.rating,
+        message: r.message,
+        mode: r.mode,
+        reps: r.reps,
+        archived: r.archived,
+        createdAt: Number(r.created_at),
+        // Null once the account is gone. The post stays; the person does not.
+        author: r.author_email
+          ? { name: r.author_name, email: r.author_email, tier: r.author_tier }
+          : null,
+      })),
+      truncated: posts.rows.length === FEEDBACK_PAGE_SIZE,
+    });
+  } catch (err) {
+    console.error("admin/feedback error:", err.message);
+    res.status(500).json({ error: "Could not load the feedback." });
+  }
+});
+
+// Archiving is "I have read this and acted on it" — it hides the post from the
+// default view and nothing else. Nothing here deletes what someone wrote.
+app.patch("/api/admin/feedback/:id", authMiddleware, adminOnly, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad id" });
+  const archived = !!(req.body && req.body.archived);
+  try {
+    const r = await db.query(
+      "UPDATE feedback SET archived=$1 WHERE id=$2 RETURNING id",
+      [archived, id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "No such post" });
+    res.json({ ok: true, id, archived });
+  } catch (err) {
+    console.error("admin/feedback patch error:", err.message);
+    res.status(500).json({ error: "Could not update that post." });
+  }
+});
+
+app.put("/api/admin/settings", authMiddleware, adminOnly, async (req, res) => {
+  const key = req.body && req.body.key;
+  // An allowlist, not a free-form key/value store. This route is one typo in
+  // a client away from writing settings nothing reads.
+  if (!Object.values(FEEDBACK_SETTINGS).includes(key)) {
+    return res.status(400).json({ error: "Unknown setting" });
+  }
+  const value = req.body.value === true || req.body.value === "on" ? "on" : "off";
+  try {
+    await db.query(`
+      INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, $3)
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+    `, [key, value, Date.now()]);
+    console.log(`Admin set ${key}=${value}`);
+    res.json({ ok: true, key, value });
+  } catch (err) {
+    console.error("admin/settings error:", err.message);
+    res.status(500).json({ error: "Could not save that setting." });
   }
 });
 
