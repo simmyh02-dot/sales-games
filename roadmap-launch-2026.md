@@ -242,6 +242,13 @@ revisit if abuse appears.
       `generated_cache` DDL moved into `003_generated_cache.sql` so a cold
       start no longer opens a connection to create a table that exists.
 - [ ] One real Neon restore into a scratch branch, steps written down.
+      **Steps are written: `runbook-database-restore.md`.** Non-destructive —
+      it branches from an hour ago, verifies row counts and `schema_migrations`
+      against production, and deletes the branch. Still needs *running*, and
+      the findings section at the bottom filled in. The one step that can
+      change a decision is Step 0: if history retention is still the 24-hour
+      default, damage done on a Friday is unrecoverable by Monday no matter how
+      well drilled you are.
 - [x] **`token_version` column for session revocation.** *Done 10 Sep 2026.*
       Tokens last 30 days and nothing could shorten that — one copied off a
       shared laptop stayed valid for a month. Every token now carries a `tv`
