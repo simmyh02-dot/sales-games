@@ -60,17 +60,18 @@
       <div class="panel" id="offer-panel" style="display:none;">
         <div class="panel-label">// Choose an offer</div>
         <div class="scenario-grid" id="offer-grid">
-          <button class="scenario-btn" data-offer="Fitness Coach">Fitness Coach</button>
-          <button class="scenario-btn" data-offer="Business Coach">Business Coach</button>
-          <button class="scenario-btn" data-offer="Agency Offer">Agency Offer</button>
-          <button class="scenario-btn" data-offer="E-commerce Offer">E-commerce Offer</button>
-          <button class="scenario-btn" data-offer="SaaS">SaaS</button>
-          <button class="scenario-btn" data-offer="High Ticket Sales">High Ticket Sales</button>
-          <button class="scenario-btn" data-offer="Affiliate Marketing">Affiliate Marketing</button>
-          <button class="scenario-btn" data-offer="Dropshipping">Dropshipping</button>
-          <button class="scenario-btn" data-offer="Coaching Certification">Coaching Certification</button>
-          <button class="scenario-btn" data-offer="Custom">Custom</button>
+          <button class="scenario-btn" data-offer="Fitness Coach" aria-pressed="false">Fitness Coach</button>
+          <button class="scenario-btn" data-offer="Business Coach" aria-pressed="false">Business Coach</button>
+          <button class="scenario-btn" data-offer="Agency Offer" aria-pressed="false">Agency Offer</button>
+          <button class="scenario-btn" data-offer="E-commerce Offer" aria-pressed="false">E-commerce Offer</button>
+          <button class="scenario-btn" data-offer="SaaS" aria-pressed="false">SaaS</button>
+          <button class="scenario-btn" data-offer="High Ticket Sales" aria-pressed="false">High Ticket Sales</button>
+          <button class="scenario-btn" data-offer="Affiliate Marketing" aria-pressed="false">Affiliate Marketing</button>
+          <button class="scenario-btn" data-offer="Dropshipping" aria-pressed="false">Dropshipping</button>
+          <button class="scenario-btn" data-offer="Coaching Certification" aria-pressed="false">Coaching Certification</button>
+          <button class="scenario-btn" data-offer="Custom" aria-pressed="false">Custom</button>
         </div>
+        <label class="sr-only" for="offer-custom-input">Describe your custom offer</label>
         <input type="text" class="custom-input" id="offer-custom-input" placeholder="Describe your custom offer (e.g. high-ticket nutrition coaching for busy parents)" style="display:none;" />
 
         <div class="actions-row">
@@ -84,14 +85,14 @@
       <div class="panel" id="section-panel" style="display:none;">
         <div class="panel-label">// Which part of the call do you want to practice?</div>
         <div class="scenario-grid section-grid" id="section-grid">
-          <button class="scenario-btn" data-section="Opening">Opening<br><small>Rapport &amp; permission</small></button>
-          <button class="scenario-btn" data-section="Situation">Situation<br><small>Discovery questions</small></button>
-          <button class="scenario-btn" data-section="Problem">Problem<br><small>Pain deepening</small></button>
-          <button class="scenario-btn" data-section="Consequences">Consequences<br><small>Impact of not solving</small></button>
-          <button class="scenario-btn" data-section="Purchase Decisions">Purchase Decisions<br><small>How they buy &amp; who&apos;s involved</small></button>
-          <button class="scenario-btn" data-section="Presentation">Presentation<br><small>Pitching the offer</small></button>
-          <button class="scenario-btn" data-section="Objection Handling">Objection Handling<br><small>After the pitch</small></button>
-          <button class="scenario-btn" data-section="Close">Close<br><small>Asking for the sale</small></button>
+          <button class="scenario-btn" data-section="Opening" aria-pressed="false">Opening<br><small>Rapport &amp; permission</small></button>
+          <button class="scenario-btn" data-section="Situation" aria-pressed="false">Situation<br><small>Discovery questions</small></button>
+          <button class="scenario-btn" data-section="Problem" aria-pressed="false">Problem<br><small>Pain deepening</small></button>
+          <button class="scenario-btn" data-section="Consequences" aria-pressed="false">Consequences<br><small>Impact of not solving</small></button>
+          <button class="scenario-btn" data-section="Purchase Decisions" aria-pressed="false">Purchase Decisions<br><small>How they buy &amp; who&apos;s involved</small></button>
+          <button class="scenario-btn" data-section="Presentation" aria-pressed="false">Presentation<br><small>Pitching the offer</small></button>
+          <button class="scenario-btn" data-section="Objection Handling" aria-pressed="false">Objection Handling<br><small>After the pitch</small></button>
+          <button class="scenario-btn" data-section="Close" aria-pressed="false">Close<br><small>Asking for the sale</small></button>
         </div>
         <div class="actions-row">
           <button class="btn btn-secondary" id="back-to-offer-btn">Back</button>
@@ -129,10 +130,15 @@
 
         <div class="chat-stage">
           <div class="mascot-rail" id="mascot-rail"></div>
-          <div class="chat-window" id="chat-window"></div>
+          <!-- role="log" + polite: the prospect's reply arrives on its own, so a
+               screen reader has to be told about it. Polite waits for a pause
+               rather than cutting across the rep mid-sentence. -->
+          <div class="chat-window" id="chat-window" role="log" aria-live="polite"
+               aria-label="Call transcript"></div>
         </div>
 
         <div class="chat-input-row" id="chat-input-row">
+          <label class="sr-only" for="chat-input">Your next line on this call</label>
           <input type="text" id="chat-input" placeholder="Type what you'd say next on this call..." />
           <button class="btn btn-primary" id="send-btn">Send</button>
         </div>

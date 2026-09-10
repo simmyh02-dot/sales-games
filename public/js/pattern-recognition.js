@@ -10,8 +10,12 @@
   // Difficulty toggle
   document.querySelectorAll(".diff-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll(".diff-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".diff-btn").forEach(b => {
+        b.classList.remove("active");
+        b.setAttribute("aria-pressed", "false");
+      });
       btn.classList.add("active");
+      btn.setAttribute("aria-pressed", "true");
       currentDifficulty = parseInt(btn.dataset.level);
     });
   });
@@ -227,10 +231,11 @@
 
   function setLevel(lvl) {
     currentDifficulty = lvl;
-    prLevels.querySelectorAll(".prestart-btn").forEach((b) =>
-      b.classList.toggle("active", parseInt(b.dataset.level, 10) === lvl));
-    document.querySelectorAll(".diff-btn").forEach((b) =>
-      b.classList.toggle("active", parseInt(b.dataset.level, 10) === lvl));
+    for (const b of [...prLevels.querySelectorAll(".prestart-btn"), ...document.querySelectorAll(".diff-btn")]) {
+      const chosen = parseInt(b.dataset.level, 10) === lvl;
+      b.classList.toggle("active", chosen);
+      b.setAttribute("aria-pressed", String(chosen));
+    }
   }
   prLevels.querySelectorAll(".prestart-btn").forEach((b) =>
     b.addEventListener("click", () => setLevel(parseInt(b.dataset.level, 10) || 1)));

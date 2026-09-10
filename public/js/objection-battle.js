@@ -25,6 +25,8 @@
   function syncTimerToggleUI() {
     timerOnBtn.classList.toggle("active", timerEnabled);
     timerOffBtn.classList.toggle("active", !timerEnabled);
+    timerOnBtn.setAttribute("aria-pressed", String(timerEnabled));
+    timerOffBtn.setAttribute("aria-pressed", String(!timerEnabled));
   }
 
   timerOnBtn.addEventListener("click", () => {
@@ -295,13 +297,20 @@
   const startBtn   = document.getElementById("ob-start-btn");
 
   function syncStartTimerUI() {
-    timerOpts.querySelectorAll(".prestart-btn").forEach((b) =>
-      b.classList.toggle("active", (b.dataset.timer === "on") === timerEnabled));
+    timerOpts.querySelectorAll(".prestart-btn").forEach((b) => {
+      const on = (b.dataset.timer === "on") === timerEnabled;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
   }
   diffOpts.querySelectorAll(".prestart-btn").forEach((b) => {
     b.addEventListener("click", () => {
-      diffOpts.querySelectorAll(".prestart-btn").forEach((x) => x.classList.remove("active"));
+      diffOpts.querySelectorAll(".prestart-btn").forEach((x) => {
+        x.classList.remove("active");
+        x.setAttribute("aria-pressed", "false");
+      });
       b.classList.add("active");
+      b.setAttribute("aria-pressed", "true");
       chosenDifficulty = parseInt(b.dataset.level, 10) || 2;
     });
   });

@@ -43,18 +43,20 @@
     <div id="ob-start" class="prestart-panel panel-accent" style="display:none;">
       <div class="panel-label">// Set up your drill</div>
       <div class="prestart-group">
-        <div class="prestart-label">Difficulty</div>
-        <div class="prestart-options" id="ob-difficulty">
-          <button type="button" class="prestart-btn" data-level="1"><span class="pb-title">Easy</span><span class="pb-sub">30s · forgiving grade</span></button>
-          <button type="button" class="prestart-btn active" data-level="2"><span class="pb-title">Medium</span><span class="pb-sub">60s · realistic</span></button>
-          <button type="button" class="prestart-btn" data-level="3"><span class="pb-title">Hard</span><span class="pb-sub">90s · graded ruthlessly</span></button>
+        <div class="prestart-label" id="ob-difficulty-label">Difficulty</div>
+        <!-- aria-pressed is what says which one is chosen. The `active` class
+             says it in colour only, which no screen reader can read. -->
+        <div class="prestart-options" id="ob-difficulty" role="group" aria-labelledby="ob-difficulty-label">
+          <button type="button" class="prestart-btn" data-level="1" aria-pressed="false"><span class="pb-title">Easy</span><span class="pb-sub">30s · forgiving grade</span></button>
+          <button type="button" class="prestart-btn active" data-level="2" aria-pressed="true"><span class="pb-title">Medium</span><span class="pb-sub">60s · realistic</span></button>
+          <button type="button" class="prestart-btn" data-level="3" aria-pressed="false"><span class="pb-title">Hard</span><span class="pb-sub">90s · graded ruthlessly</span></button>
         </div>
       </div>
       <div class="prestart-group">
-        <div class="prestart-label">Timer</div>
-        <div class="prestart-options" id="ob-timer">
-          <button type="button" class="prestart-btn" data-timer="on"><span class="pb-title">On</span><span class="pb-sub">Countdown pressure</span></button>
-          <button type="button" class="prestart-btn" data-timer="off"><span class="pb-title">Off</span><span class="pb-sub">Take your time</span></button>
+        <div class="prestart-label" id="ob-timer-label">Timer</div>
+        <div class="prestart-options" id="ob-timer" role="group" aria-labelledby="ob-timer-label">
+          <button type="button" class="prestart-btn" data-timer="on" aria-pressed="false"><span class="pb-title">On</span><span class="pb-sub">Countdown pressure</span></button>
+          <button type="button" class="prestart-btn" data-timer="off" aria-pressed="false"><span class="pb-title">Off</span><span class="pb-sub">Take your time</span></button>
         </div>
       </div>
       <button class="btn btn-primary btn-lg" id="ob-start-btn">Start drill</button>
@@ -65,10 +67,10 @@
 
       <div id="next-bar" style="display:none;">
         <div class="timer-toggle-wrap">
-          <span class="diff-bar-label">Timer</span>
-          <div class="diff-toggle">
-            <button class="diff-btn" id="timer-on-btn" data-timer="on">On</button>
-            <button class="diff-btn" id="timer-off-btn" data-timer="off">Off</button>
+          <span class="diff-bar-label" id="ob-timer-bar-label">Timer</span>
+          <div class="diff-toggle" role="group" aria-labelledby="ob-timer-bar-label">
+            <button class="diff-btn" id="timer-on-btn" data-timer="on" aria-pressed="false">On</button>
+            <button class="diff-btn" id="timer-off-btn" data-timer="off" aria-pressed="false">Off</button>
           </div>
         </div>
         <button class="btn btn-primary" id="next-btn">Next objection</button>

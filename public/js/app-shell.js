@@ -41,15 +41,19 @@ const SCG_SHELL = (() => {
 
   function navGroup(title, items) {
     const here = location.pathname;
+    const groupId = `um-group-${title.toLowerCase().replace(/[^a-z]+/g, "-")}`;
     const rows = items.map((it) => {
       const active = here === it.href ? " active" : "";
+      // aria-current tells a screen reader which entry is the page you are on;
+      // the `active` class only makes it a different colour.
       return `
-        <a class="um-item${active}" href="${it.href}">
+        <a class="um-item${active}" href="${it.href}"${active ? ' aria-current="page"' : ""}>
           <span class="um-item-label">${esc(it.label)}</span>
           <span class="um-item-tag">${esc(it.tag)}</span>
         </a>`;
     }).join("");
-    return `<div class="um-group"><div class="um-group-label">${esc(title)}</div>${rows}</div>`;
+    return `<div class="um-group" role="group" aria-labelledby="${groupId}">
+      <div class="um-group-label" id="${groupId}">${esc(title)}</div>${rows}</div>`;
   }
 
   function build() {
@@ -81,19 +85,24 @@ const SCG_SHELL = (() => {
         </a>
 
         <div class="user-menu" id="user-menu">
-          <button class="user-menu-trigger" id="user-menu-trigger" aria-haspopup="true" aria-expanded="false" style="display:none;"></button>
+<!-- aria-expanded alone is the disclosure contract. aria-haspopup="true" is
+               shorthand for "opens a menu", which this no longer is. -->
+          <button class="user-menu-trigger" id="user-menu-trigger" aria-expanded="false" aria-controls="user-menu-dropdown" style="display:none;"></button>
           <div id="auth-widget"></div>
-          <div class="user-menu-dropdown" id="user-menu-dropdown" role="menu" hidden>
+          <!-- Not role="menu": that promises menuitem children and arrow-key
+               navigation. This is a list of links, so it is announced as
+               navigation and Tab moves through it the way a link list should. -->
+          <nav class="user-menu-dropdown" id="user-menu-dropdown" aria-label="Main menu" hidden>
             ${navGroup("Train", NAV.train)}
             ${navGroup("Progress", NAV.progress)}
-            <div class="um-group">
-              <div class="um-group-label">Account</div>
+            <div class="um-group" role="group" aria-labelledby="um-group-account">
+              <div class="um-group-label" id="um-group-account">Account</div>
               <a class="um-item um-link" href="/settings#profile"><span class="um-item-label">Profile</span></a>
               <a class="um-item um-link" href="/settings"><span class="um-item-label">Settings</span></a>
               <a class="um-item um-link" href="/settings#friends"><span class="um-item-label">Invite friends</span></a>
               <button class="um-item um-link um-signout" id="um-signout"><span class="um-item-label">Sign out</span></button>
             </div>
-          </div>
+          </nav>
         </div>
       </div>`;
 
@@ -106,7 +115,15 @@ const SCG_SHELL = (() => {
     document.addEventListener("click", (e) => {
       if (menuOpen && !e.target.closest("#user-menu")) closeMenu();
     });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !menuOpen) return;
+      // Focus is somewhere inside the menu that is about to be hidden. Put it
+      // back on the trigger, or a keyboard user is left with nothing focused
+      // and has to Tab in from the top of the page again.
+      closeMenu();
+      const tr = document.getElementById("user-menu-trigger");
+      if (tr) tr.focus();
+    });
     const signout = document.getElementById("um-signout");
     if (signout) signout.addEventListener("click", () => {
       closeMenu();

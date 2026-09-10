@@ -139,8 +139,12 @@
   els.offerGrid.addEventListener("click", (e) => {
     const btn = e.target.closest(".scenario-btn");
     if (!btn) return;
-    [...els.offerGrid.children].forEach((b) => b.classList.remove("selected"));
+    [...els.offerGrid.children].forEach((b) => {
+      b.classList.remove("selected");
+      b.setAttribute("aria-pressed", "false");
+    });
     btn.classList.add("selected");
+    btn.setAttribute("aria-pressed", "true");
     selectedOffer = btn.dataset.offer;
     els.offerCustomInput.style.display = selectedOffer === "Custom" ? "block" : "none";
     updateOfferButton();
@@ -171,8 +175,12 @@
   els.sectionGrid.addEventListener("click", (e) => {
     const btn = e.target.closest(".scenario-btn");
     if (!btn) return;
-    [...els.sectionGrid.children].forEach((b) => b.classList.remove("selected"));
+    [...els.sectionGrid.children].forEach((b) => {
+      b.classList.remove("selected");
+      b.setAttribute("aria-pressed", "false");
+    });
     btn.classList.add("selected");
+    btn.setAttribute("aria-pressed", "true");
     selectedSection = btn.dataset.section;
     els.confirmSectionBtn.disabled = false;
   });
@@ -191,12 +199,12 @@
 
   function renderPersonalities() {
     const randomCard = `
-      <button class="scenario-btn personality-btn selected" data-key="random">
+      <button class="scenario-btn personality-btn selected" data-key="random" aria-pressed="true">
         🎲 Randomize
         <small>Draw a random prospect each call so you don't only train against your favourite. Recommended.</small>
       </button>`;
     const personaCards = PERSONAS.map((p) => `
-      <button class="scenario-btn personality-btn" data-key="${p.key}">
+      <button class="scenario-btn personality-btn" data-key="${p.key}" aria-pressed="false">
         ${p.label}
         <small>${p.blurb || p.primaryPain}</small>
       </button>
@@ -223,8 +231,12 @@
   els.personalityGrid.addEventListener("click", (e) => {
     const btn = e.target.closest(".personality-btn");
     if (!btn) return;
-    [...els.personalityGrid.children].forEach((b) => b.classList.remove("selected"));
+    [...els.personalityGrid.children].forEach((b) => {
+      b.classList.remove("selected");
+      b.setAttribute("aria-pressed", "false");
+    });
     btn.classList.add("selected");
+    btn.setAttribute("aria-pressed", "true");
     selectedPersonality = btn.dataset.key === "random"
       ? "random"
       : PERSONAS.find((p) => p.key === btn.dataset.key);
@@ -374,7 +386,14 @@
   function addBubble(role, text) {
     const bubble = document.createElement("div");
     bubble.className   = `chat-bubble ${role}`;
-    bubble.textContent = text;
+    // Who is speaking is carried by which side the bubble sits on, which says
+    // nothing out loud. The prefix is read, never seen.
+    const speaker = document.createElement("span");
+    speaker.className   = "sr-only";
+    speaker.textContent = role === "user" ? "You said: " : "Prospect said: ";
+    const body = document.createElement("span");
+    body.textContent = text;
+    bubble.append(speaker, body);
     els.chatWindow.appendChild(bubble);
     els.chatWindow.scrollTop = els.chatWindow.scrollHeight;
     if (role === "user") userBubbles.push(bubble);

@@ -227,7 +227,37 @@ revisit if abuse appears.
       wired to "Sign out on all other devices" in Settings → Profile.
       Tokens signed before this shipped carry no `tv` and read as 0, matching
       the column default, so the deploy signed nobody out.
-- [ ] Accessibility pass on the custom buttons, dropdown menu and live chat.
+- [x] **Accessibility pass on the custom buttons, dropdown menu and live chat.**
+      *Done 10 Sep 2026.* Four things were wrong, all of them the same mistake:
+      state carried in colour and position, which say nothing out loud.
+
+      *Focus ring.* Seven rules cleared `outline` on `:focus` so a mouse click
+      wouldn't leave a ring — which also took it from keyboard users, the only
+      people who need it. One `:focus-visible` rule restores it (keyboard only)
+      and carries `!important` so it beats those seven without unpicking each.
+
+      *Custom buttons.* The `active`/`selected` class was the only signal of
+      which difficulty, timer, offer, section or persona was chosen. Every
+      toggle group now sets `aria-pressed` alongside the class, at all eight
+      places that flip it, and each group is a labelled `role="group"`.
+
+      *Dropdown menu.* It claimed `role="menu"`, which promises `menuitem`
+      children and arrow-key navigation, and delivered neither — it is a list
+      of links. It is now a labelled `<nav>` with `aria-expanded` alone (no
+      `aria-haspopup`, which means "opens a menu"), `aria-current="page"` on the
+      entry you are on, and Escape returns focus to the trigger instead of
+      dropping it on the floor.
+
+      *Live chat.* The prospect's reply arrives on its own and was announced to
+      nobody: `#chat-window` is now `role="log" aria-live="polite"`. Who is
+      speaking was carried by which side the bubble sits on, so each bubble
+      carries a visually hidden "You said:" / "Prospect said:" prefix. Four
+      inputs that leaned on a placeholder for their name got real labels.
+
+      Verified in a browser, not assumed: `aria-pressed` flips to exactly one
+      `true` per group, Escape restores focus to the trigger, the ring computes
+      to `2px solid` on keyboard focus, and the hidden prefixes measure 0×0 and
+      do not appear in a screenshot of the chat.
 - [ ] Magic-link email sign-in as a second auth method (Google is the only way
       in today, and it stands between you and 100% of revenue).
 

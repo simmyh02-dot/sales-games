@@ -43,22 +43,22 @@
     <div id="pr-start" class="prestart-panel panel-accent" style="display:none;">
       <div class="panel-label">// Choose your level</div>
       <div class="prestart-group">
-        <div class="prestart-label">Difficulty</div>
-        <div class="prestart-options" id="pr-levels">
-          <button type="button" class="prestart-btn active" data-level="1"><span class="pb-title">Level 1</span><span class="pb-sub">Clear reads · +3 pts</span></button>
-          <button type="button" class="prestart-btn" data-level="2"><span class="pb-title">Level 2</span><span class="pb-sub">Subtler tells · +5 pts</span></button>
-          <button type="button" class="prestart-btn" data-level="3"><span class="pb-title">Level 3</span><span class="pb-sub">Ambiguous · +7 pts</span></button>
+        <div class="prestart-label" id="pr-levels-label">Difficulty</div>
+        <div class="prestart-options" id="pr-levels" role="group" aria-labelledby="pr-levels-label">
+          <button type="button" class="prestart-btn active" data-level="1" aria-pressed="true"><span class="pb-title">Level 1</span><span class="pb-sub">Clear reads · +3 pts</span></button>
+          <button type="button" class="prestart-btn" data-level="2" aria-pressed="false"><span class="pb-title">Level 2</span><span class="pb-sub">Subtler tells · +5 pts</span></button>
+          <button type="button" class="prestart-btn" data-level="3" aria-pressed="false"><span class="pb-title">Level 3</span><span class="pb-sub">Ambiguous · +7 pts</span></button>
         </div>
       </div>
       <button class="btn btn-primary btn-lg" id="pr-start-btn">Start reading</button>
     </div>
 
     <div class="diff-bar" id="pr-diffbar" style="display:none;">
-      <span class="diff-bar-label">Difficulty</span>
-      <div class="diff-toggle">
-        <button class="diff-btn active" data-level="1">Level 1</button>
-        <button class="diff-btn" data-level="2">Level 2</button>
-        <button class="diff-btn" data-level="3">Level 3</button>
+      <span class="diff-bar-label" id="pr-diff-bar-label">Difficulty</span>
+      <div class="diff-toggle" role="group" aria-labelledby="pr-diff-bar-label">
+        <button class="diff-btn active" data-level="1" aria-pressed="true">Level 1</button>
+        <button class="diff-btn" data-level="2" aria-pressed="false">Level 2</button>
+        <button class="diff-btn" data-level="3" aria-pressed="false">Level 3</button>
       </div>
     </div>
 
