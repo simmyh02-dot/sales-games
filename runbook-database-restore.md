@@ -16,17 +16,15 @@ Budget 15 minutes.
 This is the step that can actually change a decision, so do it before anything
 else.
 
-Neon can only rewind as far back as its **history retention** setting. In the
-Neon console: **Project → Settings → Storage** (labelled "History retention" or
-"Point-in-time restore window").
+Neon can only rewind as far back as its **history window**. In the Neon
+console: **Settings → History window**.
 
-- Free tier defaults to **24 hours**.
-- Paid tiers go to 7 days, and higher on the larger plans.
+On the **Free plan the slider stops at 6 hours** — that is the ceiling, not a
+default you can raise. Paid plans go up to 30 days.
 
-Ask the honest question: **if someone deleted a table on Friday night, would you
-notice before the window closed?** If retention is 24 hours, the answer over a
-weekend is no, and no amount of drilling fixes that — only raising the setting
-does.
+Ask the honest question: **if something destroyed data at 23:00, would you
+notice before the window closed?** At six hours the answer is no — you would be
+asleep for most of it. No amount of drilling fixes that; only a paid plan does.
 
 Write the current value down at the bottom of this file.
 
@@ -132,12 +130,32 @@ important six months from now.
 
 ---
 
-## Findings — fill in when you run it
+## Findings — 10 Sep 2026
 
-Leaving these blank defeats the purpose of the drill.
+- **Date run:** 10 September 2026.
+- **History window:** **6 hours**, and already at the Free plan's maximum —
+  the slider stops there. An earlier version of this file guessed 24 hours;
+  it was wrong. Neon offers up to 30 days on paid plans.
+- **Branch creation:** seconds. Neon branches are copy-on-write, so this does
+  not scale with data size.
+- **Row counts matched:** yes — `users` 1, `scores` 40, `call_history` 11,
+  identical on the branch and on production. Identical rather than lower is
+  correct here: nothing was written during the hour that was rewound past.
+- **Schema came across:** yes — 11 tables, and `schema_migrations` listed all
+  three of `001_initial_schema.sql`, `002_token_version.sql`,
+  `003_generated_cache.sql`.
+- **Corrections to this runbook, found by running it:**
+  - The branch dialog's wording is **"Branch data and schema from a past point
+    in time"** — the second of four radio options. The default is the first
+    one, which copies the present and proves nothing.
+  - There is an **Auto-delete** dropdown, default "After 1 day". Leaving it
+    alone makes Step 5 unnecessary.
+  - Neon shows the new branch's connection string immediately on creation, so
+    Step 4 happens whether you plan it or not.
+  - `schema_migrations` has no `id` column. Order by `version`.
+  - The setting is under **Settings → History window**, not "Storage".
 
-- Date run:
-- History retention window (Step 0):
-- Time from "Create branch" to first successful query (Steps 2–3):
-- Row counts matched expectations: yes / no
-- Anything that did not match this runbook:
+**The conclusion was not about the procedure.** Restoring works and is now
+rehearsed. The six-hour ceiling is the actual risk, it cannot be raised on the
+free plan, and it is tracked as a launch blocker in `roadmap-launch-2026.md`
+under "Last steps before launch".

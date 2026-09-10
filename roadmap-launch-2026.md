@@ -241,14 +241,18 @@ revisit if abuse appears.
       `connectionTimeoutMillis` instead of the default infinite wait; and the
       `generated_cache` DDL moved into `003_generated_cache.sql` so a cold
       start no longer opens a connection to create a table that exists.
-- [ ] One real Neon restore into a scratch branch, steps written down.
-      **Steps are written: `runbook-database-restore.md`.** Non-destructive —
-      it branches from an hour ago, verifies row counts and `schema_migrations`
-      against production, and deletes the branch. Still needs *running*, and
-      the findings section at the bottom filled in. The one step that can
-      change a decision is Step 0: if history retention is still the 24-hour
-      default, damage done on a Friday is unrecoverable by Monday no matter how
-      well drilled you are.
+- [x] **One real Neon restore into a scratch branch, steps written down.**
+      *Done 10 Sep 2026.* Runbook: `runbook-database-restore.md`. The drill
+      passed cleanly — a branch taken from an hour earlier returned the same
+      1/40/11 row counts as production, all 11 tables, and all three rows of
+      `schema_migrations`. Restoring works and the procedure is written down.
+
+      **The drill's real finding was not the drill.** Neon's Free plan caps the
+      history window at **6 hours**, and it is already at that maximum — this
+      file previously assumed 24. Six hours is shorter than a night's sleep:
+      data destroyed at 23:00 and noticed at 08:00 is gone, and no amount of
+      rehearsing the restore procedure recovers it. See "Last steps before
+      launch" — this is now a launch blocker, not a Phase 3 item.
 - [x] **`token_version` column for session revocation.** *Done 10 Sep 2026.*
       Tokens last 30 days and nothing could shorten that — one copied off a
       shared laptop stayed valid for a month. Every token now carries a `tv`
@@ -294,6 +298,65 @@ revisit if abuse appears.
       `true` per group, Escape restores focus to the trigger, the ring computes
       to `2px solid` on keyboard focus, and the hidden prefixes measure 0×0 and
       do not appear in a screenshot of the chat.
+- [x] **Product feedback — a pop-up after two reps, a letterbox in Settings, a
+      thread in admin.** *Done 10 Sep 2026, for launch and the first couple of
+      months.*
+
+      Two channels, one `feedback` table. The pop-up asks for 1&ndash;5 with an
+      optional note once someone has finished their **second** rep &mdash; the
+      first point at which they have seen a debrief, chosen to go again, and
+      formed an opinion about the product rather than about one bad call. The
+      box at the bottom of Settings takes a letter at any time and has no
+      rating on purpose: a scale invites a score, and a letter invites a
+      sentence.
+
+      The trigger hangs off `SCG.addScore`, the one line every mode already
+      runs when a graded rep lands, so all four modes got it without knowing
+      the feature exists. `score.js` asks the server whether it is due; the
+      3-second delay before it appears lives in the client, so the debrief they
+      just earned is never covered by a dialog.
+
+      **Being asked is itself an answer.** `feedback_prompt_state` is one row
+      per person, server-side rather than in `localStorage` (which is
+      per-device and would re-ask the same person in every new browser). It is
+      recorded when the dialog is actually on screen, not when the check says
+      it could be. A "not now" snoozes for three more reps; three asks with no
+      answer retires it; one rating retires it for good. A letter deliberately
+      does **not** &mdash; answering in Settings should not silently cancel a
+      question they have not been asked yet.
+
+      Both channels are switchable from `/admin/feedback` without a deploy
+      (`app_settings`, an allowlisted key/value pair, read uncached &mdash; a
+      switch that takes a minute to bite is a switch you cannot trust while
+      watching the thing it controls). Two switches rather than one because
+      they retire at different times: the pop-up is intrusive by design and
+      comes out after launch; the letterbox can stay forever. Off *removes* the
+      thing rather than greying it out, and the submit route re-checks the
+      switch, because a hidden box is a rendering decision and the route is
+      reachable without it.
+
+      `/admin/feedback` reads as a forum: ratings and letters newest-first in
+      one thread, colour-coded badges, the author joined at read time (so a
+      deleted account takes its name off posts already written), paragraph
+      breaks preserved, and an Archive button that hides a handled post without
+      deleting what anybody wrote. Above it, the poll: the distribution, the
+      average, and &mdash; next to it &mdash; the **answer rate**, because a 4.8
+      from one person in twenty is a different number than a 4.8 from twelve.
+
+      Feedback is included in the GDPR export and deleted with the account. The
+      poll loses that vote; the privacy notice promises deletion erases what we
+      hold, and a post someone wrote is theirs even when it is useful to us.
+      Section 1 of the notice now lists it.
+
+      **Verified against real Postgres**, not by eye: the migration and every
+      query were run under PGlite with a fixture covering someone one rep short
+      of the threshold, someone who dismissed and came back, someone who hit
+      the three-ask cap, someone who answered, a letter that must not retire a
+      pop-up, an archived post that must stay out of the default view, the
+      empty-table case (day one), and an account deletion that must leave no
+      orphaned post. Each query is asserted to appear verbatim in `server.js`,
+      so the run tests the shipped code and not a copy. The pop-up, the
+      letterbox and the admin thread were driven in a browser in both themes.
 - [ ] Magic-link email sign-in as a second auth method (Google is the only way
       in today, and it stands between you and 100% of revenue).
 
@@ -303,6 +366,25 @@ revisit if abuse appears.
 
 Things deliberately deferred, to be done immediately before going public
 rather than now. Each is flagged here so it cannot quietly fall off.
+
+- [ ] **Widen the database history window before taking a single paying user.**
+      *Found 10 Sep 2026 by running the restore drill.* Neon's Free plan allows
+      a maximum of **6 hours**, and the project is already at that maximum.
+      Restoring itself works — that was verified — but only within those six
+      hours, which is shorter than one night. Damage done at 23:00 and noticed
+      at 08:00 is permanent.
+
+      Today this is nearly harmless: one account, forty rows, all of it the
+      owner's own. It stops being harmless the moment someone else's paid
+      progress is in there, because the failure mode is a refund, a bad review
+      and nothing to restore from.
+
+      The fix is a plan upgrade — Neon advertises up to 30 days on paid tiers —
+      and it should be bought at the same time as the first real customer, not
+      before. **Do not build a custom `pg_dump` pipeline instead.** It is more
+      moving parts to maintain, needs somewhere to store the dumps, and would
+      be a worse version of a feature that costs about a tenth of one
+      subscription per month.
 
 - [ ] **Transactional email.** *Deferred 5 Sep 2026 by decision — build it as
       one of the last steps.* Provider undecided (Resend is the cheap default;
