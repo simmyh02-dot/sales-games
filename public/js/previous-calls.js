@@ -125,9 +125,7 @@
           <div class="pc-debrief-label">// Debrief</div>
           ${Number.isFinite(a.callScore) ? `<div class="pc-debrief-score">${a.callScore}<span> / 10</span></div>` : ""}
           ${a.headline ? `<p class="pc-debrief-headline">${esc(a.headline)}</p>` : ""}
-          ${a.rememberThis ? `<div class="pc-debrief-remember"><strong>Remember this:</strong> ${esc(a.rememberThis)}</div>` : ""}
-          ${bullets("What you did well", a.whatYouDidWell)}
-          ${bullets("Think about this next time", a.thinkAboutNextTime)}
+          ${Array.isArray(a.turningPoints) ? newShape(a) : oldShape(a)}
         </div>` : `
         <div class="pc-debrief">
           <div class="pc-debrief-label">// No debrief</div>
@@ -139,6 +137,80 @@
     } catch (err) {
       els.readerBody.innerHTML = `<p class="pc-loading">${esc(err.message)}</p>`;
     }
+  }
+
+  // Calls saved before the debrief redesign: a lesson and two bullet lists.
+  function oldShape(a) {
+    return `
+      ${a.rememberThis ? `<div class="pc-debrief-remember"><strong>Remember this:</strong> ${esc(a.rememberThis)}</div>` : ""}
+      ${bullets("What you did well", a.whatYouDidWell)}
+      ${bullets("Think about this next time", a.thinkAboutNextTime)}`;
+  }
+
+  // Calls saved since: the same five blocks the live debrief shows, in the
+  // reader's quieter register.
+  function newShape(a) {
+    const nc = a.nextCall || {};
+    const next = (nc.change || nc.tryLine || nc.keep) ? `
+      <div class="pc-debrief-remember">
+        ${nc.change ? `<div><strong>Change:</strong> ${esc(nc.change)}</div>` : ""}
+        ${nc.tryLine ? `<div><strong>Try:</strong> ${esc(nc.tryLine)}</div>` : ""}
+        ${nc.keep ? `<div><strong>Keep:</strong> ${esc(nc.keep)}</div>` : ""}
+      </div>` : "";
+
+    const VERDICT = { good: "Keep this", improve: "Could be sharper", bad: "Watch this" };
+    const moments = (a.turningPoints || []).length ? `
+      <div class="pc-debrief-block"><h4>Turning points</h4>
+        ${a.turningPoints.map((t) => `
+          <div class="db-moment db-moment-${esc(t.verdict || "improve")}">
+            <div class="db-moment-verdict">${VERDICT[t.verdict] || "Could be sharper"}</div>
+            <div class="db-moment-quote"><span class="db-who">You</span> &ldquo;${esc(t.quote)}&rdquo;</div>
+            ${t.prospectReply ? `<div class="db-moment-reply"><span class="db-who">Them</span> &ldquo;${esc(t.prospectReply)}&rdquo;</div>` : ""}
+            ${t.what ? `<div class="db-moment-what">${esc(t.what)}</div>` : ""}
+            ${t.sayInstead ? `<div class="db-moment-alt"><span class="db-alt-label">Say instead</span>${esc(t.sayInstead)}</div>` : ""}
+          </div>`).join("")}
+      </div>` : "";
+
+    const steps = a.scorecard && Array.isArray(a.scorecard.steps) ? a.scorecard.steps : (a.structure || []);
+    const LABEL = { hit: "Hit", partial: "Partial", missed: "Missed" };
+    const card = steps.length ? `
+      <div class="pc-debrief-block"><h4>Scorecard${a.scorecard && a.scorecard.focus ? " · " + esc(a.scorecard.focus) : ""}</h4>
+        <div class="setter-stages">${steps.map((st) => `
+          <div class="setter-stage stage-${esc(st.status || "missed")}">
+            <div class="setter-stage-head">
+              <span class="setter-stage-name">${esc(st.label || st.key || "")}</span>
+              <span class="setter-stage-badge stage-${esc(st.status || "missed")}">${LABEL[st.status] || "Missed"}</span>
+            </div>
+            ${st.note ? `<div class="setter-stage-note">${esc(st.note)}</div>` : ""}
+          </div>`).join("")}
+        </div>
+      </div>` : "";
+
+    const r = a.reveal;
+    const reveal = r && (r.hidden || (r.beliefs || []).length) ? `
+      <div class="pc-debrief-block"><h4>What they were holding back</h4>
+        ${r.disposition ? `<div class="db-disposition"><span class="db-disp-chip">${esc(r.disposition)}</span></div>` : ""}
+        ${r.hidden ? `<div class="db-hidden ${r.hiddenSurfaced ? "surfaced" : ""}"><div class="db-hidden-text">&ldquo;${esc(r.hidden)}&rdquo;</div>${r.hiddenNote ? `<div class="db-hidden-note">${esc(r.hiddenNote)}</div>` : ""}</div>` : ""}
+        <div class="db-beliefs">${(r.beliefs || []).map((b) => {
+          const cls = !b.surfaced ? "quiet" : b.handled ? "handled" : "missed";
+          const mark = !b.surfaced ? "&ndash;" : b.handled ? "&#10003;" : "&#10007;";
+          const tail = !b.surfaced ? "never came up" : b.handled ? (b.evidence || "handled") : (b.evidence || "not handled");
+          return `<div class="db-belief db-belief-${cls}"><span class="db-belief-mark">${mark}</span><span class="db-belief-text">${esc(b.text)}</span><span class="db-belief-tail">${esc(tail)}</span></div>`;
+        }).join("")}</div>
+      </div>` : "";
+
+    const n = a.numbers;
+    const numbers = n && Number.isFinite(n.talkRatio) ? `
+      <div class="pc-debrief-block"><h4>By the numbers</h4>
+        <ul>
+          <li>Your words / theirs: ${n.talkRatio} / ${100 - n.talkRatio}</li>
+          <li>Questions you asked: ${n.questions} in ${n.lines} lines</li>
+          <li>${a.structure ? "Closer call positioned on" : "Pitch came on"}: ${n.pitchedAtLine ? "line " + n.pitchedAtLine : "not in this transcript"}</li>
+          <li>Objections raised / handled: ${n.raised} / ${n.handled}</li>
+        </ul>
+      </div>` : "";
+
+    return card + moments + reveal + next + numbers;
   }
 
   function bullets(title, items) {

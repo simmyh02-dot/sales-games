@@ -256,13 +256,20 @@
 
   // --- Start call ----------------------------------------------------------
 
-  // Alternate the displayed prospect name between two people, call to call.
+  // A different first name each call. Two names alternating was a tell by
+  // the third call; a pool with a short memory of the last few used is not.
+  const NAME_POOL = [
+    "Sarah", "John", "Marcus", "Priya", "Daniel", "Amara", "Tom", "Elena", "Jordan", "Nadia",
+    "Chris", "Leah", "Omar", "Hannah", "Ben", "Sofia", "Ryan", "Maya", "Jake", "Isabel",
+    "Liam", "Grace", "Nate", "Chloe", "Sam", "Aisha", "Matt", "Erin", "Adam", "Zoe",
+    "Luke", "Nina", "Kyle", "Tara", "Josh", "Mia", "Dev", "Rosa", "Alex", "Jenna",
+  ];
   function nextProspectName() {
-    const NAMES = ["John", "Sarah"];
-    let idx = parseInt(localStorage.getItem("scg_call_name_idx") || "0", 10);
-    if (Number.isNaN(idx)) idx = 0;
-    const name = NAMES[idx % NAMES.length];
-    localStorage.setItem("scg_call_name_idx", String((idx + 1) % NAMES.length));
+    let recent = [];
+    try { recent = JSON.parse(localStorage.getItem("scg_call_recent_names") || "[]"); } catch { recent = []; }
+    const pool = NAME_POOL.filter((n) => !recent.includes(n));
+    const name = pool[Math.floor(Math.random() * pool.length)] || NAME_POOL[0];
+    try { localStorage.setItem("scg_call_recent_names", JSON.stringify([name, ...recent].slice(0, 8))); } catch { /* fine */ }
     return name;
   }
 
@@ -352,6 +359,7 @@
       els.callStatus.classList.remove("call-status-warn", "call-status-success");
 
       els.chatWindow.innerHTML = "";
+      els.chatWindow.classList.remove("analyzed");
       // Stand the pixel prospect up beside the chat; they open the call talking.
       if (typeof SCG_MASCOT !== "undefined") {
         SCG_MASCOT.mount(els.mascotRail, { name: prospectName });
@@ -580,8 +588,8 @@
       analyzed = true;
       mascotState("idle");
       applyHighlights(data.highlights || []);
-      if (isSetter) renderSetterSummary(data);
-      else renderSummary(data);
+      els.chatWindow.classList.add("analyzed");
+      renderDebrief(data, isSetter);
       els.chatInputRow.style.display = "none";
       els.endCallBtn.style.display   = "none";
       els.callStatus.textContent     = "";
@@ -700,90 +708,18 @@
     els.chatWindow.scrollTop = 0;
   }
 
-  // The "+N points" pill for the debrief, with the server's plain-English
-  // breakdown underneath so the number is always explainable.
-  function pointsBadge(points, breakdown) {
-    const n = Number.isFinite(points) ? points : 0;
-    const pill = `<div class="points-badge">+${n} point${n === 1 ? "" : "s"}</div>`;
-    const why  = breakdown ? `<div class="points-why">${esc(breakdown)}</div>` : "";
-    return pill + why;
-  }
+  // --- The debrief: five blocks, one job each ------------------------------
+  // Verdict (what happened), scorecard (against the method), turning points
+  // (the evidence, with the line to say instead), the reveal (the prospect's
+  // side), next call (one change, one line, one keep), and the numbers.
+  // Points go in the footer: they're the meter's business, not the lesson's.
 
-  function renderSummary(data) {
-    // Award points (scaled server-side by callScore) and meter the session.
-    const points = Number.isFinite(data.pointsAwarded) ? data.pointsAwarded : 0;
-    SCG.addScore(points, "sales-call");
+  const STATUS_LABEL = { hit: "Hit", partial: "Partial", missed: "Missed", not_reached: "Not reached", prior: "Before this drill" };
+  const VERDICT_LABEL = { good: "Keep this", improve: "Could be sharper", bad: "Watch this" };
 
-    els.summaryPanel.innerHTML = `
-      <div class="panel summary-card">
-        <div class="panel-label">// Debrief - what to take into your next call</div>
-        <div class="summary-top">
-          <div class="summary-score">
-            <div class="summary-score-val">${data.callScore ?? "—"}</div>
-            <div class="summary-score-sub">/ 10</div>
-          </div>
-          <div class="summary-headline">
-            <p>${esc(data.headline || "")}</p>
-            ${pointsBadge(points, data.pointsBreakdown)}
-          </div>
-        </div>
-
-        ${data.rememberThis ? `
-        <div class="remember-block">
-          <div class="remember-label">Remember this</div>
-          <div class="remember-text">${esc(data.rememberThis)}</div>
-        </div>` : ""}
-
-        <div class="feedback-block info">
-          <h4><span class="tag"></span>Think about this next time</h4>
-          <ul>${listItems(data.thinkAboutNextTime)}</ul>
-        </div>
-
-        <div class="feedback-block good">
-          <h4><span class="tag"></span>What you did well</h4>
-          <ul>${listItems(data.whatYouDidWell)}</ul>
-        </div>
-
-        ${data.principle && data.principle.name ? `
-        <div class="quote-block"><strong>${esc(data.principle.name)}</strong>: ${esc(data.principle.note || "")}</div>` : ""}
-
-        <div class="actions-row">
-          <span class="objection-context">Green, amber and red marks above show your strongest and weakest moves.</span>
-          <button class="btn btn-secondary" id="save-call-btn">Save this conversation</button>
-          <button class="btn btn-primary" id="new-call-btn">Run another call</button>
-        </div>
-      </div>`;
-
-    els.summaryPanel.style.display = "block";
-    const newBtn = document.getElementById("new-call-btn");
-    if (newBtn) newBtn.addEventListener("click", resetAll);
-    SCG_SAVED.bindSaveButton(document.getElementById("save-call-btn"), () => savePayload(data));
-    els.summaryPanel.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function renderSetterSummary(data) {
-    // Award points (scaled server-side, floored high for an earned booking).
-    const points = Number.isFinite(data.pointsAwarded) ? data.pointsAwarded : 0;
-    SCG.addScore(points, "setter");
-
-    const qualified = data.outcome === "Qualified";
-    const outcomeClass = qualified ? "outcome-qualified" : "outcome-notqualified";
-    const outcomeLabel = data.outcome || (qualified ? "Qualified" : "Not Qualified");
-
-    const bookingLine = data.booked
-      ? (data.unearned
-          ? `Closer call booked — but unearned. ${esc(data.bookingRationale || "")}`
-          : `Closer call booked. ${esc(data.bookingRationale || "")}`)
-      : `No closer call booked. ${esc(data.bookingRationale || "")}`;
-    const bookingClass = data.booked ? (data.unearned ? "booking-soft" : "booking-confirmed") : "booking-none";
-
-    const obj = data.objectives || {};
-    const objRow = (ok, label) =>
-      `<div class="setter-obj ${ok ? "ok" : "miss"}"><span class="setter-obj-mark">${ok ? "✓" : "✗"}</span>${label}</div>`;
-
-    const STATUS_LABEL = { hit: "Hit", partial: "Partial", missed: "Missed" };
-    const structureRows = (data.structure || []).map((s) => {
-      const st = ["hit", "partial", "missed"].includes(s.status) ? s.status : "partial";
+  function scorecardRows(steps) {
+    return (steps || []).map((s) => {
+      const st = ["hit", "partial", "missed"].includes(s.status) ? s.status : "missed";
       return `
         <div class="setter-stage stage-${st}">
           <div class="setter-stage-head">
@@ -793,56 +729,167 @@
           ${s.note ? `<div class="setter-stage-note">${esc(s.note)}</div>` : ""}
         </div>`;
     }).join("");
+  }
 
-    els.summaryPanel.innerHTML = `
-      <div class="panel summary-card">
-        <div class="panel-label">// Setter debrief - did you qualify and book the lead?</div>
+  // The eight phases as a strip, so a section drill still shows where the
+  // call sat in the whole method.
+  function phaseStrip(phases) {
+    if (!phases || !phases.length) return "";
+    return `<div class="db-phases" aria-label="Call phases">${phases.map((p) => {
+      const st = STATUS_LABEL[p.status] ? p.status : "not_reached";
+      return `<span class="db-phase db-phase-${st}" title="${esc(STATUS_LABEL[st])}">${esc(p.label)}</span>`;
+    }).join("")}</div>`;
+  }
 
-        <div class="setter-outcome ${outcomeClass}">
-          <div class="setter-outcome-badge">${esc(outcomeLabel)}</div>
+  function turningPointCards(points) {
+    if (!points || !points.length) return "";
+    return points.map((t) => {
+      const v = ["good", "improve", "bad"].includes(t.verdict) ? t.verdict : "improve";
+      return `
+        <div class="db-moment db-moment-${v}">
+          <div class="db-moment-verdict">${VERDICT_LABEL[v]}${t.principle ? ` <span class="db-moment-principle">${esc(t.principle)}</span>` : ""}</div>
+          <div class="db-moment-quote"><span class="db-who">You</span> &ldquo;${esc(t.quote)}&rdquo;</div>
+          ${t.prospectReply ? `<div class="db-moment-reply"><span class="db-who">Them</span> &ldquo;${esc(t.prospectReply)}&rdquo;</div>` : ""}
+          ${t.what ? `<div class="db-moment-what">${esc(t.what)}</div>` : ""}
+          ${t.sayInstead ? `<div class="db-moment-alt"><span class="db-alt-label">Say instead</span>${esc(t.sayInstead)}</div>` : ""}
+        </div>`;
+    }).join("");
+  }
+
+  function revealBlock(reveal, name) {
+    if (!reveal) return "";
+    const beliefs = Array.isArray(reveal.beliefs) ? reveal.beliefs : [];
+    if (!reveal.hidden && !beliefs.length) return "";
+    const rows = beliefs.map((b) => {
+      const cls  = !b.surfaced ? "quiet" : b.handled ? "handled" : "missed";
+      const mark = !b.surfaced ? "&ndash;" : b.handled ? "&#10003;" : "&#10007;";
+      const tail = !b.surfaced ? "never came up" : b.handled ? (b.evidence || "handled") : (b.evidence || "surfaced, not handled");
+      return `<div class="db-belief db-belief-${cls}"><span class="db-belief-mark">${mark}</span><span class="db-belief-text">${esc(b.text)}</span><span class="db-belief-tail">${esc(tail)}</span></div>`;
+    }).join("");
+    return `
+      <div class="db-block">
+        <h4 class="db-h">What ${esc(name || "the prospect")} was holding back</h4>
+        ${reveal.disposition ? `<div class="db-disposition"><span class="db-disp-chip">${esc(reveal.disposition)}</span>${reveal.dispositionBrief ? `<span class="db-disp-brief">${esc(reveal.dispositionBrief)}</span>` : ""}</div>` : ""}
+        ${reveal.hidden ? `
+          <div class="db-hidden ${reveal.hiddenSurfaced ? "surfaced" : ""}">
+            <div class="db-hidden-label">${reveal.hiddenSurfaced ? "The one thing they wouldn't say - and it surfaced" : "The one thing they wouldn't say"}</div>
+            <div class="db-hidden-text">&ldquo;${esc(reveal.hidden)}&rdquo;</div>
+            ${reveal.hiddenNote ? `<div class="db-hidden-note">${esc(reveal.hiddenNote)}</div>` : ""}
+          </div>` : ""}
+        ${rows ? `<div class="db-beliefs">${rows}</div>` : ""}
+        ${reveal.saysYesWhen ? `<div class="db-yes"><span class="db-alt-label">Earns a yes</span>${esc(reveal.saysYesWhen)}</div>` : ""}
+      </div>`;
+  }
+
+  function nextCallBlock(nc) {
+    if (!nc || !(nc.change || nc.tryLine || nc.keep)) return "";
+    return `
+      <div class="remember-block db-next">
+        <div class="remember-label">Next call</div>
+        ${nc.change ? `<div class="db-next-row"><span class="db-next-k">Change</span><span class="remember-text">${esc(nc.change)}</span></div>` : ""}
+        ${nc.tryLine ? `<div class="db-next-row"><span class="db-next-k">Try</span><span class="db-next-line">${esc(nc.tryLine)}</span></div>` : ""}
+        ${nc.keep ? `<div class="db-next-row"><span class="db-next-k">Keep</span><span>${esc(nc.keep)}</span></div>` : ""}
+      </div>`;
+  }
+
+  function numbersBlock(n, trend, isSetter) {
+    if (!n || !Number.isFinite(n.talkRatio)) return "";
+    const tile = (v, k) => `<div class="db-num"><div class="db-num-v">${v}</div><div class="db-num-k">${k}</div></div>`;
+    const pitchLabel = isSetter ? "Closer call positioned on" : "Pitch came on";
+    const tiles = [
+      tile(`${n.talkRatio}<span>/${100 - n.talkRatio}</span>`, "Your words / theirs"),
+      tile(String(n.questions), `Questions in ${n.lines} line${n.lines === 1 ? "" : "s"}`),
+      tile(n.pitchedAtLine ? `Line ${n.pitchedAtLine}` : "&ndash;", pitchLabel),
+      tile(`${n.raised}<span>&rarr;</span>${n.handled}`, "Objections raised &rarr; handled"),
+    ].join("");
+    let trendLine;
+    if (trend && trend.calls) {
+      const parts = [];
+      if (Number.isFinite(trend.avgScore))     parts.push(`score ${trend.avgScore}/10`);
+      if (Number.isFinite(trend.avgTalkRatio)) parts.push(`you talked ${trend.avgTalkRatio}%`);
+      if (Number.isFinite(trend.avgQuestions)) parts.push(`${trend.avgQuestions} questions`);
+      trendLine = `Your last ${trend.calls} ${isSetter ? "setter" : "closer"} call${trend.calls === 1 ? "" : "s"}, on average: ${parts.join(" &middot; ")}.`;
+    } else {
+      trendLine = `No earlier ${isSetter ? "setter" : "closer"} calls to compare with yet. The next debrief will.`;
+    }
+    return `
+      <div class="db-block">
+        <h4 class="db-h">By the numbers <span class="db-h-sub">counted from the transcript, not graded</span></h4>
+        <div class="db-nums">${tiles}</div>
+        <div class="db-trend">${trendLine}</div>
+      </div>`;
+  }
+
+  function renderDebrief(data, isSetter) {
+    const points = Number.isFinite(data.pointsAwarded) ? data.pointsAwarded : 0;
+    SCG.addScore(points, isSetter ? "setter" : "sales-call");
+
+    const sc = data.scorecard || {};
+    const prospectName = prospect && prospect.name ? prospect.name : "the prospect";
+
+    let verdict;
+    if (isSetter) {
+      const qualified = data.outcome === "Qualified";
+      const bookingLine = data.booked
+        ? (data.unearned
+            ? `Closer call booked, but unearned. ${esc(data.bookingRationale || "")}`
+            : `Closer call booked. ${esc(data.bookingRationale || "")}`)
+        : `No closer call booked. ${esc(data.bookingRationale || "")}`;
+      const bookingClass = data.booked ? (data.unearned ? "booking-soft" : "booking-confirmed") : "booking-none";
+      const obj = data.objectives || {};
+      const objRow = (ok, label) =>
+        `<div class="setter-obj ${ok ? "ok" : "miss"}"><span class="setter-obj-mark">${ok ? "&#10003;" : "&#10007;"}</span>${label}</div>`;
+      verdict = `
+        <div class="setter-outcome ${qualified ? "outcome-qualified" : "outcome-notqualified"}">
+          <div class="setter-outcome-badge">${esc(data.outcome || (qualified ? "Qualified" : "Not Qualified"))}</div>
           <div class="setter-outcome-side">
-            <div class="summary-score-val">${data.callScore ?? "—"}<span class="summary-score-sub">/ 10</span></div>
+            <div class="summary-score-val">${data.callScore ?? "&mdash;"}<span class="summary-score-sub">/ 10</span></div>
           </div>
         </div>
-
         <div class="setter-booking-line ${bookingClass}">${bookingLine}</div>
-
-        ${pointsBadge(points, data.pointsBreakdown)}
-
         ${data.headline ? `<p class="summary-headline-p">${esc(data.headline)}</p>` : ""}
-
         <div class="setter-objectives">
           ${objRow(!!obj.understoodPain, "Understood the pain")}
           ${objRow(!!obj.positionedCloserCall, "Positioned the closer call")}
-        </div>
+        </div>`;
+    } else {
+      verdict = `
+        <div class="summary-top">
+          <div class="summary-score">
+            <div class="summary-score-val">${data.callScore ?? "&mdash;"}</div>
+            <div class="summary-score-sub">/ 10</div>
+          </div>
+          <div class="summary-headline">
+            <div class="db-outcome ${data.closed ? "db-outcome-closed" : "db-outcome-open"}">${data.closed ? "Closed" : "Not closed"}</div>
+            <p>${esc(data.headline || "")}</p>
+          </div>
+        </div>`;
+    }
 
-        ${structureRows ? `
-        <div class="feedback-block info">
-          <h4><span class="tag"></span>How you followed the structure</h4>
-          <div class="setter-stages">${structureRows}</div>
-        </div>` : ""}
+    const scorecard = isSetter
+      ? `<div class="db-block">
+           <h4 class="db-h">How you followed the structure</h4>
+           <div class="setter-stages">${scorecardRows(data.structure || sc.steps)}</div>
+         </div>`
+      : `<div class="db-block">
+           <h4 class="db-h">Scorecard${sc.focus ? ` <span class="db-h-sub">${esc(sc.focus)}</span>` : ""}</h4>
+           ${phaseStrip(sc.phases)}
+           ${sc.steps && sc.steps.length ? `<div class="setter-stages">${scorecardRows(sc.steps)}</div>` : ""}
+         </div>`;
 
-        ${data.rememberThis ? `
-        <div class="remember-block">
-          <div class="remember-label">Remember this</div>
-          <div class="remember-text">${esc(data.rememberThis)}</div>
-        </div>` : ""}
+    const moments = turningPointCards(data.turningPoints);
 
-        <div class="feedback-block info">
-          <h4><span class="tag"></span>Think about this next time</h4>
-          <ul>${listItems(data.thinkAboutNextTime)}</ul>
-        </div>
-
-        <div class="feedback-block good">
-          <h4><span class="tag"></span>What you did well</h4>
-          <ul>${listItems(data.whatYouDidWell)}</ul>
-        </div>
-
-        ${data.principle && data.principle.name ? `
-        <div class="quote-block"><strong>${esc(data.principle.name)}</strong>: ${esc(data.principle.note || "")}</div>` : ""}
-
-        <div class="actions-row">
-          <span class="objection-context">Green, amber and red marks above show your strongest and weakest moves.</span>
+    els.summaryPanel.innerHTML = `
+      <div class="panel summary-card">
+        <div class="panel-label">// Debrief - ${isSetter ? "did you qualify and book the lead?" : "what happened, and what to do about it"}</div>
+        ${verdict}
+        ${scorecard}
+        ${moments ? `<div class="db-block"><h4 class="db-h">Turning points <span class="db-h-sub">the moments that decided the call</span></h4>${moments}</div>` : ""}
+        ${revealBlock(data.reveal, prospectName)}
+        ${nextCallBlock(data.nextCall)}
+        ${numbersBlock(data.numbers, data.trend, isSetter)}
+        <div class="actions-row db-foot">
+          <span class="points-why">+${points} point${points === 1 ? "" : "s"}${data.pointsBreakdown ? ` &middot; ${esc(data.pointsBreakdown)}` : ""}</span>
           <button class="btn btn-secondary" id="save-call-btn">Save this conversation</button>
           <button class="btn btn-primary" id="new-call-btn">Run another call</button>
         </div>
@@ -865,17 +912,16 @@
       persona: activePersona && activePersona.label ? activePersona.label : null,
       section: setter ? null : selectedSection,
       outcome: analysis
-        ? (setter ? (analysis.outcome || (analysis.booked ? "Closer call booked" : "No booking")) : null)
+        ? (setter
+            ? (analysis.outcome || (analysis.booked ? "Closer call booked" : "No booking"))
+            : (analysis.closed ? "Closed" : "Not closed"))
         : "Ended without review",
       score:   analysis && Number.isFinite(analysis.callScore) ? analysis.callScore : null,
       transcript: SCG_SAVED.toTranscript(history),
-      analysis: analysis || null,
+      // highlights are the turning points again, in the shape the chat marks
+      // want; the reader rebuilds from turningPoints, so they stay out.
+      analysis: analysis ? Object.fromEntries(Object.entries(analysis).filter(([k]) => k !== "highlights")) : null,
     };
-  }
-
-  function listItems(items) {
-    if (!items || !items.length) return "<li>Nothing notable.</li>";
-    return items.map((x) => `<li>${esc(x)}</li>`).join("");
   }
 
   function esc(str) {

@@ -570,15 +570,21 @@ async function saveLesson(userId, { content, headline, source, persona, callScor
 // Persist a compact record of a call so the Skill Tree can "remember" it.
 // The transcript is capped and the skill list is short on purpose: this
 // memory only exists to fill out the tree, it is never fed back to the AI.
-async function saveCallHistory(userId, { mode, label, persona, section, outcome, skills, transcript, reviewed }) {
+// score + metrics (005_call_metrics.sql) are what "vs your last 5 calls" in
+// the debrief reads back. A reviewed call always carries both; a call ended
+// without a review carries neither.
+async function saveCallHistory(userId, { mode, label, persona, section, outcome, skills, transcript, reviewed, score, metrics }) {
   if (!db || !userId) return;
   const skillsJson = JSON.stringify(Array.isArray(skills) ? skills.slice(0, 12) : []);
   const compact = typeof transcript === "string" ? transcript.slice(0, 4000) : null;
+  const metricsJson = metrics && typeof metrics === "object" ? JSON.stringify(metrics) : null;
+  await schemaReady();       // the two new columns must exist before we write them
   await db.query(
-    `INSERT INTO call_history (user_id, mode, label, persona, section, outcome, skills, transcript, reviewed, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    `INSERT INTO call_history (user_id, mode, label, persona, section, outcome, skills, transcript, reviewed, created_at, score, metrics)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [userId, mode || null, label || null, persona || null, section || null,
-     outcome || null, skillsJson, compact, !!reviewed, Date.now()]
+     outcome || null, skillsJson, compact, !!reviewed, Date.now(),
+     Number.isFinite(score) ? score : null, metricsJson]
   ).catch(e => console.error("saveCallHistory error:", e.message));
 }
 
@@ -1725,7 +1731,112 @@ const BELIEF_AXES = [
   { key: "works_for_others", label: "Works for others, not for me",
     surfaces: "Believes the results are real but that something about their own circumstances makes them the exception.",
     weights: { base: 1, unemployed: 2, beginner: 2 } },
+
+  // NOT FEAR. Everything above bottoms out in fear, and a bank drawn only from
+  // it makes every prospect the same scared person in a different coat. Real
+  // pipelines are full of people who are fine: confident, decided, or simply
+  // not bothered. These axes are only reachable through a disposition whose
+  // pool names them (see DISPOSITIONS), so the anxious prospect never gets one.
+  { key: "ready_logistics", label: "I'm in if the logistics work", nonFear: true,
+    surfaces: "Concerns are practical, not emotional: start date, how payments run, hours per week, what happens if they travel. A rep who treats this as an objection to reframe annoys them.",
+    weights: { base: 3, worker: 4, "business-owner": 4, retiree: 3 } },
+
+  { key: "confident_diy", label: "I could do this myself", nonFear: true,
+    surfaces: "Believes they have the ability and most of the knowledge already. Questions whether paying for help is needed at all. Ego, not fear.",
+    weights: { base: 3, "business-owner": 5, worker: 3, beginner: 1 } },
+
+  { key: "worth_my_time", label: "Is this worth my time", nonFear: true,
+    surfaces: "Money is not the issue; time is the currency. Wants the return on hours spelled out and gets impatient with anything generic.",
+    weights: { base: 3, "business-owner": 5, retiree: 2 } },
+
+  { key: "indifferent_vague", label: "Sure, sounds good (means nothing)", nonFear: true,
+    surfaces: "Agreeable words with no commitment under them. No pain they will own, every answer soft. Nothing feels urgent enough to decide about.",
+    weights: { base: 3, worker: 4, beginner: 4, "business-owner": 2 } },
+
+  { key: "already_decided", label: "Already decided, checking you", nonFear: true,
+    surfaces: "Made the decision privately before the call. The call is a competence check on the rep: says yes fast if the rep is clean and calm, backs off if the rep oversells or manufactures drama.",
+    weights: { base: 3, "business-owner": 4, worker: 3 } },
 ];
+
+// ---------------------------------------------------------------------
+// DISPOSITION - the second independent axis on a prospect, after
+// communication style. Comm style is HOW they talk; disposition is WHERE
+// THEY ARE. It decides which belief axes are even on the table, how many
+// beliefs they carry, their readiness, what the one thing they won't say is,
+// and how they behave turn to turn. Rolled once at /start, rides on the
+// prospect object, and is only revealed to the trainee in the debrief.
+// ---------------------------------------------------------------------
+const DISPOSITIONS = [
+  { key: "ready", label: "Confident and ready", weight: 2, readiness: "High", beliefCount: [1, 2],
+    pool: ["ready_logistics", "already_decided", "proof", "trust_you", "pace"],
+    brief: "They have mostly decided before the call. Confident, direct, no fear at the bottom. Their questions are practical: what happens in week one, the start date, how payment runs, who they will work with. They cool off if the rep over-pitches, gets pushy, keeps digging for pain they have already stated, or offers a discount. A calm, competent rep can close this call quickly.",
+    hidden: "the private reason they have already decided, which they will not volunteer: a deadline, a person, a recent event",
+    talk: "Ready, warm, decisive. Answer directly and volunteer what you have already decided. Steer toward practicalities. If the rep manufactures drama, drags the call out, or discounts, get visibly cooler and less sure.",
+    grading: "This prospect was READY. Manufacturing pain they had already named, over-pitching, stalling, or discounting are the mistakes here. A short, clean call that confirms the fit and asks for the decision is a good call, not a lazy one." },
+
+  { key: "confident_skeptic", label: "Confident and skeptical", weight: 3, readiness: "Medium", beliefCount: [2, 3],
+    pool: ["confident_diy", "worth_my_time", "proof", "trust_you", "minimizer", "sunk_cost"],
+    brief: "Successful and self-assured. No fear. Their resistance comes from strength: 'I could do this myself', 'I have done fine so far', 'why do I need you'. Reassurance annoys them; specifics, respect and a rep who does not flinch earn them.",
+    hidden: "the one private doubt under the confidence (for example that they have plateaued and will not admit it), or an ego need to be treated as a peer rather than a lead",
+    talk: "Direct, slightly amused, challenging but not hostile. Test the rep's competence. Respect a rep who holds their frame; steamroll one who hedges or flatters.",
+    grading: "This prospect was a CONFIDENT SKEPTIC. Reassurance, flattery and generic pitch language lose them. Holding frame, specifics, and making them sell themselves on why they cannot do it alone are what work." },
+
+  { key: "noncommittal", label: "Agreeable and non-committal", weight: 3, readiness: "Medium", beliefCount: [2, 3],
+    pool: ["indifferent_vague", "later", "passive", "research", "permission"],
+    brief: "Pleasant, agrees with everything, decides nothing. 'Sounds good', 'yeah probably', 'let me think about it', 'I will get back to you'. There is no fear to uncover and no strong pain either; the difficulty is getting a real answer or a real decision out of them. They only commit when pinned to a specific decision, a specific reason and a specific time.",
+    hidden: "what they would actually need in order to decide, which they will not say: another person's opinion, or that they do not feel the problem enough yet",
+    talk: "Friendly, easy, vague. Soft words: maybe, probably, I guess, sounds good. Never a firm no. Never a firm yes unless the rep pins you to a specific decision, for a specific reason, and asks directly.",
+    grading: "This prospect was NON-COMMITTAL. 'Sounds good' is not progress. The skill being tested is pinning soft language to a real answer, surfacing a real reason, and asking for a specific decision. Letting vagueness slide is the mistake." },
+
+  { key: "anxious", label: "Anxious and fearful", weight: 3, readiness: "Low", beliefCount: [3, 5],
+    pool: null,   // every fear-based axis, weighted by persona as before
+    brief: "Wants it and is scared: of the money, of failing again, of what people around them will say. Their resistance is fear wearing excuses.",
+    hidden: "the single deepest fear they would never say out loud",
+    talk: null,   // comm style already covers the delivery
+    grading: "This prospect was ANXIOUS. Handling the surface excuse without reaching the fear under it leaves the objection intact. Look for whether the rep found and addressed the real belief." },
+
+  { key: "browser", label: "Curious browser", weight: 2, readiness: "Low", beliefCount: [1, 2],
+    pool: ["research", "passive", "later", "indifferent_vague", "sunk_cost"],
+    brief: "Just looking. Friendly, curious, gathering information, no urgency, and no pain they have admitted to. They did not come to buy; the rep has to find, or fail to find, a reason this matters now.",
+    hidden: "why they actually clicked, which they are playing down",
+    talk: "Curious and chatty about the offer, evasive about yourself. Ask plenty of questions. Deflect questions about your own situation with 'oh, I am just looking into it' until the rep earns a real answer.",
+    grading: "This prospect was a BROWSER. Pitching to someone with no admitted pain is the mistake. The test is whether the rep found the real reason they clicked and turned browsing into a decision, or correctly qualified them out." },
+];
+
+const DISPOSITIONS_BY_KEY = DISPOSITIONS.reduce((a, d) => { a[d.key] = d; return a; }, {});
+
+function pickDisposition() {
+  const total = DISPOSITIONS.reduce((s, d) => s + d.weight, 0);
+  let r = Math.random() * total;
+  for (const d of DISPOSITIONS) {
+    r -= d.weight;
+    if (r < 0) return d;
+  }
+  return DISPOSITIONS[DISPOSITIONS.length - 1];
+}
+
+// The disposition as the profile generator sees it.
+function dispositionSeed(d) {
+  return `DISPOSITION - where this prospect is, independent of their persona and their communication style: ${d.label}.
+${d.brief}
+buyingReadiness MUST be "${d.readiness}". hiddenBelief for this prospect is ${d.hidden}. It is not necessarily a fear.
+Keep goal, currentSituation, problem and openingMessage consistent with this disposition.`;
+}
+
+// The disposition as the roleplaying prospect sees it, turn to turn.
+function dispositionBlock(disp) {
+  const d = disp && disp.key ? (DISPOSITIONS_BY_KEY[disp.key] || null) : null;
+  if (!d) return "";
+  return `
+DISPOSITION - where you are in this decision (independent of how you talk): ${d.label}.
+- ${d.brief}${d.talk ? `\n- ${d.talk}` : ""}`;
+}
+
+// The disposition as the grader sees it.
+function dispositionGrading(disp) {
+  const d = disp && disp.key ? (DISPOSITIONS_BY_KEY[disp.key] || null) : null;
+  return d ? d.grading : "";
+}
 
 // Concrete particulars rolled alongside the axes. Beliefs stated as slogans
 // all sound alike; beliefs hung on a number, a person or a date do not.
@@ -1757,9 +1868,18 @@ function pickWeightedAxis(pool, personaKey) {
 // 3-5 DISTINCT axes, weighted toward the ones that fit the rolled persona.
 // Sampling WITHOUT replacement is what makes the bank internally varied - the
 // model can no longer return four flavours of the same doubt.
-function pickBeliefAxes(personaKey) {
-  const count = 3 + Math.floor(Math.random() * 3);   // 3, 4 or 5
-  const pool = BELIEF_AXES.slice();
+// The disposition decides the pool and the count. The anxious prospect draws
+// from every fear-based axis (the original behaviour); the others draw only
+// from their own short list, which is how a ready buyer ends up with one
+// logistics question instead of four fears. Persona weights still apply
+// inside whichever pool is in play.
+function pickBeliefAxes(personaKey, disposition) {
+  const d = disposition || DISPOSITIONS_BY_KEY.anxious;
+  const [lo, hi] = d.beliefCount || [3, 5];
+  const count = lo + Math.floor(Math.random() * (hi - lo + 1));
+  const pool = d.pool
+    ? BELIEF_AXES.filter((ax) => d.pool.includes(ax.key))
+    : BELIEF_AXES.filter((ax) => !ax.nonFear);
   const picked = [];
   while (picked.length < count && pool.length) {
     const axis = pickWeightedAxis(pool, personaKey);
@@ -1797,8 +1917,9 @@ Rules for the bank:
 - Weave in these particulars from this prospect's life, and keep goal, currentSituation and problem consistent with them:
 ${anchorLines}
 - The beliefs should sit slightly at odds with each other, the way real people are inconsistent. A surface excuse can be cover for something further down the list.
+- Not every belief is a fear. If an assigned axis is practical, confident or indifferent, write it that way: a ready buyer asks about start dates, a confident one says they could do it alone, a non-committal one says "sounds good" and means nothing. Do NOT smuggle fear into an axis that has none.
 - BANNED, because every previous prospect said them: "I don't know if I'm fit for this", "I'm not sure I'm cut out for this", "some people are just born with it", "people who are born with it are the ones who win", "it works for others but not for me" (allowed ONLY if that exact axis is assigned above, and then only anchored to a specific past attempt), and any bare version of "is this a scam".
-- hiddenBelief must be a DIFFERENT fear from all of the above, not a restatement of the strongest one.${avoidBlock}`;
+- hiddenBelief must be DIFFERENT from all of the above, not a restatement of the strongest one. Its nature is set by the DISPOSITION block: a fear for an anxious prospect, a private reason or an ego need for a confident one, an unspoken condition for a non-committal one.${avoidBlock}`;
 }
 
 // Per-user novelty. The axis roll fixes variety inside one call; this fixes
@@ -1843,6 +1964,273 @@ function trimBeliefMemory(userId) {
   ).catch(() => {});
 }
 
+// ---------------------------------------------------------------------
+// DEBRIEF ENGINE
+//
+// The old debrief asked the model for "one thing to remember" and then for
+// six fields, each of which was that one thing in a different shape, so the
+// same sentence came back as the headline, the lesson, three bullets and
+// the principle. This version gives every block ONE job and enforces the
+// difference on the server: turning points must quote a real line, the
+// reveal is assembled from the profile rather than asked for, and the
+// numbers are arithmetic on the transcript so they mean the same thing on
+// every call. One grader pass produces everything, including the marks on
+// the chat, so the marks can no longer contradict the verdict (they used
+// to be graded from the salesperson's lines alone, blind to what the
+// prospect said back).
+// ---------------------------------------------------------------------
+
+// The One Call Close, as a scorecard. Phase keys are what the grader returns;
+// labels match the section picker in sales-call.html so a drilled section can
+// be mapped to its phase and scored on that phase's own steps.
+const CLOSER_PHASES = [
+  { key: "opening", label: "Opening", steps: [
+      { key: "why_here",   label: "Found out why they're here and what they want help with" },
+      { key: "why_want",   label: "Got the why behind it, not just the what" },
+      { key: "frame",      label: "Set a small frame: where you are, where you want to be, next step if it fits" },
+      { key: "focus_them", label: "Kept it on them, at conversation level, genuinely interested" } ] },
+  { key: "situation", label: "Situation", steps: [
+      { key: "doing_now",  label: "What they're doing right now" },
+      { key: "how_long",   label: "How long, and why they're doing it" },
+      { key: "results",    label: "What results it's actually getting them" } ] },
+  { key: "problem", label: "Problem", steps: [
+      { key: "missing",    label: "What's missing / why the current situation isn't enough" },
+      { key: "probe",      label: "Probed down: broad, specific, how long, impact, how it feels" },
+      { key: "symptoms",   label: "Reached the symptoms that carry the pain, not just the problem" },
+      { key: "eliminate",  label: "Eliminated the other solutions (doing it alone, someone else)" } ] },
+  { key: "consequences", label: "Consequences", steps: [
+      { key: "reframe",    label: "Reframed to open them up (medal / lion) before digging" },
+      { key: "inaction",   label: "Cost of not acting, in emotions rather than answers" },
+      { key: "commit",     label: "Got them to say they won't accept that outcome" },
+      { key: "why_now",    label: "Why now, and permission to move to the presentation" } ] },
+  { key: "purchase", label: "Purchase Decisions", steps: [
+      { key: "tried",      label: "What they've already done to solve it" },
+      { key: "prehandle",  label: "Pre-handled the likely objection before it arrived" },
+      { key: "identity",   label: "Identity reframe: who they'd have to be" },
+      { key: "future",     label: "Future paced in their own words, then painted the picture" } ] },
+  { key: "presentation", label: "Presentation", steps: [
+      { key: "pillars",    label: "Three pillars, short, each tied to something they said" },
+      { key: "certainty",  label: "Certainty check before price (1-10, what takes it to ten)" },
+      { key: "price",      label: "Price tied to the outcome, then the next steps" } ] },
+  { key: "objections", label: "Objection Handling", steps: [
+      { key: "clarify",    label: "Defused and clarified what they actually mean" },
+      { key: "reframe",    label: "Reframed it (money to commitment, can't to others have)" },
+      { key: "leverage",   label: "Leveraged the cost of staying where they are" },
+      { key: "commit",     label: "Got a commitment before solving the logistics" },
+      { key: "resources",  label: "Found the resources with them, not for them" } ] },
+  { key: "close", label: "Close", steps: [
+      { key: "ask",        label: "Asked for the decision, clearly" },
+      { key: "silence",    label: "Let them answer instead of talking through it" },
+      { key: "next_steps", label: "Agreed the concrete next steps (payment, onboarding)" } ] },
+];
+const CLOSER_PHASE_BY_LABEL = Object.fromEntries(CLOSER_PHASES.map((p) => [p.label, p]));
+
+function closerRubricForPrompt(section) {
+  const phase = section ? CLOSER_PHASE_BY_LABEL[section] : null;
+  const phases = CLOSER_PHASES.map((p, i) => `${i + 1}. ${p.key} (${p.label})`).join("\n");
+  const steps = phase
+    ? `\nThe salesperson drilled the "${phase.label}" phase. Score each of its steps, with a note that cites what happened:\n` +
+      phase.steps.map((s) => `- ${s.key}: ${s.label}`).join("\n")
+    : "";
+  return `THE ONE CALL CLOSE PHASES (for "phases": one entry per key, in this order):\n${phases}${steps}`;
+}
+
+// The phase strip and the drilled phase's steps, normalised. Phases before
+// the drilled section already "happened" off-screen, so they are marked
+// prior regardless of what the model said about them: it cannot grade
+// what nobody did. Missing entries read as not reached.
+function buildCloserScorecard(summary, section) {
+  const phase = section ? CLOSER_PHASE_BY_LABEL[section] : null;
+  const startIdx = phase ? CLOSER_PHASES.indexOf(phase) : 0;
+  const STATUSES = ["hit", "partial", "missed", "not_reached"];
+  const rawPhases = Array.isArray(summary.phases) ? summary.phases : [];
+  const phases = CLOSER_PHASES.map((p, i) => {
+    if (i < startIdx) return { key: p.key, label: p.label, status: "prior" };
+    const m = rawPhases.find((x) => x && x.key === p.key);
+    const status = m && STATUSES.includes(m.status) ? m.status : "not_reached";
+    return { key: p.key, label: p.label, status };
+  });
+  const rawSteps = Array.isArray(summary.steps) ? summary.steps : [];
+  const steps = phase
+    ? phase.steps.map((s) => {
+        const m = rawSteps.find((x) => x && x.key === s.key);
+        const status = m && ["hit", "partial", "missed"].includes(m.status) ? m.status : "missed";
+        return { key: s.key, label: s.label, status, note: m ? String(m.note || "").trim() : "" };
+      })
+    : [];
+  return { focus: phase ? phase.label : null, phases, steps };
+}
+
+// Loose text match for "did the model quote a real line": lowercase, letters
+// and digits only, whitespace collapsed. Curly quotes and dashes in the
+// model's copy must not disqualify an otherwise honest quote.
+function looseText(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9À-ɏ ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// Turning points are the evidence layer, so every one has to point at a
+// line that exists and quote it honestly. An index that isn't a real
+// salesperson line drops the point. A quote that isn't in the line is
+// replaced with the line itself (the index was right, the copy wasn't), so
+// the rep still sees what was actually said. The prospect's reply is taken
+// from the transcript rather than asked for, for the same reason.
+function buildTurningPoints(raw, turns) {
+  const repPositions = [];
+  turns.forEach((m, pos) => { if (m.role === "user") repPositions.push(pos); });
+  const seen = new Set();
+  const out = [];
+  for (const tp of (Array.isArray(raw) ? raw : [])) {
+    if (!tp || !Number.isInteger(tp.index) || tp.index < 0 || tp.index >= repPositions.length) continue;
+    if (seen.has(tp.index)) continue;
+    seen.add(tp.index);
+    const pos  = repPositions[tp.index];
+    const line = turns[pos].content;
+    const next = turns[pos + 1] && turns[pos + 1].role !== "user" ? turns[pos + 1].content : "";
+    const verdict = ["good", "improve", "bad"].includes(tp.verdict) ? tp.verdict : "improve";
+    const quoteOk = tp.quote && looseText(tp.quote).length >= 8 && looseText(line).includes(looseText(tp.quote));
+    out.push({
+      index:         tp.index,
+      verdict,
+      quote:         quoteOk ? String(tp.quote).trim() : line.slice(0, 180),
+      prospectReply: next.slice(0, 220),
+      what:          String(tp.what || "").trim(),
+      sayInstead:    verdict === "good" ? "" : String(tp.sayInstead || "").trim(),
+      principle:     String(tp.principle || "").trim(),
+    });
+    if (out.length === 3) break;
+  }
+  return out;
+}
+
+// The reveal is the prospect's side of the call. Everything factual comes
+// from the profile the server generated; the model only says which beliefs
+// surfaced and which were handled, by index, so it cannot invent a belief
+// the prospect never had.
+function buildReveal(prospect, personality, summary) {
+  const bank  = Array.isArray(prospect && prospect.limitingBeliefs) ? prospect.limitingBeliefs : [];
+  const marks = Array.isArray(summary.beliefs) ? summary.beliefs : [];
+  const beliefs = bank.map((text, i) => {
+    const m = marks.find((b) => b && b.index === i) || {};
+    return {
+      text:     String(text),
+      surfaced: !!m.surfaced,
+      handled:  !!m.surfaced && !!m.handled,
+      evidence: String(m.evidence || "").trim(),
+    };
+  });
+  const disp = prospect && prospect.disposition && DISPOSITIONS_BY_KEY[prospect.disposition.key];
+  return {
+    disposition:      disp ? disp.label : null,
+    dispositionBrief: disp ? disp.brief : null,
+    hidden:           prospect && prospect.hiddenBelief ? String(prospect.hiddenBelief) : null,
+    hiddenSurfaced:   !!summary.hiddenBeliefSurfaced,
+    hiddenNote:       String(summary.hiddenBeliefNote || "").trim(),
+    beliefs,
+    saysYesWhen:      personality && personality.saysYesWhen ? String(personality.saysYesWhen) : null,
+  };
+}
+
+// Arithmetic on the transcript. No model, so a 56/44 talk ratio means the
+// same thing on every call and the trend is a real comparison.
+function computeCallMetrics(turns, summary) {
+  const wc  = (s) => (String(s || "").match(/[\p{L}\p{N}']+/gu) || []).length;
+  const rep = turns.filter((m) => m.role === "user");
+  const pro = turns.filter((m) => m.role !== "user");
+  const repWords = rep.reduce((n, m) => n + wc(m.content), 0);
+  const proWords = pro.reduce((n, m) => n + wc(m.content), 0);
+  const total = repWords + proWords;
+  const beliefs = Array.isArray(summary.beliefs) ? summary.beliefs : [];
+  const pitched = Number.isInteger(summary.pitchedAtLine) && summary.pitchedAtLine >= 0 && summary.pitchedAtLine < rep.length
+    ? summary.pitchedAtLine + 1
+    : null;
+  return {
+    lines:         rep.length,
+    talkRatio:     total ? Math.round((repWords / total) * 100) : null,
+    questions:     rep.reduce((n, m) => n + (String(m.content).match(/\?/g) || []).length, 0),
+    raised:        beliefs.filter((b) => b && b.surfaced).length,
+    handled:       beliefs.filter((b) => b && b.surfaced && b.handled).length,
+    pitchedAtLine: pitched,
+  };
+}
+
+// The rep's last five reviewed calls in this mode, averaged, so the debrief
+// can say "vs your last 5". Read before this call is saved. Best effort.
+async function recentCallTrend(userId, mode) {
+  if (!db || !userId) return null;
+  try {
+    const r = await db.query(
+      `SELECT score, metrics FROM call_history
+        WHERE user_id=$1 AND mode=$2 AND reviewed=TRUE AND metrics IS NOT NULL
+        ORDER BY id DESC LIMIT 5`,
+      [userId, mode]
+    );
+    const rows = r.rows.map((row) => {
+      let m = null;
+      try { m = JSON.parse(row.metrics); } catch { /* skip a bad row */ }
+      return { score: row.score, m };
+    }).filter((x) => x.m);
+    if (!rows.length) return null;
+    const avg = (xs) => {
+      const v = xs.filter((n) => Number.isFinite(n));
+      return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10 : null;
+    };
+    return {
+      calls:        rows.length,
+      avgScore:     avg(rows.map((x) => x.score)),
+      avgTalkRatio: avg(rows.map((x) => x.m.talkRatio)),
+      avgQuestions: avg(rows.map((x) => x.m.questions)),
+    };
+  } catch (err) {
+    console.error("recentCallTrend error:", err.message);
+    return null;
+  }
+}
+
+// "nextCall", with the non-repetition rule checked rather than hoped for:
+// if the change restates a turning point's alternative line, the model
+// ignored the instruction and the rep would read the same sentence twice.
+function buildNextCall(summary, turningPoints) {
+  const nc = summary.nextCall && typeof summary.nextCall === "object" ? summary.nextCall : {};
+  let change = String(nc.change || "").trim();
+  const alts = turningPoints.map((t) => looseText(t.sayInstead)).filter(Boolean);
+  if (change && alts.some((a) => a === looseText(change))) change = "";
+  const hasGood = turningPoints.some((t) => t.verdict === "good");
+  return {
+    change,
+    tryLine: String(nc.tryLine || "").trim(),
+    keep:    hasGood ? String(nc.keep || "").trim() : "",
+  };
+}
+
+// Shared JSON contract for the grader, so Closer and Setter return the same
+// evidence blocks and the client renders one debrief.
+const DEBRIEF_SHARED_FIELDS = `
+  "turningPoints": [
+    { "index": <the [#i] of a salesperson line>, "verdict": "good" | "improve" | "bad",
+      "quote": "5 to 20 words copied VERBATIM from that line",
+      "what": "one sentence: what this line did to the call, judged by how the prospect responded",
+      "sayInstead": "for improve/bad ONLY: the exact line to say instead, in the salesperson's own register, using the prospect's words where possible. Omit for good.",
+      "principle": "the principle from the notes this moment is about, by name, or empty" }
+  ],
+  "beliefs": [ one entry per item in the profile's limitingBeliefs, in order:
+    { "index": <0-based position in limitingBeliefs>, "surfaced": <did it come up on the call>, "handled": <was it genuinely handled>, "evidence": "under 10 words, or empty" } ],
+  "hiddenBeliefSurfaced": <did the hidden belief actually surface in the prospect's words>,
+  "hiddenBeliefNote": "one sentence: how close the salesperson came to the hidden belief and whether they addressed it",
+  "pitchedAtLine": <the [#i] of the first salesperson line that presented the offer or a price, or null>,
+  "nextCall": {
+    "change": "ONE behaviour to change next call: the pattern across the turning points, or the single biggest miss. Different words from every turning point.",
+    "tryLine": "one concrete line to say next call, in quotes",
+    "keep": "one thing to keep doing, naming the good turning point it comes from; empty string if there was no good moment"
+  },
+  "discovered_skills": ["skill_id1", "skill_id2"]`;
+
+const DEBRIEF_RULES = `
+RULES (each block has one job; the server checks these):
+- "headline" says what happened. No advice in it.
+- "turningPoints": at most 3, and only the moments that decided the call. Quotes are copied verbatim. Judge each line by what the prospect did next, not by how it reads on its own.
+- "nextCall.change" must NOT restate a turning point's sayInstead. It names the pattern, in different words.
+- Do not repeat a point across blocks. If a moment is a turning point, the scorecard note for it is one short clause, not the same sentence again.`;
+
 app.post("/api/call/start", aiLimiter, authMiddleware, checkSessionLimit, async (req, res) => {
   if (!requireAI(res)) return;
   recordSessionStart(req.userId, "sales-call");
@@ -1862,9 +2250,10 @@ Shape their goal, current situation, problem, limiting beliefs, opening line and
     ? `Use exactly "${prospectName}" as the prospect's name.`
     : `Give the prospect a realistic first name.`;
 
-  const commStyle  = pickCommStyle();
-  const beliefAxes = pickBeliefAxes(personality && personality.key);
-  const anchors    = pickAnchors();
+  const commStyle   = pickCommStyle();
+  const disposition = pickDisposition();
+  const beliefAxes  = pickBeliefAxes(personality && personality.key, disposition);
+  const anchors     = pickAnchors();
 
   try {
     const avoid = await recentBeliefsFor(req.userId);
@@ -1873,6 +2262,7 @@ Shape their goal, current situation, problem, limiting beliefs, opening line and
 Scenario: ${scenario}${customDescription ? ` — ${customDescription}` : ""}
 ${sectionContext}
 ${personalityContext}
+${dispositionSeed(disposition)}
 ${commStyleSeed(commStyle)}
 ${nameInstruction}
 
@@ -1897,8 +2287,11 @@ Return JSON:
       language
     );
     if (prospectName) data.name = prospectName;
-    // Ride the rolled style along on the prospect so /message stays consistent.
+    // Ride the rolled style and disposition along on the prospect so /message
+    // and /end stay consistent with the profile that was generated.
     data.communicationStyle = { key: commStyle.key, label: commStyle.label };
+    data.disposition        = { key: disposition.key, label: disposition.label };
+    data.buyingReadiness    = disposition.readiness;
     data.beliefAxes = beliefAxes.map((a) => a.key);
     rememberBeliefs(req.userId, data.limitingBeliefs);
     trimBeliefMemory(req.userId);
@@ -1964,7 +2357,8 @@ MEMORY AND PROGRESSION (act like a conscious, real human, not a loop):
 - If they have handled most of your beliefs well, soften and move toward a decision like a real person would.
 - If they handle something poorly or dodge it, stay on it - don't let them off the hook.
 
-REACT realistically based on how well they apply Authority, Tonality, Identity, Certainty, Objection Handling and Closing principles. Stay completely in character.
+REACT realistically based on how well they apply Authority, Identity, Certainty, Objection Handling and Closing principles. Stay completely in character.
+${dispositionBlock(prospect.disposition)}
 
 ${commStyleBlock(prospect.communicationStyle)}
 
@@ -2005,53 +2399,32 @@ app.post("/api/call/end", aiLimiter, authMiddleware, async (req, res) => {
   const { scenario, prospect, history, section, personality, language } = req.body;
   try {
     const turns = capHistory(history);
+    // One transcript, with the salesperson's lines numbered so the grader can
+    // point at them. The prospect's lines are in it too: a line is judged by
+    // what it did to the call, which is invisible without the reply.
+    let repIdx = 0;
     const historyText = turns
-      .map((m) => `${m.role === "user" ? "Salesperson" : "Prospect"}: ${m.content}`)
-      .join("\n");
-
-    // The salesperson's own lines, numbered, so highlights can map back to chat bubbles.
-    const userLines = turns.filter((m) => m.role === "user");
-    const numberedUserLines = userLines
-      .map((m, i) => `[#${i}] Salesperson: ${m.content}`)
+      .map((m) => m.role === "user" ? `[#${repIdx++}] Salesperson: ${m.content}` : `Prospect: ${m.content}`)
       .join("\n");
 
     const sectionFocus = section
-      ? `\nThis session focused on the "${section}" phase. Weight your feedback heavily on skills specific to that phase.`
+      ? `\nThis session drilled the "${section}" phase; earlier phases are assumed to have happened before the transcript starts.`
       : "";
+    const dispositionNote = dispositionGrading(prospect && prospect.disposition);
 
-    // 1) HAIKU — fast per-message highlights to paint directly onto the chat.
-    const highlightsPromise = askClaude(
-      `A sales call roleplay just ended. Below are ONLY the salesperson's own lines, each tagged [#index].
-Pick the lines that most matter for learning and tag each one. Highlight the genuinely strong moves AND
-the clear mistakes / missed reads. Do not tag every line - choose the 4 to 8 most instructive ones.
+    // Read the trend BEFORE this call is written, so "vs your last 5" means
+    // the five before this one.
+    const trendPromise = recentCallTrend(req.userId, "Closer");
 
-Verdicts:
-- "good"    = a strong, skillful move (mark these green)
-- "improve" = workable but a better option existed
-- "bad"     = a clear mistake or missed read (mark these red)
-
-Salesperson lines:
-${numberedUserLines}
-
-${STYLE_RULES}
-
-Return ONLY valid JSON. Each note is the lesson for that exact line, under 14 words, action-focused:
-{
-  "highlights": [
-    { "index": <integer matching [#index]>, "verdict": "good" | "improve" | "bad", "note": "what to think about, under 14 words" }
-  ]
-}`,
-      900,
-      HAIKU,
-      language
-    );
-
-    // 2) SONNET — the deeper learning summary that lives under the chat.
-    const summaryPromise = askClaude(
-      `A sales call roleplay simulation just ended.
+    const summary = await askClaude(
+      `A sales call roleplay simulation just ended. Grade the salesperson.
 Scenario: ${scenario}
 ${sectionFocus}
-Prospect profile: ${JSON.stringify(prospect)}
+${dispositionNote ? `\n${dispositionNote}\n` : ""}
+Prospect profile (the prospect's hiddenBelief and limitingBeliefs are what they were actually holding; the salesperson could not see them):
+${JSON.stringify(prospect)}
+
+${closerRubricForPrompt(section)}
 
 Full transcript:
 ${historyText}
@@ -2059,40 +2432,30 @@ ${historyText}
 ${STYLE_RULES}
 
 ${SKILL_ID_PROMPT}
+${DEBRIEF_RULES}
 
-Analyze the salesperson's performance, grounded in the sales study notes. The goal is that they LEARN ONE
-thing they will remember and apply on the next call. Be specific to what actually happened in this transcript.
 Return JSON:
 {
   "callScore": <integer 0-10, overall quality of the call>,
   "closed": <boolean, true ONLY if the transcript shows the prospect explicitly agreeing to buy / move forward with payment>,
-  "headline": "one-line verdict of how the call went",
-  "rememberThis": "the single most important lesson from THIS call, one memorable sentence",
-  "thinkAboutNextTime": ["forward-looking bullet, a concrete thing to do differently next call", "..."],
-  "whatYouDidWell": ["short bullet under 15 words", "..."],
-  "principle": { "name": "principle name from notes", "note": "one sentence on how it applied here" },
-  "discovered_skills": ["skill_id1", "skill_id2", "skill_id3"]
+  "headline": "one line: what happened on this call",
+  "phases": [ { "key": "<phase key>", "status": "hit" | "partial" | "missed" | "not_reached" } ],
+  "steps": [ { "key": "<step key of the drilled phase>", "status": "hit" | "partial" | "missed", "note": "under 14 words, citing what happened" } ],${DEBRIEF_SHARED_FIELDS}
 }`,
-      1600,
+      2400,
       SONNET,
       language
     );
 
-    const [highlightsData, summary] = await Promise.all([
-      highlightsPromise.catch(() => ({ highlights: [] })),
-      summaryPromise,
-    ]);
+    const turningPoints = buildTurningPoints(summary.turningPoints, turns);
+    const scorecard     = buildCloserScorecard(summary, section);
+    const reveal        = buildReveal(prospect, personality, summary);
+    const nextCall      = buildNextCall(summary, turningPoints);
+    const numbers       = computeCallMetrics(turns, summary);
+    const trend         = await trendPromise;
 
-    // Attach the salesperson's quote to each highlight so the client can match
-    // by text if indices ever drift.
-    const highlights = (highlightsData.highlights || [])
-      .filter((h) => h && typeof h.index === "number" && userLines[h.index])
-      .map((h) => ({
-        index: h.index,
-        verdict: ["good", "improve", "bad"].includes(h.verdict) ? h.verdict : "improve",
-        note: h.note || "",
-        quote: userLines[h.index].content,
-      }));
+    // The marks on the chat come from the same pass as the verdict.
+    const highlights = turningPoints.map((t) => ({ index: t.index, verdict: t.verdict, note: t.what, quote: t.quote }));
 
     // Closer: base 50 scaled by the 0-10 call quality, +15 only if the deal closed.
     const closeBase     = pointsForCall(50, summary.callScore);
@@ -2106,9 +2469,10 @@ Return JSON:
     if (req.userId && summary.discovered_skills) {
       autoUnlock(req.userId, summary.discovered_skills);
     }
-    if (req.userId && summary.rememberThis) {
+    // The lesson is the one thing to change: that's what Lessons is for.
+    if (req.userId && nextCall.change) {
       saveLesson(req.userId, {
-        content: summary.rememberThis,
+        content: nextCall.change,
         headline: summary.headline,
         source: "Closer",
         persona: personality && personality.label ? personality.label : null,
@@ -2122,18 +2486,35 @@ Return JSON:
         label: scenario,
         persona: personality && personality.label ? personality.label : null,
         section: section || null,
-        outcome: "Reviewed",
+        outcome: closed ? "Closed" : "Reviewed",
         skills: summary.discovered_skills || [],
         transcript: historyText,
         reviewed: true,
+        score: clampRating(summary.callScore),
+        metrics: numbers,
       });
     }
-    res.json({ ...summary, highlights, pointsAwarded, pointsBreakdown });
+    res.json({
+      callScore: summary.callScore,
+      closed,
+      headline: summary.headline || "",
+      scorecard,
+      turningPoints,
+      reveal,
+      nextCall,
+      numbers,
+      trend,
+      highlights,
+      discovered_skills: summary.discovered_skills || [],
+      pointsAwarded,
+      pointsBreakdown,
+    });
   } catch (err) {
     console.error("call/end error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate feedback report." });
   }
 });
+
 
 // ---------------------------------------------------------------------
 // SETTER MODE
@@ -2226,17 +2607,19 @@ app.post("/api/setter/start", aiLimiter, authMiddleware, checkSessionLimit, asyn
     ? `Use exactly "${prospectName}" as the lead's name.`
     : `Give the lead a realistic first name.`;
 
-  const commStyle  = pickCommStyle();
-  const beliefAxes = pickBeliefAxes(personality && personality.key);
-  const anchors    = pickAnchors();
+  const commStyle   = pickCommStyle();
+  const disposition = pickDisposition();
+  const beliefAxes  = pickBeliefAxes(personality && personality.key, disposition);
+  const anchors     = pickAnchors();
 
   try {
     const avoid = await recentBeliefsFor(req.userId);
     const data = await askClaude(
       `Generate a prospect profile for a REMOTE-INCOME RECRUITMENT call roleplay.
 The offer: ${offerText}
-The trainee is a SETTER phoning this warm lead. The lead has NOT been sold anything yet — they only watched a video and are curious/skeptical.
+The trainee is a SETTER phoning this warm lead. The lead has NOT been sold anything yet — they only watched a video.
 ${personaContext}
+${dispositionSeed(disposition)}
 ${commStyleSeed(commStyle)}
 ${nameInstruction}
 
@@ -2260,8 +2643,11 @@ Return JSON:
       language
     );
     if (prospectName) data.name = prospectName;
-    // Ride the rolled style along on the lead so /message stays consistent.
+    // Ride the rolled style and disposition along on the lead so /message and
+    // /end stay consistent with the profile that was generated.
     data.communicationStyle = { key: commStyle.key, label: commStyle.label };
+    data.disposition        = { key: disposition.key, label: disposition.label };
+    data.buyingReadiness    = disposition.readiness;
     data.beliefAxes = beliefAxes.map((a) => a.key);
     rememberBeliefs(req.userId, data.limitingBeliefs);
     trimBeliefMemory(req.userId);
@@ -2300,8 +2686,9 @@ app.post("/api/setter/message", aiLimiter, authMiddleware, async (req, res) => {
     const msg = await anthropic.messages.create({
       model: SONNET,
       max_tokens: 350,
-      system: `You are roleplaying as ${prospect.name}, a warm LEAD on a phone call. You recently watched a video about ${offerText} and left your details, so someone from their team (the SETTER, the person you're talking to) is now calling you. You are curious but skeptical. You do NOT know any sales script and must never reference one.
+      system: `You are roleplaying as ${prospect.name}, a warm LEAD on a phone call. You recently watched a video about ${offerText} and left your details, so someone from their team (the SETTER, the person you're talking to) is now calling you. You do NOT know any sales script and must never reference one.
 ${personaInstruction}
+${dispositionBlock(prospect.disposition)}
 
 Profile:
 - Age: ${prospect.age}
@@ -2316,7 +2703,7 @@ ${beliefBank}
 
 BEHAVIOUR:
 - Act like a real, conscious human, not a loop. Remember everything already said. Never repeat an objection once it's been genuinely handled — drop it and move on.
-- Make the setter EARN it. Don't hand over your real problem, its impact, or your goals unless they actually ask good questions and make you feel understood. If they interrogate you or jump to pitching without understanding you, stay guarded and non-committal.
+- Make the setter EARN it. Don't hand over your real problem, its impact, or your goals unless they actually ask good questions and make you feel understood. If they interrogate you or jump to pitching without understanding you, stay guarded and non-committal. (If your DISPOSITION says you are ready or confident, "earning it" means competence and respect, not digging: you still expect to be asked why you are here, but you do not manufacture reluctance.)
 - You only agree to book a call with a "closer" / "coach" when the setter has (a) genuinely understood your pain and goals AND (b) made that next call feel worth your time AND (c) offered a specific time. Only then do you accept a SPECIFIC time slot.
 
 BOOKING FLAG (be strict and honest):
@@ -2360,39 +2747,17 @@ app.post("/api/setter/end", aiLimiter, authMiddleware, async (req, res) => {
   const offerText = setterOfferText(offer, customDescription);
   try {
     const turns = capHistory(history);
+    // One transcript with the setter's lines numbered; the lead's lines stay in
+    // so each setter line is judged by what the lead did next.
+    let repIdx = 0;
     const historyText = turns
-      .map((m) => `${m.role === "user" ? "Setter" : "Lead"}: ${m.content}`)
+      .map((m) => m.role === "user" ? `[#${repIdx++}] Setter: ${m.content}` : `Lead: ${m.content}`)
       .join("\n");
 
-    const userLines = turns.filter((m) => m.role === "user");
-    const numberedUserLines = userLines
-      .map((m, i) => `[#${i}] Setter: ${m.content}`)
-      .join("\n");
+    const dispositionNote = dispositionGrading(prospect && prospect.disposition);
+    const trendPromise = recentCallTrend(req.userId, "Setter");
 
-    // 1) HAIKU — per-line highlights painted onto the chat.
-    const highlightsPromise = askClaude(
-      `A remote-income recruitment call just ended. Below are ONLY the setter's own lines, each tagged [#index].
-Pick the 4 to 8 most instructive lines and tag each. Highlight strong moves AND clear mistakes / missed reads.
-
-Verdicts:
-- "good"    = a strong, skillful move
-- "improve" = workable but a better option existed
-- "bad"     = a clear mistake or missed read
-
-Setter lines:
-${numberedUserLines}
-
-${STYLE_RULES}
-
-Return ONLY valid JSON. Each note is the lesson for that exact line, under 14 words, action-focused:
-{ "highlights": [ { "index": <integer>, "verdict": "good" | "improve" | "bad", "note": "under 14 words" } ] }`,
-      900,
-      HAIKU,
-      language
-    );
-
-    // 2) SONNET — grade against the Setter Call Framework + decide the outcome.
-    const summaryPromise = askClaude(
+    const summary = await askClaude(
       `A REMOTE-INCOME RECRUITMENT call roleplay just ended. The offer being recruited for: ${offerText}
 Grade the SETTER (the trainee) against the ideal call structure and objectives below.
 
@@ -2400,8 +2765,9 @@ THE IDEAL STRUCTURE (order matters, but it's a loose guide — reward following 
 ${setterStagesForPrompt()}
 ${setterFrameworkBlock()}
 ${SETTER_OBJECTIVES}
-
-Lead profile: ${JSON.stringify(prospect)}
+${dispositionNote ? `\n${dispositionNote} A booking with a READY lead is earned when the setter confirmed the reason and the fit, even if pain discovery was brief.\n` : ""}
+Lead profile (the lead's hiddenBelief and limitingBeliefs are what they were actually holding; the setter could not see them):
+${JSON.stringify(prospect)}
 
 Full transcript:
 ${historyText}
@@ -2412,6 +2778,8 @@ BOOKING VALIDATION (two-stage guard): only treat the call as BOOKED if the trans
 ${STYLE_RULES}
 
 ${SKILL_ID_PROMPT}
+${DEBRIEF_RULES}
+- "pitchedAtLine" here is the first setter line that positioned the call with a closer.
 
 Return JSON:
 {
@@ -2422,38 +2790,28 @@ Return JSON:
   "bookingRationale": "one or two sentences: was the closer call booked, and was it earned?",
   "objectives": { "understoodPain": <boolean>, "positionedCloserCall": <boolean> },
   "structure": [ { "key": "<stage key from the list>", "status": "hit" | "partial" | "missed", "note": "under 14 words, specific to this call" } ],
-  "headline": "one-line verdict of how the call went",
-  "rememberThis": "the single most important lesson from THIS call, one memorable sentence",
-  "thinkAboutNextTime": ["forward-looking, concrete thing to do differently next call", "..."],
-  "whatYouDidWell": ["short bullet under 15 words", "..."],
-  "principle": { "name": "principle name", "note": "one sentence on how it applied here" },
-  "discovered_skills": ["skill_id1", "skill_id2"]
+  "headline": "one line: what happened on this call",${DEBRIEF_SHARED_FIELDS}
 }
 The "structure" array MUST include one entry for every stage key: ${SETTER_STAGES.map((s) => s.key).join(", ")}.`,
-      2000,
+      2600,
       SONNET,
       language
     );
 
-    const [highlightsData, summary] = await Promise.all([
-      highlightsPromise.catch(() => ({ highlights: [] })),
-      summaryPromise,
-    ]);
-
-    const highlights = (highlightsData.highlights || [])
-      .filter((h) => h && typeof h.index === "number" && userLines[h.index])
-      .map((h) => ({
-        index: h.index,
-        verdict: ["good", "improve", "bad"].includes(h.verdict) ? h.verdict : "improve",
-        note: h.note || "",
-        quote: userLines[h.index].content,
-      }));
-
     // Attach each stage's label so the client doesn't need to know the rubric.
     const stageLabels = Object.fromEntries(SETTER_STAGES.map((s) => [s.key, s.label]));
-    const structure = Array.isArray(summary.structure)
-      ? summary.structure.map((s) => ({ ...s, label: stageLabels[s.key] || s.key }))
-      : [];
+    const structure = SETTER_STAGES.map((s) => {
+      const m = Array.isArray(summary.structure) ? summary.structure.find((x) => x && x.key === s.key) : null;
+      const status = m && ["hit", "partial", "missed"].includes(m.status) ? m.status : "missed";
+      return { key: s.key, label: stageLabels[s.key], status, note: m ? String(m.note || "").trim() : "" };
+    });
+
+    const turningPoints = buildTurningPoints(summary.turningPoints, turns);
+    const reveal        = buildReveal(prospect, personality, summary);
+    const nextCall      = buildNextCall(summary, turningPoints);
+    const numbers       = computeCallMetrics(turns, summary);
+    const trend         = await trendPromise;
+    const highlights    = turningPoints.map((t) => ({ index: t.index, verdict: t.verdict, note: t.what, quote: t.quote }));
 
     // Setter: base 10 scaled by the 0-10 call quality, +5 only for an earned booking.
     const setBase       = pointsForCall(10, summary.callScore);
@@ -2469,9 +2827,9 @@ The "structure" array MUST include one entry for every stage key: ${SETTER_STAGE
     if (req.userId && summary.discovered_skills) {
       autoUnlock(req.userId, summary.discovered_skills);
     }
-    if (req.userId && summary.rememberThis) {
+    if (req.userId && nextCall.change) {
       saveLesson(req.userId, {
-        content: summary.rememberThis,
+        content: nextCall.change,
         headline: summary.headline,
         source: "Setter",
         persona: personality && personality.label ? personality.label : null,
@@ -2489,14 +2847,36 @@ The "structure" array MUST include one entry for every stage key: ${SETTER_STAGE
         skills: summary.discovered_skills || [],
         transcript: historyText,
         reviewed: true,
+        score: clampRating(summary.callScore),
+        metrics: numbers,
       });
     }
-    res.json({ ...summary, structure, highlights, pointsAwarded, pointsBreakdown });
+    res.json({
+      callScore: summary.callScore,
+      outcome: summary.outcome === "Qualified" ? "Qualified" : "Not Qualified",
+      booked: !!summary.booked,
+      unearned: !!summary.unearned,
+      bookingRationale: String(summary.bookingRationale || "").trim(),
+      objectives: summary.objectives || {},
+      headline: summary.headline || "",
+      scorecard: { focus: "Setter Call Framework", phases: [], steps: structure },
+      structure,
+      turningPoints,
+      reveal,
+      nextCall,
+      numbers,
+      trend,
+      highlights,
+      discovered_skills: summary.discovered_skills || [],
+      pointsAwarded,
+      pointsBreakdown,
+    });
   } catch (err) {
     console.error("setter/end error:", err.stack || err.message);
     res.status(500).json({ error: "Failed to generate feedback report." });
   }
 });
+
 
 // ---------------------------------------------------------------------
 // End a call WITHOUT a review. Sometimes you just want to quit and move
@@ -2614,7 +2994,12 @@ app.post("/api/calls/save", authMiddleware, async (req, res) => {
 
   let analysisJson = null;
   if (analysis && typeof analysis === "object") {
-    try { analysisJson = JSON.stringify(analysis).slice(0, 40000); } catch { analysisJson = null; }
+    // Never truncate: a sliced JSON string is not JSON, and the reader would
+    // throw on a call that saved "successfully". Oversized means dropped.
+    try {
+      const str = JSON.stringify(analysis);
+      analysisJson = str.length <= 40000 ? str : null;
+    } catch { analysisJson = null; }
   }
 
   try {
@@ -2930,11 +3315,14 @@ function renderCallPdf(doc, call, opts) {
     doc.fillColor(c.ink).font("Helvetica-Bold").fontSize(12)
        .text(a.headline, PDF_MARGIN, doc.y, { width: contentW, paragraphGap: 8, lineGap: 2 });
   }
-  if (a.rememberThis) {
+  // Calls saved before the debrief redesign carry "rememberThis"; newer ones
+  // carry nextCall.change in the same role.
+  const lesson = a.rememberThis || (a.nextCall && a.nextCall.change) || "";
+  if (lesson) {
     doc.fillColor(c.muted).font("Helvetica-Bold").fontSize(9)
-       .text("REMEMBER THIS", PDF_MARGIN, doc.y, { characterSpacing: 1.1 });
+       .text(a.rememberThis ? "REMEMBER THIS" : "CHANGE ONE THING", PDF_MARGIN, doc.y, { characterSpacing: 1.1 });
     doc.fillColor(c.ink).font("Helvetica-Oblique").fontSize(11)
-       .text(a.rememberThis, { width: contentW, paragraphGap: 10, lineGap: 2 });
+       .text(lesson, { width: contentW, paragraphGap: 10, lineGap: 2 });
   }
 
   // Setter-specific blocks
@@ -2967,6 +3355,113 @@ function renderCallPdf(doc, call, opts) {
     });
   }
 
+  // Closer scorecard (the drilled phase's steps). Setter's stages are the
+  // "structure" block above, so this only fires for Closer.
+  const sc = a.scorecard;
+  if (sc && Array.isArray(sc.steps) && sc.steps.length && !Array.isArray(a.structure)) {
+    pdfHeading(doc, c, "Scorecard" + (sc.focus ? " \u00b7 " + sc.focus : ""));
+    sc.steps.forEach((s) => {
+      if (doc.y > 700) pdfNewPage(doc, c);
+      const status = (s.status || "missed").toUpperCase();
+      doc.fillColor(c.ink).font("Helvetica-Bold").fontSize(10.5)
+         .text((s.label || s.key || "") + "  ", PDF_MARGIN, doc.y, { width: contentW, continued: true })
+         .fillColor(status === "HIT" ? c.good : status === "MISSED" ? c.bad : c.muted)
+         .fontSize(8.5).text(status, { characterSpacing: 0.8 });
+      if (s.note) {
+        doc.fillColor(c.muted).font("Helvetica").fontSize(10)
+           .text(s.note, PDF_MARGIN, doc.y, { width: contentW, paragraphGap: 6, lineGap: 1.5 });
+      }
+    });
+  }
+
+  if (Array.isArray(a.turningPoints) && a.turningPoints.length) {
+    pdfHeading(doc, c, "Turning points");
+    a.turningPoints.forEach((t) => {
+      if (doc.y > 660) pdfNewPage(doc, c);
+      const col = t.verdict === "good" ? c.good : t.verdict === "bad" ? c.bad : c.muted;
+      doc.fillColor(col).font("Helvetica-Bold").fontSize(8.5)
+         .text((t.verdict === "good" ? "KEEP" : t.verdict === "bad" ? "WATCH THIS" : "SHARPER"), PDF_MARGIN, doc.y, { characterSpacing: 0.8 });
+      doc.fillColor(c.ink).font("Helvetica-Oblique").fontSize(10.5)
+         .text("You: \u201c" + (t.quote || "") + "\u201d", PDF_MARGIN, doc.y, { width: contentW, lineGap: 1.5 });
+      if (t.prospectReply) {
+        doc.fillColor(c.muted).font("Helvetica-Oblique").fontSize(10)
+           .text("Them: \u201c" + t.prospectReply + "\u201d", PDF_MARGIN, doc.y, { width: contentW, lineGap: 1.5 });
+      }
+      if (t.what) {
+        doc.fillColor(c.ink).font("Helvetica").fontSize(10.5)
+           .text(t.what, PDF_MARGIN, doc.y, { width: contentW, lineGap: 1.5 });
+      }
+      if (t.sayInstead) {
+        doc.fillColor(c.muted).font("Helvetica-Bold").fontSize(8.5)
+           .text("SAY INSTEAD", PDF_MARGIN, doc.y, { characterSpacing: 0.8 });
+        doc.fillColor(c.ink).font("Helvetica").fontSize(10.5)
+           .text(t.sayInstead, PDF_MARGIN, doc.y, { width: contentW, paragraphGap: 8, lineGap: 1.5 });
+      } else {
+        doc.moveDown(0.5);
+      }
+    });
+  }
+
+  const rv = a.reveal;
+  if (rv && (rv.hidden || (Array.isArray(rv.beliefs) && rv.beliefs.length))) {
+    pdfHeading(doc, c, "What the prospect was holding back");
+    if (rv.disposition) {
+      doc.fillColor(c.muted).font("Helvetica").fontSize(10)
+         .text("Disposition: " + rv.disposition, PDF_MARGIN, doc.y, { width: contentW, paragraphGap: 4 });
+    }
+    if (rv.hidden) {
+      doc.fillColor(c.ink).font("Helvetica-Oblique").fontSize(10.5)
+         .text(rv.hidden, PDF_MARGIN, doc.y, { width: contentW, lineGap: 1.5 });
+      if (rv.hiddenNote) {
+        doc.fillColor(c.muted).font("Helvetica").fontSize(10)
+           .text(rv.hiddenNote, PDF_MARGIN, doc.y, { width: contentW, paragraphGap: 6, lineGap: 1.5 });
+      }
+    }
+    (rv.beliefs || []).forEach((b) => {
+      if (doc.y > 700) pdfNewPage(doc, c);
+      const mark = !b.surfaced ? "\u2013" : b.handled ? "\u2713" : "\u2717";
+      const col  = !b.surfaced ? c.muted : b.handled ? c.good : c.bad;
+      doc.fillColor(col).font("Helvetica-Bold").fontSize(10.5)
+         .text(mark + "  ", PDF_MARGIN, doc.y, { continued: true })
+         .fillColor(c.ink).font("Helvetica").text(b.text + (b.surfaced ? "" : "  (never came up)"), { width: contentW, lineGap: 1.5 });
+    });
+    if (rv.saysYesWhen) {
+      doc.moveDown(0.3);
+      doc.fillColor(c.muted).font("Helvetica").fontSize(10)
+         .text("What earns a yes from this persona: " + rv.saysYesWhen, PDF_MARGIN, doc.y, { width: contentW, paragraphGap: 6, lineGap: 1.5 });
+    }
+  }
+
+  const nc = a.nextCall;
+  if (nc && (nc.tryLine || nc.keep)) {
+    pdfHeading(doc, c, "Next call");
+    if (nc.tryLine) {
+      doc.fillColor(c.muted).font("Helvetica-Bold").fontSize(8.5).text("TRY", PDF_MARGIN, doc.y, { characterSpacing: 0.8 });
+      doc.fillColor(c.ink).font("Helvetica").fontSize(10.5).text(nc.tryLine, PDF_MARGIN, doc.y, { width: contentW, paragraphGap: 6, lineGap: 1.5 });
+    }
+    if (nc.keep) {
+      doc.fillColor(c.muted).font("Helvetica-Bold").fontSize(8.5).text("KEEP", PDF_MARGIN, doc.y, { characterSpacing: 0.8 });
+      doc.fillColor(c.ink).font("Helvetica").fontSize(10.5).text(nc.keep, PDF_MARGIN, doc.y, { width: contentW, paragraphGap: 6, lineGap: 1.5 });
+    }
+  }
+
+  const n = a.numbers;
+  if (n && Number.isFinite(n.talkRatio)) {
+    pdfHeading(doc, c, "By the numbers");
+    const rows = [
+      ["Your words / theirs", n.talkRatio + " / " + (100 - n.talkRatio)],
+      ["Questions you asked", n.questions + " in " + n.lines + " lines"],
+      ["Pitch came on", n.pitchedAtLine ? "line " + n.pitchedAtLine : "not in this transcript"],
+      ["Objections raised / handled", n.raised + " / " + n.handled],
+    ];
+    rows.forEach(([k, v]) => {
+      doc.fillColor(c.muted).font("Helvetica").fontSize(10)
+         .text(k + ": ", PDF_MARGIN, doc.y, { continued: true })
+         .fillColor(c.ink).font("Helvetica-Bold").text(String(v));
+    });
+  }
+
+  // Blocks from the previous debrief shape, for calls saved before it changed.
   if (Array.isArray(a.whatYouDidWell) && a.whatYouDidWell.length) {
     pdfHeading(doc, c, "What you did well");
     pdfBullets(doc, c, a.whatYouDidWell);

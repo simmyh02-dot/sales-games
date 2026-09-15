@@ -418,6 +418,127 @@ rather than now. Each is flagged here so it cannot quietly fall off.
 
 ---
 
+## Rep's-eye review — 15 Sep 2026
+
+A customer walk through the live app as the target rep (young, new to
+high-ticket, drilling between real calls, cost-sensitive, wants to know
+exactly what to change). One Closer call, one objection round, one pattern
+round, every page, every grading prompt. Twenty-four findings; the two the
+user flagged as urgent shipped the same day. The rest are the backlog, in
+the order they pay off.
+
+### Shipped 15 Sep 2026
+
+- [x] **The debrief, rebuilt around five jobs.** The old one asked the model
+      for "one thing to remember" and then for six fields, so the same
+      sentence came back as headline, lesson, three bullets and principle
+      (six of seven blocks, on the test call). Now one Sonnet pass over the
+      **full** transcript returns: a verdict (no advice in it), a scorecard
+      (Closer: the eight One-Call-Close phases as a strip plus the drilled
+      phase's own steps, hit/partial/missed; Setter: the nine stages as
+      before), up to three **turning points** each quoting a real line with
+      the prospect's actual reply and a "say instead", the **reveal** (the
+      hidden belief, which bank beliefs surfaced and were handled, what earns
+      a yes from the persona, the disposition), **next call** (change one
+      thing, one line to try, one thing to keep), and **the numbers** — talk
+      ratio, questions, the line the pitch came on, objections raised →
+      handled, computed on the server with no model, plus the average of the
+      rep's last five calls in that mode.
+      Enforced server-side, not hoped for: a quote must be a substring of the
+      line it points at or the real line replaces it; an invalid index drops
+      the point; three points max; "change one thing" is dropped if it
+      restates a turning point's alternative; "keep" needs a green moment;
+      phases before a drilled section are marked *prior* whatever the model
+      said. The chat marks come from the same pass, so they can no longer
+      contradict the verdict (the old highlight pass saw only the
+      salesperson's lines — it graded the test call's worst line green).
+      One model call instead of two. `005_call_metrics.sql` adds
+      `score` + `metrics` to `call_history` for the trend; saved calls and the
+      PDF render both the new shape and calls saved under the old one. The
+      Lesson saved is the "change one thing" sentence, so Lessons keeps its
+      shape. Verified under PGlite (engine rules, migration applied twice,
+      trend query scoping) and on the live deploy.
+- [x] **Prospect variety: a disposition axis.** Every prospect bottomed out in
+      fear, because every belief axis was a fear. Five new non-fear axes
+      (logistics, "I could do this myself", "worth my time", "sounds good,
+      means nothing", "already decided, checking you") and a **disposition**
+      rolled at `/start`, independent of persona and comm style: *Confident
+      and ready* (1–2 beliefs, High readiness, cools off if you over-pitch or
+      discount), *Confident and skeptical* (resistance from strength),
+      *Agreeable and non-committal* (never a firm no, never a firm yes unless
+      pinned), *Anxious and fearful* (the old default, 3–5 fear beliefs), and
+      *Curious browser* (no admitted pain, just looking). The disposition
+      picks the belief pool and count, fixes `buyingReadiness`, redefines
+      what the hidden thing is (a private reason, an ego need, an unspoken
+      condition — not always a fear), adds a behaviour block to every
+      prospect turn, and tells the grader what a good call looked like for
+      *that* prospect (a short clean close of a ready buyer is a good call).
+      Hidden during the call, revealed in the debrief. Both modes.
+- [x] Names: a pool of 40 with an eight-name memory, instead of John/Sarah
+      alternating.
+
+### Backlog, in payoff order
+
+**Fix first (broken or misleading today)**
+- [ ] The landing demo throws the typed response away after sign-in. Keep it
+      in `sessionStorage`; grade it on first arrival at /home. It's the first
+      promise the product makes and the best onboarding moment available.
+- [ ] A 30-second objection round costs the same session as a 30-line call.
+      On Free that's the month gone in five minutes. Meter calls at 1 and
+      drills at ⅕, or meter only full calls and cap drills generously. Also:
+      "Score tracking" vs "Progress tracking" and "Priority everything" on
+      the pricing grid aren't differences a rep can see.
+
+**Big wins (change what the product is worth to this rep)**
+- [ ] **Offer Profile** in Settings — name, price and payment plans, promise,
+      what's included, ideal client, top three objections — injected into
+      prospect generation, prospect turns, the grader and Objection Battle.
+      The rep had to invent the program and the price on the call and was
+      then interrogated on things they'd made up. Foundation for "train
+      your script between calls".
+- [ ] "Call so far" card when a section other than Opening is drilled: her
+      situation, the pain that surfaced, what was pitched, the price. The
+      profile already holds it; the rep starts blind without it.
+- [ ] Voice input on the call (browser speech-to-text, zero API cost),
+      optionally the prospect's reply spoken. Typing removes exactly what
+      reps are for.
+- [ ] Stream the prospect's reply; pre-generate the prospect while the rep
+      is on the persona screen. "Connecting..." sat still ~15s.
+- [ ] Objection Battle draws from the Offer Profile and the rep's own top
+      three; drill one type on purpose ("money, ten rounds").
+- [ ] Objection Battle: one follow-up turn. Answering with a question ends
+      the round today; real objections are 2–3 exchanges.
+- [ ] Pattern Recognition: drop the "tonal cue" type (text has no tone;
+      Tonality was cut from the product), add a one-tap "I'd argue with this
+      answer" that prunes an item from the cache after two flags, hand-check
+      the Level 1 pool once.
+- [ ] Lessons: a "Your pattern" block — the miss that recurs most across the
+      last ten debriefs, average score by section and persona, the trend.
+      The page copy already promises "see your weak spots by persona"; it
+      delivers a filter. Everything needed is now in `call_history`.
+- [ ] Settings → Progress: score over the last ten calls, per-section
+      averages (Closer), stage hit-rate (Setter), the one skill to work on.
+      Points second.
+- [ ] First-run strip on /home for accounts with zero graded reps ("read one
+      prospect → handle one objection → take your first call"); fix
+      "Welcome back" on a first visit.
+
+**Polish**
+- [ ] Message box: auto-growing textarea, Enter sends, Shift+Enter newline.
+- [ ] "MSG 7 / 30" reads as a quota. Drop the denominator or label it.
+- [ ] Feedback pop-up lands on top of the debrief 3s after it renders. Fire
+      it on the next page load or after "Run another call".
+- [ ] Objection Battle: strip skill ids from copy ("(rf_restaurant)"); reset
+      the card's "Analyzing..." / "AI is reviewing..." once graded.
+- [ ] Skill Tree lights a node when a skill was *touched*, including on bad
+      calls. Two states (touched / demonstrated), or present it as the map
+      of the method rather than progress.
+
+**Not yet checked:** the live call at phone width, the Setter debrief on a
+fresh account, the PDF export end to end.
+
+---
+
 ## Done alongside Phase 1 (30 Aug 2026)
 
 - **Rebrand → Sales Camp AI.** All titles, brand marks, page copy, comment
