@@ -2765,7 +2765,8 @@ input.custom-input:focus {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-2);
-  white-space: nowrap;
+  max-width: 220px;
+  text-align: right;
 }
 .db-yes { font-size: 13.5px; line-height: 1.55; color: var(--text-1); margin-top: 12px; }
 
@@ -2810,7 +2811,7 @@ input.custom-input:focus {
 
 @media (max-width: 560px) {
   .db-belief { grid-template-columns: 18px 1fr; }
-  .db-belief-tail { grid-column: 2; white-space: normal; }
+  .db-belief-tail { grid-column: 2; max-width: none; text-align: left; }
   .db-next-row { grid-template-columns: 1fr; gap: 4px; }
 }
 
