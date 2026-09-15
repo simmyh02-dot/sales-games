@@ -480,6 +480,13 @@ the order they pay off.
 ### Backlog, in payoff order
 
 **Fix first (broken or misleading today)**
+- [ ] A confirmed booking (Setter) or a firm yes (Closer) ends the call by
+      itself 1.3s later (`autoCloseCall` in sales-call.js), so the rep never
+      gets to finish: confirm the time, set next steps, handle the last
+      wobble. Reported by Simon 15 Sep 2026. Fix: on the success flag, show
+      a "Booked / Closed" state with the input still open and Analyze
+      highlighted; let the rep end it. Or a short "wrap up or analyze?"
+      prompt. Never auto-end.
 - [ ] The landing demo throws the typed response away after sign-in. Keep it
       in `sessionStorage`; grade it on first arrival at /home. It's the first
       promise the product makes and the best onboarding moment available.
