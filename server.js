@@ -1140,7 +1140,9 @@ Signing you in&hellip;
 </body></html>`);
   } catch (err) {
     console.error("Dev bypass error:", err.message);
-    res.status(500).send("Bypass failed");
+    // Debug detail is fine here — this whole route is already gated on the
+    // same secret, so anyone who can trigger the error can already read it.
+    res.status(500).send("Bypass failed: " + err.message);
   }
 });
 
