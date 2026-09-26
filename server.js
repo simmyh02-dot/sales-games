@@ -1135,7 +1135,26 @@ app.get("/api/auth/me", async (req, res) => {
       "SELECT id, name, email, picture, language, token_version FROM users WHERE id=$1",
       [payload.sub]
     );
-    if (!result.rows.length) return res.status(404).json({ error: "User not found" });
+    if (!result.rows.length) {
+      // The one legitimate way to reach here: dev-bypass issued a fallback
+      // token (version 0) while the DB was unreachable — e.g. Neon still
+      // waking from an archived branch — so no row was ever written. Now
+      // that the query above got through, self-heal by writing it lazily
+      // instead of treating a valid, correctly-signed token as invalid.
+      // Anything else with no matching row is a real "user not found".
+      if (payload.sub === "g_dev_bypass") {
+        const healed = await db.query(
+          `INSERT INTO users (id, google_id, email, name, picture, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (id) DO UPDATE SET email=$3
+           RETURNING id, name, email, picture, language, token_version`,
+          ["g_dev_bypass", "dev_bypass", "simmyh02@gmail.com", "Simon", "", Date.now()]
+        );
+        const { token_version, ...user } = healed.rows[0];
+        return res.json(user);
+      }
+      return res.status(404).json({ error: "User not found" });
+    }
     // This route is what auth-guard.js polls on every app page load, so it is
     // where a revoked session actually bounces someone out. The comparison
     // rides along on the query already being made.
