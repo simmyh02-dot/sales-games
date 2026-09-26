@@ -1069,29 +1069,48 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
 // the Google round trip — gated on a secret only you hold, set as
 // DEV_BYPASS_SECRET in Vercel. Unset the env var (or delete this route) once
 // Google sign-in is working again; nothing else in the app changes.
+//
+// Neon auto-unarchives an archived branch on the first query against it, but
+// that wake-up can itself be slow or briefly error while it's happening —
+// and a quota-exceeded project won't wake up at all. Either way, signing in
+// should not depend on Neon answering right now: this still tries the DB
+// (so a healthy Neon gets the real token_version and a real user row), but
+// falls back to a version-0 token instead of failing if that attempt errors.
 app.get("/api/auth/dev-bypass", authLimiter, async (req, res) => {
   if (!process.env.DEV_BYPASS_SECRET) return res.status(404).send("Not found");
   if (req.query.secret !== process.env.DEV_BYPASS_SECRET) return res.status(403).send("Forbidden");
-  if (!db) return res.status(503).json({ error: "Database not configured. Set DATABASE_URL." });
 
-  try {
-    await schemaReady();
-    const email = "simmyh02@gmail.com";
-    const userId = "g_dev_bypass";
-    const saved = await db.query(
-      `INSERT INTO users (id, google_id, email, name, picture, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (id) DO UPDATE SET email=$3
-       RETURNING token_version`,
-      [userId, "dev_bypass", email, "Simon", "", Date.now()]
-    );
-    const token = signToken(userId, saved.rows[0].token_version);
-    const user = { id: userId, name: "Simon", email, picture: "" };
+  const email = "simmyh02@gmail.com";
+  const userId = "g_dev_bypass";
+  let tokenVersion = 0;
+  let dbNote = "database not reached (running on a fallback token)";
 
-    // Drop the token straight into the same localStorage keys auth-guard.js
-    // reads, then continue to /home — same landing spot a real Google
-    // sign-in gets you.
-    res.type("html").send(`<!DOCTYPE html><html><body>
+  if (db) {
+    try {
+      await schemaReady();
+      const saved = await db.query(
+        `INSERT INTO users (id, google_id, email, name, picture, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (id) DO UPDATE SET email=$3
+         RETURNING token_version`,
+        [userId, "dev_bypass", email, "Simon", "", Date.now()]
+      );
+      tokenVersion = saved.rows[0].token_version;
+      dbNote = "database reached fine";
+    } catch (err) {
+      console.error("Dev bypass: DB unreachable, issuing fallback token:", err.message);
+    }
+  }
+
+  const token = signToken(userId, tokenVersion);
+  const user = { id: userId, name: "Simon", email, picture: "" };
+
+  // Drop the token straight into the same localStorage keys auth-guard.js
+  // reads, then continue to /home — same landing spot a real Google
+  // sign-in gets you. dbNote is only ever seen by you (it's in the page
+  // source of a page only this secret-gated route serves).
+  res.type("html").send(`<!DOCTYPE html><html><body>
+<!-- ${dbNote} -->
 <script>
   localStorage.setItem("scg_auth_token", ${JSON.stringify(token)});
   localStorage.setItem("scg_auth_user", ${JSON.stringify(JSON.stringify(user))});
@@ -1099,12 +1118,6 @@ app.get("/api/auth/dev-bypass", authLimiter, async (req, res) => {
 </script>
 Signing you in&hellip;
 </body></html>`);
-  } catch (err) {
-    console.error("Dev bypass error:", err.message);
-    // Debug detail is fine here — this whole route is already gated on the
-    // same secret, so anyone who can trigger the error can already read it.
-    res.status(500).send("Bypass failed: " + err.message);
-  }
 });
 
 app.get("/api/auth/me", async (req, res) => {
