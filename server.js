@@ -1,33 +1,5 @@
 require("dotenv").config();
 
-// ---------------------------------------------------------------------
-// Error reporting. This block runs before express and pg are required,
-// because the SDK instruments those modules as they load. Without a
-// SENTRY_DSN nothing initialises and every call below is a no-op, so local
-// dev and the tests are unaffected.
-//
-// captureConsoleIntegration is doing most of the work: every route in this
-// file catches its own errors and console.error()s them, so those never
-// reach the express error handler. Promoting error-level console output to
-// Sentry events is what actually gets those in front of us.
-// ---------------------------------------------------------------------
-const Sentry = require("@sentry/node");
-if (process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV || "development",
-    release: process.env.VERCEL_GIT_COMMIT_SHA || undefined,
-    // Errors only. Tracing would sample every AI call, and those are long.
-    tracesSampleRate: 0,
-    // Transcripts are the whole product and they are personal. Never let the
-    // SDK attach request bodies, headers or IPs on its own.
-    sendDefaultPii: false,
-    maxValueLength: 2000,
-    integrations: [Sentry.captureConsoleIntegration({ levels: ["error"] })],
-  });
-  console.log("Sentry error reporting enabled.");
-}
-
 const express = require("express");
 const helmet = require("helmet");
 const crypto = require("crypto");
@@ -60,16 +32,9 @@ const PORT = process.env.PORT || 3000;
 // this every request looks like one address and rate limiting is meaningless.
 app.set("trust proxy", 1);
 
-// Vercel freezes the function the moment a response ends, so a queued Sentry
-// event can sit unsent until the next invocation — or be lost with the
-// instance. Flushing on finish costs the client nothing: the response has
-// already gone out by the time this runs.
-if (process.env.SENTRY_DSN) {
-  app.use((req, res, next) => {
-    res.on("finish", () => { Sentry.flush(2000).catch(() => {}); });
-    next();
-  });
-}
+// Vercel freezes the function the moment a response ends. Sentry used to
+// need a flush hook here to get queued events out before that happened;
+// with Sentry removed, there is nothing left to flush.
 
 // ---------------------------------------------------------------------
 // Fail fast on missing production config. A missing JWT_SECRET used to fall
@@ -492,10 +457,6 @@ async function authMiddleware(req, res, next) {
     return res.status(401).json({ error: "Session ended. Please sign in again." });
   }
   req.userId = payload.sub;
-  // Ties any error raised while serving this request to an account id, so a
-  // report is actionable ("this user, this call") without carrying an email
-  // or a transcript into Sentry. No-op when SENTRY_DSN is unset.
-  Sentry.setUser({ id: payload.sub });
   next();
 }
 
@@ -4343,11 +4304,6 @@ app.get("/api/health", async (req, res) => {
     dbOk,
     aiConfigured: !!anthropic,
     authConfigured: !!(googleClient && db),
-    // Whether SENTRY_DSN reached this environment — a boolean, never the DSN.
-    // "Did the env var actually land in Vercel?" was otherwise unanswerable
-    // from outside: a missing DSN silently disables the SDK and looks
-    // identical to a healthy deploy with no errors.
-    errorReportingConfigured: !!process.env.SENTRY_DSN,
     schema,
     googleClientId: process.env.GOOGLE_CLIENT_ID || null,
     model: SONNET,
