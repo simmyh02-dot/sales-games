@@ -1111,7 +1111,7 @@ app.get("/api/auth/dev-bypass", authLimiter, async (req, res) => {
   // source of a page only this secret-gated route serves).
   res.type("html").send(`<!DOCTYPE html><html><body>
 <!-- ${dbNote} -->
-<script>
+<script nonce="${res.locals.cspNonce}">
   localStorage.setItem("scg_auth_token", ${JSON.stringify(token)});
   localStorage.setItem("scg_auth_user", ${JSON.stringify(JSON.stringify(user))});
   location.replace("/home");
