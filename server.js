@@ -1103,6 +1103,47 @@ app.post("/api/auth/google", authLimiter, async (req, res) => {
   }
 });
 
+// Personal-use bypass while Google OAuth is quota-blocked in the Cloud
+// project. Mints a real session the same way /api/auth/google does, minus
+// the Google round trip — gated on a secret only you hold, set as
+// DEV_BYPASS_SECRET in Vercel. Unset the env var (or delete this route) once
+// Google sign-in is working again; nothing else in the app changes.
+app.get("/api/auth/dev-bypass", authLimiter, async (req, res) => {
+  if (!process.env.DEV_BYPASS_SECRET) return res.status(404).send("Not found");
+  if (req.query.secret !== process.env.DEV_BYPASS_SECRET) return res.status(403).send("Forbidden");
+  if (!db) return res.status(503).json({ error: "Database not configured. Set DATABASE_URL." });
+
+  try {
+    await schemaReady();
+    const email = "simmyh02@gmail.com";
+    const userId = "g_dev_bypass";
+    const saved = await db.query(
+      `INSERT INTO users (id, google_id, email, name, picture, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (id) DO UPDATE SET email=$3
+       RETURNING token_version`,
+      [userId, "dev_bypass", email, "Simon", "", Date.now()]
+    );
+    const token = signToken(userId, saved.rows[0].token_version);
+    const user = { id: userId, name: "Simon", email, picture: "" };
+
+    // Drop the token straight into the same localStorage keys auth-guard.js
+    // reads, then continue to /home — same landing spot a real Google
+    // sign-in gets you.
+    res.type("html").send(`<!DOCTYPE html><html><body>
+<script>
+  localStorage.setItem("scg_auth_token", ${JSON.stringify(token)});
+  localStorage.setItem("scg_auth_user", ${JSON.stringify(JSON.stringify(user))});
+  location.replace("/home");
+</script>
+Signing you in&hellip;
+</body></html>`);
+  } catch (err) {
+    console.error("Dev bypass error:", err.message);
+    res.status(500).send("Bypass failed");
+  }
+});
+
 app.get("/api/auth/me", async (req, res) => {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
